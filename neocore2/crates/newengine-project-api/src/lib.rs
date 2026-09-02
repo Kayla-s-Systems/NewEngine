@@ -18,6 +18,10 @@ pub use service::*;
 pub const PROJECT_MANIFEST_FILE: &str = "game.toml";
 /// Compatibility request accepting either a project directory or manifest path.
 pub const PROJECT_REQUEST_ENV: &str = "NEWENGINE_PROJECT";
+/// Canonical repository/deployment root used by all authored filesystem paths.
+pub const ROOT_DIR_ENV: &str = "ROOT-DIR";
+/// Canonical active project directory. Published after `game.toml` is resolved.
+pub const PROJECT_DIR_ENV: &str = "PROJECT-DIR";
 /// Canonical selected editor-project root.
 pub const PROJECT_ROOT_ENV: &str = "NEWENGINE_PROJECT_ROOT";
 /// Canonical selected editor-project manifest.

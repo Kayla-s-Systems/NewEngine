@@ -8,7 +8,7 @@ authors = ["Take Some()"]
 license = "Proprietary"
 
 [package.metadata.newengine.winres]
-icon = "../../../../Shared/Source/branding/logo.ico"
+icon = "ROOT-DIR/Shared/Source/branding/logo.ico"
 product_name = "North Star NewEngine"
 original_filename = "NewEngine.exe"
 
@@ -17,13 +17,13 @@ name = "NewEngine"
 path = "src/main.rs"
 
 [dependencies]
-newengine-project-api = { path = "../../crates/newengine-project-api" }
-newengine-project-runtime = { path = "../../crates/newengine-project-runtime" }
-newengine-game-module-api = { path = "../../crates/newengine-game-module-api" }
-newengine-plugin-api = { path = "../../crates/newengine-plugin-api" }
-newengine-plugin-host = { path = "../../crates/newengine-plugin-host" }
-newengine-runtime-host = { path = "../../crates/newengine-runtime-host", default-features = false, features = ["full-runtime"] }
-newengine-core = { path = "../../crates/newengine-core" }
+newengine-project-api = { workspace = true }
+newengine-project-runtime = { workspace = true }
+newengine-game-module-api = { workspace = true }
+newengine-plugin-api = { workspace = true }
+newengine-plugin-host = { workspace = true }
+newengine-runtime-host = { workspace = true, default-features = false, features = ["full-runtime"] }
+newengine-core = { workspace = true }
 serde_json = "1"
 toml = "1.1.4"
 

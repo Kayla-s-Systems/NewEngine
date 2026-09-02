@@ -122,10 +122,7 @@ pub fn normalize_project_manifest_request(path: impl Into<PathBuf>) -> PathBuf {
 /// launchers, content mounts and authoring systems cannot reinterpret it against
 /// different working directories.
 #[inline]
-pub fn resolve_project_manifest_request(
-    path: impl AsRef<Path>,
-    base_dir: &Path,
-) -> PathBuf {
+pub fn resolve_project_manifest_request(path: impl AsRef<Path>, base_dir: &Path) -> PathBuf {
     let path = normalize_project_manifest_request(path.as_ref().to_path_buf());
     if path.is_absolute() {
         path

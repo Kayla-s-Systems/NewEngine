@@ -1,4 +1,4 @@
-use super::super::profile::GameReadyMapProfile;
+use super::super::profile::AuthoredWorldProfile;
 use serde_json::Value;
 
 pub(super) fn log_ymap_value_summary(logical_path: &str, value: &Value) {
@@ -13,7 +13,7 @@ pub(super) fn log_ymap_value_summary(logical_path: &str, value: &Value) {
     let streaming_nodes = count_named_objects(value, &["streaming"]);
     let profile_present = value.pointer("/map/profile").is_some() || value.get("profile").is_some();
     newengine_ulog_api::ulog::info!(
-        "game-ready ymap read: semantic XML projection path='{}' section='{}' definitions={} placements={} definition_refs={} prefabs={} terrain_surface_layer_nodes={} terrain_surface_nodes={} terrain_heightmap_nodes={} terrain_streaming_nodes={} profile_present={} policy='xml metadata projected into GameReadyMapProfile; runtime semantics stay outside generic AssetManager'",
+        "authored-world ymap read: semantic XML projection path='{}' section='{}' definitions={} placements={} definition_refs={} prefabs={} terrain_surface_layer_nodes={} terrain_surface_nodes={} terrain_heightmap_nodes={} terrain_streaming_nodes={} profile_present={} policy='xml metadata projected into AuthoredWorldProfile; runtime semantics stay outside generic AssetManager'",
         logical_path,
         section,
         definitions,
@@ -31,7 +31,7 @@ pub(super) fn log_ymap_value_summary(logical_path: &str, value: &Value) {
 pub(super) fn log_loaded_profile_summary(
     logical_path: &str,
     source_label: &str,
-    profile: &GameReadyMapProfile,
+    profile: &AuthoredWorldProfile,
 ) {
     let surface_layers = profile.terrain.surface.layers.len();
     let layer_summary = terrain_layers_summary(profile);
@@ -42,7 +42,7 @@ pub(super) fn log_loaded_profile_summary(
     let launch_radius = launch_blocking_warm_radius(profile.terrain.streaming.chunk_radius);
     let launch_resident_chunks = resident_chunks(launch_radius);
     newengine_ulog_api::ulog::info!(
-        "game-ready ymap read: profile materialized path='{}' source='{}' title='{}' terrain_cells={}x{} terrain_size={}x{} base_height={} height_scale={} generator='{}' surface_mode='multi_textured_projected_3ch' surface_status='{}' surface_layer_count={} projected_surface=[forest='{}',sand='{}',rock='{}'] surface_layers=[{}] heightmap_status='{}' heightmap_enabled={} heightmap_source='{}' heightmap_mode='{}' heightmap_strength={} heightmap_range=[{},{}] heightmap_tile_scale=[{},{}] heightmap_tile_offset=[{},{}] heightmap_invert={} streaming_enabled={} chunk_radius={} unload_radius={} max_chunks_per_frame={} launch_radius={} launch_resident_chunks={} target_resident_chunks={} definitions={} prefabs={} terrain_package_status='{}'",
+        "authored-world ymap read: profile materialized path='{}' source='{}' title='{}' terrain_cells={}x{} terrain_size={}x{} base_height={} height_scale={} generator='{}' surface_mode='multi_textured_projected_3ch' surface_status='{}' surface_layer_count={} projected_surface=[forest='{}',sand='{}',rock='{}'] surface_layers=[{}] heightmap_status='{}' heightmap_enabled={} heightmap_source='{}' heightmap_mode='{}' heightmap_strength={} heightmap_range=[{},{}] heightmap_tile_scale=[{},{}] heightmap_tile_offset=[{},{}] heightmap_invert={} streaming_enabled={} chunk_radius={} unload_radius={} max_chunks_per_frame={} launch_radius={} launch_resident_chunks={} target_resident_chunks={} definitions={} prefabs={} terrain_package_status='{}'",
         logical_path,
         source_label,
         profile.title,
@@ -95,10 +95,10 @@ pub(super) fn log_loaded_profile_summary(
     log_terrain_package_readiness(logical_path, profile, surface_status, heightmap_status);
 }
 
-fn log_surface_layer_details(logical_path: &str, profile: &GameReadyMapProfile) {
+fn log_surface_layer_details(logical_path: &str, profile: &AuthoredWorldProfile) {
     if profile.terrain.surface.layers.is_empty() {
         newengine_ulog_api::ulog::warn!(
-            "game-ready ymap read: terrain surface package path='{}' status='fallback_single_material' reason='no declarative <surface><layers> entries found'",
+            "authored-world ymap read: terrain surface package path='{}' status='fallback_single_material' reason='no declarative <surface><layers> entries found'",
             logical_path,
         );
         return;
@@ -113,7 +113,7 @@ fn log_surface_layer_details(logical_path: &str, profile: &GameReadyMapProfile) 
             _ => false,
         };
         newengine_ulog_api::ulog::info!(
-            "game-ready ymap read: terrain surface layer path='{}' index={} role='{}' projected_slot='{}' texture='{}' weight={:.3} uv_scale={:.3} projected={} runtime='TerrainMaterialLayers -> 3-channel terrain shader'",
+            "authored-world ymap read: terrain surface layer path='{}' index={} role='{}' projected_slot='{}' texture='{}' weight={:.3} uv_scale={:.3} projected={} runtime='TerrainMaterialLayers -> 3-channel terrain shader'",
             logical_path,
             index,
             layer.role,
@@ -126,11 +126,11 @@ fn log_surface_layer_details(logical_path: &str, profile: &GameReadyMapProfile) 
     }
 }
 
-fn log_heightmap_readiness(logical_path: &str, profile: &GameReadyMapProfile) {
+fn log_heightmap_readiness(logical_path: &str, profile: &AuthoredWorldProfile) {
     let heightmap = &profile.terrain.heightmap;
     let status = terrain_heightmap_status(profile);
     newengine_ulog_api::ulog::info!(
-        "game-ready ymap read: terrain heightmap path='{}' status='{}' enabled={} source='{}' mode='{}' strength={} range=[{},{}] tile_scale=[{},{}] tile_offset=[{},{}] invert={} runtime_loader='engine.assets.textures.entry_rgba8_v1' policy='heightmap source must be a .ytd@entry texture reference'",
+        "authored-world ymap read: terrain heightmap path='{}' status='{}' enabled={} source='{}' mode='{}' strength={} range=[{},{}] tile_scale=[{},{}] tile_offset=[{},{}] invert={} runtime_loader='engine.assets.textures.entry_rgba8_v1' policy='heightmap source must be a .ytd@entry texture reference'",
         logical_path,
         status,
         heightmap.enabled,
@@ -149,13 +149,13 @@ fn log_heightmap_readiness(logical_path: &str, profile: &GameReadyMapProfile) {
 
 fn log_streaming_readiness(
     logical_path: &str,
-    profile: &GameReadyMapProfile,
+    profile: &AuthoredWorldProfile,
     launch_radius: i32,
     launch_resident_chunks: usize,
     target_resident_chunks: usize,
 ) {
     newengine_ulog_api::ulog::info!(
-        "game-ready ymap read: terrain streaming path='{}' enabled={} render_radius={} unload_radius={} max_chunks_per_frame={} launch_radius={} launch_resident_chunks={} target_resident_chunks={} policy='warm small launch ring before gate; full render radius streams after public Play'",
+        "authored-world ymap read: terrain streaming path='{}' enabled={} render_radius={} unload_radius={} max_chunks_per_frame={} launch_radius={} launch_resident_chunks={} target_resident_chunks={} policy='warm small launch ring before gate; full render radius streams after public Play'",
         logical_path,
         profile.terrain.streaming.enabled,
         profile.terrain.streaming.chunk_radius,
@@ -169,13 +169,13 @@ fn log_streaming_readiness(
 
 fn log_terrain_package_readiness(
     logical_path: &str,
-    profile: &GameReadyMapProfile,
+    profile: &AuthoredWorldProfile,
     surface_status: &'static str,
     heightmap_status: &'static str,
 ) {
     let status = terrain_package_status(profile);
     newengine_ulog_api::ulog::info!(
-        "game-ready ymap read: terrain package readiness path='{}' status='{}' surface_status='{}' heightmap_status='{}' projected_layers={} required_layers=3 streaming_enabled={} package_contract='ymap.terrain -> surface layers + heightmap + streaming plan'",
+        "authored-world ymap read: terrain package readiness path='{}' status='{}' surface_status='{}' heightmap_status='{}' projected_layers={} required_layers=3 streaming_enabled={} package_contract='ymap.terrain -> surface layers + heightmap + streaming plan'",
         logical_path,
         status,
         surface_status,
@@ -185,7 +185,7 @@ fn log_terrain_package_readiness(
     );
 }
 
-fn terrain_layers_summary(profile: &GameReadyMapProfile) -> String {
+fn terrain_layers_summary(profile: &AuthoredWorldProfile) -> String {
     if profile.terrain.surface.layers.is_empty() {
         return "<none>".to_owned();
     }
@@ -204,7 +204,7 @@ fn terrain_layers_summary(profile: &GameReadyMapProfile) -> String {
         .join(";")
 }
 
-fn terrain_surface_status(profile: &GameReadyMapProfile) -> &'static str {
+fn terrain_surface_status(profile: &AuthoredWorldProfile) -> &'static str {
     let surface = &profile.terrain.surface;
     let projected_textures_ready = !surface.forest_base_texture.is_empty()
         && !surface.sand_base_texture.is_empty()
@@ -218,7 +218,7 @@ fn terrain_surface_status(profile: &GameReadyMapProfile) -> &'static str {
     }
 }
 
-fn terrain_heightmap_status(profile: &GameReadyMapProfile) -> &'static str {
+fn terrain_heightmap_status(profile: &AuthoredWorldProfile) -> &'static str {
     let heightmap = &profile.terrain.heightmap;
     if !heightmap.enabled {
         "disabled_by_profile"
@@ -233,7 +233,7 @@ fn terrain_heightmap_status(profile: &GameReadyMapProfile) -> &'static str {
     }
 }
 
-fn terrain_package_status(profile: &GameReadyMapProfile) -> &'static str {
+fn terrain_package_status(profile: &AuthoredWorldProfile) -> &'static str {
     let surface = terrain_surface_status(profile);
     let heightmap = terrain_heightmap_status(profile);
     let surface_ok = matches!(surface, "ready_multi_textured_projected_3ch");

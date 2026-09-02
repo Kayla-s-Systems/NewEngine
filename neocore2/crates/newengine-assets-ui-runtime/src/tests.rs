@@ -165,11 +165,13 @@ fn aurelia_asset_preview_fixture_xml() -> String {
     {
         let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
 
-        for candidate in [
-            manifest_dir
-                .join("../../../assets/ui/src/devtools/aurelia_asset_preview_stand.neui.xml"),
-            manifest_dir.join("../../assets/ui/src/devtools/aurelia_asset_preview_stand.neui.xml"),
-        ] {
+        let workspace_root = manifest_dir
+            .ancestors()
+            .nth(2)
+            .expect("crate manifest must live under neocore2/crates");
+
+        for candidate in [workspace_root
+            .join("assets/ui/src/devtools/aurelia_asset_preview_stand.neui.xml")] {
             if candidate.exists() {
                 return std::fs::read_to_string(&candidate).unwrap_or_else(|err| {
                     panic!("failed to read {}: {}", candidate.display(), err)

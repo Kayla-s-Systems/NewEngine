@@ -61,17 +61,17 @@ fn select_weighted_clips(clips: &[SoundCueClip], unit: f32) -> Option<&SoundCueC
     clips.last()
 }
 
-fn embedded_yscd_clip_key(cue_reference: &str, clip_index: usize, codec: &str) -> String {
+fn embedded_ysncd_clip_key(cue_reference: &str, clip_index: usize, codec: &str) -> String {
     let hash = stable_text_hash(cue_reference);
     let codec = codec.trim().trim_start_matches('.').to_ascii_lowercase();
     if codec.is_empty() {
-        format!("__yscd/{hash:016x}/{clip_index:04}")
+        format!("__ysncd/{hash:016x}/{clip_index:04}")
     } else {
-        format!("__yscd/{hash:016x}/{clip_index:04}.{codec}")
+        format!("__ysncd/{hash:016x}/{clip_index:04}.{codec}")
     }
 }
 
-fn audio_route_from_yscd(value: &str) -> Result<AudioRouteId, String> {
+fn audio_route_from_ysncd(value: &str) -> Result<AudioRouteId, String> {
     let route = AudioRouteId::new(value.trim().to_owned());
     if !route.0.is_empty() {
         route.validate()?;
@@ -79,15 +79,15 @@ fn audio_route_from_yscd(value: &str) -> Result<AudioRouteId, String> {
     Ok(route)
 }
 
-fn concurrency_scope_from_yscd(value: &str) -> Result<AudioConcurrencyScope, String> {
+fn concurrency_scope_from_ysncd(value: &str) -> Result<AudioConcurrencyScope, String> {
     match value.trim().to_ascii_lowercase().as_str() {
         "global" => Ok(AudioConcurrencyScope::Global),
         "object" | "owner" | "emitter" => Ok(AudioConcurrencyScope::Object),
-        other => Err(format!("YSCD cue has unsupported concurrency_scope '{other}'")),
+        other => Err(format!("YSNCD cue has unsupported concurrency_scope '{other}'")),
     }
 }
 
-fn voice_steal_rule_from_yscd(value: &str) -> Result<AudioVoiceStealRule, String> {
+fn voice_steal_rule_from_ysncd(value: &str) -> Result<AudioVoiceStealRule, String> {
     match value.trim().to_ascii_lowercase().as_str() {
         "reject_new" | "reject" => Ok(AudioVoiceStealRule::RejectNew),
         "lower_priority_then_oldest" | "priority" | "legacy" => {
@@ -96,21 +96,21 @@ fn voice_steal_rule_from_yscd(value: &str) -> Result<AudioVoiceStealRule, String
         "oldest" => Ok(AudioVoiceStealRule::Oldest),
         "quietest" => Ok(AudioVoiceStealRule::Quietest),
         "farthest" => Ok(AudioVoiceStealRule::Farthest),
-        other => Err(format!("YSCD cue has unsupported steal_rule '{other}'")),
+        other => Err(format!("YSNCD cue has unsupported steal_rule '{other}'")),
     }
 }
 
-fn sound_cue_spatial_policy_from_yscd(value: &str) -> Result<SoundCueSpatialPolicy, String> {
+fn sound_cue_spatial_policy_from_ysncd(value: &str) -> Result<SoundCueSpatialPolicy, String> {
     match value.trim().to_ascii_lowercase().as_str() {
         "inherit" => Ok(SoundCueSpatialPolicy::Inherit),
         "non_spatial" | "nonspatial" | "2d" => Ok(SoundCueSpatialPolicy::NonSpatial),
         "spatial" | "3d" => Ok(SoundCueSpatialPolicy::Spatial),
-        other => Err(format!("YSCD cue has unsupported spatial_policy '{other}'")),
+        other => Err(format!("YSNCD cue has unsupported spatial_policy '{other}'")),
     }
 }
 
-fn audio_attenuation_from_yscd(
-    authored: &newengine_asset_format_nef8::YscdAttenuation,
+fn audio_attenuation_from_ysncd(
+    authored: &newengine_asset_format_nef8::YsncdAttenuation,
 ) -> Result<AudioAttenuationSettings, String> {
     let curve = match authored.curve.trim().to_ascii_lowercase().as_str() {
         "linear" => newengine_audio_api::AudioAttenuationCurve::Linear,
@@ -120,7 +120,7 @@ fn audio_attenuation_from_yscd(
         "custom" => newengine_audio_api::AudioAttenuationCurve::Custom,
         other => {
             return Err(format!(
-                "YSCD cue has unsupported attenuation curve '{other}'"
+                "YSNCD cue has unsupported attenuation curve '{other}'"
             ));
         }
     };

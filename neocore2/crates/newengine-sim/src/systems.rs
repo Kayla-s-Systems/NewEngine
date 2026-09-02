@@ -10,8 +10,9 @@ use crate::{
     run_character_motor_controller, run_follow_camera_controller, run_orbit_camera_controller,
     AngularVelocity, CameraControlInputComp, CameraRigComp, CharacterFacingTurnStepRequest,
     CharacterMotor, CommandBuffer, ControllerCtx, ControllerIntentQueue,
-    FollowTargetCameraController, FollowTargetCameraMotor, IntentBuffer, IntentCommandBufferExt,
-    MotorInput, OrbitCameraMotor, SimFrame, TransformCommandBufferExt, Velocity,
+    FollowTargetCameraController, FollowTargetCameraMotor, Intent, IntentBuffer,
+    IntentCommandBufferExt, MotorInput, OrbitCameraMotor, SimFrame, TransformCommandBufferExt,
+    Velocity,
 };
 
 #[inline]
@@ -42,9 +43,9 @@ pub fn sys_character_motor(world: &World, frame: SimFrame, cmd: &mut CommandBuff
 
         run_character_motor_controller(id, &ctx, motor, input, &mut intents);
         if world.get::<CharacterFacingTurnStepRequest>(id).is_some() {
-            // The controller has consumed this bounded yaw increment into its rotation intent.
-            // Normal fixed-pose interpolation must see both endpoints; no snap/bypass marker exists.
-            cmd.remove::<CharacterFacingTurnStepRequest>(id);
+            // Consume through the semantic intent queue. Controllers are read-only over ECS storage;
+            // ApplyIntents owns the one-shot component removal after the facing step is authored.
+            intents.push(Intent::ConsumeCharacterFacingTurnStepRequest { entity: id });
         }
     }
 
@@ -138,8 +139,10 @@ pub fn sys_apply_controller_intents(world: &World, _frame: SimFrame, cmd: &mut C
         return;
     }
 
-    let intents = queue.snapshot();
-    for intent in &intents {
+    // Apply directly from the immutable queue view. Controller systems already deferred all
+    // world mutation into `CommandBuffer`, so cloning the tiny intent vector here only adds an
+    // allocator hit to every fixed tick and can inherit unrelated allocator contention.
+    for intent in queue.iter() {
         intent.apply_to(cmd);
     }
 

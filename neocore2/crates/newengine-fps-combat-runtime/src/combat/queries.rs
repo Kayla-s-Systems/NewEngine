@@ -538,7 +538,7 @@ fn apply_callback_status(world: &mut World, status: Option<String>) {
     let Some(status) = status else {
         return;
     };
-    if let Some(state) = world.resource_mut::<newengine_gameplay_fps_api::FpsDemoState>() {
+    if let Some(state) = world.resource_mut::<newengine_gameplay_fps_api::FpsObjectiveState>() {
         state.status = status;
     }
 }

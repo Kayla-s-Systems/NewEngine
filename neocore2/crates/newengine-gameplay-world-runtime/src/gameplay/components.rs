@@ -27,9 +27,12 @@ pub use player::{
     PlayerJointChannels, PlayerJointCopyRule, PlayerJointRotationWeight, PlayerLandingState,
     PlayerLocomotionAnimation, PlayerLocomotionState, PlayerLookContext, PlayerModelAssignment,
     PlayerModelBinding, PlayerMovementSpeeds, PlayerPaletteFollowRule, PlayerRenderPose,
-    PlayerSkinBinding, PlayerSkinPose, PlayerSkinSidecarDefinition, PlayerSkinVertex,
-    PlayerStanceKind, PlayerStanceState, PlayerViewState, PlayerViewVisibility,
-    PlayerViewVisibilityPolicy, PlayerVisualKind, PlayerVisualPart, PlayerWeaponArmIkRigDefinition,
+    PlayerSecondaryMotionBend, PlayerSecondaryMotionCapsule, PlayerSecondaryMotionColliderMode,
+    PlayerSecondaryMotionEdge, PlayerSecondaryMotionOrientedBox, PlayerSecondaryMotionParticle,
+    PlayerSecondaryMotionTuning, PlayerSkeletalSecondaryMotionRig, PlayerSkinBinding,
+    PlayerSkinPose, PlayerSkinSidecarDefinition, PlayerSkinVertex, PlayerStanceKind,
+    PlayerStanceState, PlayerViewState, PlayerViewVisibility, PlayerViewVisibilityPolicy,
+    PlayerVisualKind, PlayerVisualPart, PlayerWeaponArmIkRigDefinition,
 };
 pub use render_environment::{
     CloudShadowRenderState, EnvironmentDomeRenderState, EnvironmentPostFxState,

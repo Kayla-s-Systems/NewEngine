@@ -151,7 +151,6 @@ impl StartupLoader {
 
         report.total_ms = Some(t0.elapsed().as_millis().min(u128::from(u32::MAX)) as u32);
         crate::startup::set_last_load_report(report.clone());
-        crate::startup::set_last_startup_config(cfg.clone());
         Ok((cfg, report))
     }
 

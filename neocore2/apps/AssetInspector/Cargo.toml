@@ -5,24 +5,24 @@ edition = "2021"
 readme = "README.md"
 
 [dependencies]
-newengine-asset-inspector-runtime = { path = "../../crates/newengine-asset-inspector-runtime" }
-newengine-asset-preview-runtime = { path = "../../crates/newengine-asset-preview-runtime" }
-newengine-viewport-bridge = { path = "../../crates/newengine-viewport-bridge" }
-newengine-assets = { path = "../../crates/newengine-assets" }
-newengine-asset-bootstrap-runtime = { path = "../../crates/newengine-asset-bootstrap-runtime" }
-newengine-assets-ui-runtime = { path = "../../crates/newengine-assets-ui-runtime" }
-newengine-core = { path = "../../crates/newengine-core" }
-newengine-definitions-runtime = { path = "../../crates/newengine-definitions-runtime" }
-newengine-engine-runtime = { path = "../../crates/newengine-engine-runtime" }
-newengine-material-runtime = { path = "../../crates/newengine-material-runtime" }
-newengine-material-domain-gameready = { path = "../../crates/newengine-material-domain-gameready" }
-newengine-model-runtime = { path = "../../crates/newengine-model-runtime" }
-newengine-plugin-host = { path = "../../crates/newengine-plugin-host" }
-newengine-runtime-host = { path = "../../crates/newengine-runtime-host", default-features = false, features = ["full-runtime"] }
-newengine-windowed-host-runtime = { path = "../../crates/newengine-windowed-host-runtime", default-features = false, features = ["prestart-window-egui", "window-icon"] }
-newengine-render-runtime-adapter = { path = "../../crates/newengine-render-runtime-adapter" }
-newengine-schema-runtime = { path = "../../crates/newengine-schema-runtime" }
-newengine-scene = { path = "../../crates/newengine-scene", features = ["runtime"] }
-newengine-scene-runtime = { path = "../../crates/newengine-scene-runtime" }
-newengine-ulog-api = { path = "../../crates/newengine-ulog-api" }
-newengine-ui = { path = "../../crates/newengine-ui", default-features = false }
+newengine-asset-inspector-runtime = { workspace = true }
+newengine-asset-preview-runtime = { workspace = true }
+newengine-viewport-bridge = { workspace = true }
+newengine-assets = { workspace = true }
+newengine-asset-bootstrap-runtime = { workspace = true }
+newengine-assets-ui-runtime = { workspace = true }
+newengine-core = { workspace = true }
+newengine-definitions-runtime = { workspace = true }
+newengine-engine-runtime = { workspace = true }
+newengine-material-runtime = { workspace = true }
+newengine-material-domain-gameready = { workspace = true }
+newengine-model-runtime = { workspace = true }
+newengine-plugin-host = { workspace = true }
+newengine-runtime-host = { workspace = true, default-features = false, features = ["full-runtime"] }
+newengine-windowed-host-runtime = { workspace = true, default-features = false, features = ["prestart-window-egui", "window-icon"] }
+newengine-render-runtime-adapter = { workspace = true }
+newengine-schema-runtime = { workspace = true }
+newengine-scene = { workspace = true, features = ["runtime"] }
+newengine-scene-runtime = { workspace = true }
+newengine-ulog-api = { workspace = true }
+newengine-ui = { workspace = true, default-features = false }

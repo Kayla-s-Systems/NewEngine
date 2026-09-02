@@ -153,6 +153,93 @@ pub struct PlayerBraidSecondaryMotionRig {
     pub right_shoulder_joint: String,
 }
 
+/// Collision projection policy for a project-authored skeletal secondary-motion collider.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PlayerSecondaryMotionColliderMode {
+    #[default]
+    Exterior,
+    OneSidedBack,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlayerSecondaryMotionParticle {
+    /// Rest position in the model source space declared by the bound drawable.
+    pub rest_position: [f32; 3],
+    pub mobility: f32,
+    pub follow: f32,
+    pub inertia: f32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlayerSecondaryMotionEdge {
+    pub a: usize,
+    pub b: usize,
+    pub rest_length: f32,
+    pub stiffness: f32,
+    pub damping: f32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlayerSecondaryMotionBend {
+    pub indices: [usize; 4],
+    pub weights: [f32; 4],
+    pub geometry_scale: f32,
+    pub rest_scalar: f32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlayerSecondaryMotionCapsule {
+    pub joint: String,
+    pub mode: PlayerSecondaryMotionColliderMode,
+    /// Endpoints in the source/model authoring space. Runtime canonicalizes them through
+    /// the drawable's source-to-model transform before binding them to the skeleton.
+    pub source_a: [f32; 3],
+    pub source_b: [f32; 3],
+    pub radius: f32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlayerSecondaryMotionOrientedBox {
+    pub joint: String,
+    pub mode: PlayerSecondaryMotionColliderMode,
+    pub source_center: [f32; 3],
+    pub source_axes: [[f32; 3]; 3],
+    pub half_extents: [f32; 3],
+}
+
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct PlayerSecondaryMotionTuning {
+    pub teleport_reset_distance: f32,
+    pub teleport_reset_quat_dot: f32,
+    pub back_clearance: f32,
+    pub solver_substeps: u8,
+    pub solver_iterations: u8,
+    pub max_root_acceleration: f32,
+    pub gravity_scale: f32,
+    pub inertia_scale: f32,
+    pub velocity_damping: f32,
+    pub collision_margin: f32,
+    pub follow_scale: f32,
+    pub stretch_reference_stiffness: f32,
+    pub bend_reference_stiffness: f32,
+    pub tunnel_depth: f32,
+}
+
+/// Fully project-authored skeletal secondary-motion contract. The runtime owns only the solver;
+/// character identity, topology, constraint values and collision geometry are content.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct PlayerSkeletalSecondaryMotionRig {
+    pub chain_joints: Vec<String>,
+    pub dynamic_start: usize,
+    pub particles: Vec<PlayerSecondaryMotionParticle>,
+    pub edges: Vec<PlayerSecondaryMotionEdge>,
+    pub bends: Vec<PlayerSecondaryMotionBend>,
+    pub centerline_pairs: Vec<[usize; 2]>,
+    pub collision_capsules: Vec<PlayerSecondaryMotionCapsule>,
+    pub collision_boxes: Vec<PlayerSecondaryMotionOrientedBox>,
+    pub tuning: PlayerSecondaryMotionTuning,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlayerSkinSidecarDefinition {
     pub model: String,
@@ -178,7 +265,9 @@ pub struct PlayerCharacterPresentation {
     pub eye_parent_follow_rule: Option<PlayerEyeParentFollowRule>,
     pub helper_pose_copies: Vec<PlayerJointCopyRule>,
     pub skin_sidecar: Option<PlayerSkinSidecarDefinition>,
+    /// Legacy compatibility DTO. New project content must author `skeletal_secondary_motion`.
     pub braid_secondary_motion: Option<PlayerBraidSecondaryMotionRig>,
+    pub skeletal_secondary_motion: Option<PlayerSkeletalSecondaryMotionRig>,
     pub equipment_ready_animation: Option<String>,
     pub equipment_aim_animation: Option<String>,
     pub equipment_reload_animation: Option<String>,
@@ -230,6 +319,7 @@ impl Default for PlayerCharacterPresentation {
             helper_pose_copies: Vec::new(),
             skin_sidecar: None,
             braid_secondary_motion: None,
+            skeletal_secondary_motion: None,
             equipment_ready_animation: None,
             equipment_aim_animation: None,
             equipment_reload_animation: None,

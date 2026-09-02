@@ -62,9 +62,13 @@ pub fn reconcile_existing_player_assignments_with_policy(
         let Some(variant) = variant else {
             continue;
         };
-        let Some(desired) = assignment(variant) else {
+        let Some(mut desired) = assignment(variant) else {
             continue;
         };
+        // FPS gameplay policy does not own project-authored skeletal secondary motion.
+        // Preserve the canonical YTYP/runtime assignment while reconciling FPS presentation fields.
+        desired.presentation.skeletal_secondary_motion =
+            current.presentation.skeletal_secondary_motion.clone();
         if assignment_payload_matches(&current, &desired) {
             continue;
         }
@@ -188,6 +192,7 @@ pub fn assignment(variant: &FpsPlayableCharacterPolicy) -> Option<PlayerModelAss
                     right_shoulder_joint: rig.right_shoulder_joint.clone(),
                 },
             ),
+            skeletal_secondary_motion: None,
             equipment_ready_animation: presentation_animation(
                 "equipment.ready",
                 &variant.presentation.equipment_ready_animation,

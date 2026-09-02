@@ -75,7 +75,7 @@ pub(super) fn is_ytd_ref(value: &str) -> bool {
 
 #[inline]
 pub(super) fn material_spec_mut<'a>(
-    profile: &'a mut GameReadyMapProfile,
+    profile: &'a mut AuthoredWorldProfile,
     key: &str,
 ) -> Option<&'a mut GameReadyMaterialSpec> {
     match key {
@@ -91,7 +91,7 @@ pub(super) fn material_spec_mut<'a>(
 }
 
 pub(super) fn apply_material_refs_from_ytyp(
-    profile: &mut GameReadyMapProfile,
+    profile: &mut AuthoredWorldProfile,
     metadata: &serde_json::Value,
     definition_ref: &str,
 ) -> usize {
@@ -146,7 +146,7 @@ pub(super) fn apply_ytd_constant(
 }
 
 pub(super) fn apply_texture_refs_from_ytyp(
-    profile: &mut GameReadyMapProfile,
+    profile: &mut AuthoredWorldProfile,
     metadata: &serde_json::Value,
     definition_ref: &str,
 ) -> usize {
@@ -211,7 +211,7 @@ fn player_motion_response_from_ytyp(
 }
 
 fn apply_player_runtime_data_from_ytyp(
-    profile: &mut GameReadyMapProfile,
+    profile: &mut AuthoredWorldProfile,
     data: &mut GameData,
     metadata: &serde_json::Value,
 ) -> usize {
@@ -332,7 +332,7 @@ fn apply_player_runtime_data_from_ytyp(
 }
 
 pub(super) fn apply_gameplay_constants_from_ytyp(
-    profile: &mut GameReadyMapProfile,
+    profile: &mut AuthoredWorldProfile,
     metadata: &serde_json::Value,
 ) -> usize {
     let mut applied = 0usize;
@@ -382,7 +382,7 @@ pub(super) fn apply_gameplay_constants_from_ytyp(
 }
 
 pub(super) fn apply_sky_constants_from_ytyp(
-    profile: &mut GameReadyMapProfile,
+    profile: &mut AuthoredWorldProfile,
     metadata: &serde_json::Value,
 ) -> usize {
     let mut applied = 0usize;
@@ -433,7 +433,7 @@ pub(super) fn apply_sky_constants_from_ytyp(
 }
 
 pub(super) fn apply_time_constants_from_ytyp(
-    profile: &mut GameReadyMapProfile,
+    profile: &mut AuthoredWorldProfile,
     metadata: &serde_json::Value,
 ) -> usize {
     let mut applied = 0usize;
@@ -639,7 +639,7 @@ fn definition_render_options(
 }
 
 fn apply_sky_drawable_from_ytyp(
-    profile: &mut GameReadyMapProfile,
+    profile: &mut AuthoredWorldProfile,
     entry: &serde_json::Value,
     definition_ref: &str,
 ) -> usize {
@@ -672,7 +672,7 @@ fn apply_sky_drawable_from_ytyp(
 }
 
 fn apply_render_options_from_ytyp(
-    profile: &mut GameReadyMapProfile,
+    profile: &mut AuthoredWorldProfile,
     entry: &serde_json::Value,
     definition_ref: &str,
 ) -> usize {
@@ -706,7 +706,7 @@ fn apply_render_options_from_ytyp(
 }
 
 pub(crate) fn apply_game_ready_ytyp_metadata(
-    profile: &mut GameReadyMapProfile,
+    profile: &mut AuthoredWorldProfile,
     game_data: &mut GameData,
 ) {
     let definitions = profile.definitions.clone();

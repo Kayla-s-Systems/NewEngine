@@ -186,6 +186,7 @@ impl RenderFrameOrchestrator {
                 spot[3] = 0.0;
             }
         }
+        cpu_profile.mark("lights");
         let extent = Extent2D::new(scope.vp_w, scope.vp_h);
         let gpu_safe_profile = runtime_profile.gpu_safe_enabled();
         if gpu_safe_profile {
@@ -212,6 +213,7 @@ impl RenderFrameOrchestrator {
             extent,
             scope.trace_frame,
         );
+        cpu_profile.mark("shadow_setup");
 
         let extraction = SceneExtractionCtx {
             scene,

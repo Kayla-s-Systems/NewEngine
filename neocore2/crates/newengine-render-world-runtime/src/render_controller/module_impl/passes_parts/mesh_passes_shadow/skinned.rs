@@ -16,6 +16,7 @@ pub(super) fn draw_skinned_player_primitives_shadow(
     use crate::render_controller::gpu::{ensure_player_skin_gpu, ensure_skin_palette_gpu};
 
     let world = scene.world();
+    let (shadow_snapshot, _snapshot_reused) = this.skinned_shadow_scene_snapshot(scene, runtime);
     let reg_lock = this.bridges.scene.primitives();
     let reg = reg_lock.read();
     let mats_lock = this.bridges.scene.materials();
@@ -23,20 +24,18 @@ pub(super) fn draw_skinned_player_primitives_shadow(
     let shadow_max_distance = primitive_shadow_max_distance(runtime);
     let shadow_max_distance_sq = shadow_max_distance * shadow_max_distance;
 
-    for (entity, prim, global) in world.query2::<Primitive, GlobalTransform>() {
+    for source in shadow_snapshot.entries.iter() {
+        let entity = source.entity;
+        let prim = source.primitive;
+        let render_model = source.render_model;
         let Some(skin) =
             world.get::<newengine_gameplay_world_runtime::gameplay::PlayerSkinBinding>(entity)
         else {
             continue;
         };
-        if !display_shadow_caster_visible_in_mode(world, entity, runtime) {
-            continue;
-        }
-        let render_model = newengine_gameplay_world_runtime::gameplay::player_render_model_matrix(
-            world, entity, global.0,
-        );
+        debug_assert_eq!(skin.owner, source.owner);
         let Some(pose) =
-            world.get::<newengine_gameplay_world_runtime::gameplay::PlayerSkinPose>(skin.owner)
+            world.get::<newengine_gameplay_world_runtime::gameplay::PlayerSkinPose>(source.owner)
         else {
             continue;
         };
@@ -44,45 +43,23 @@ pub(super) fn draw_skinned_player_primitives_shadow(
             continue;
         }
         if runtime {
-            // A skinned mesh can leave its authored bind-pose part bounds substantially
-            // (limbs, root motion, retargeting/orientation changes). Culling the shadow
-            // caster with those per-part static bounds can therefore remove the entire
-            // character from CSM while the forward skin is still visible. Use a single
-            // conservative owner-space character proxy for shadow admission instead.
-            let owner_height = world
-                .get::<newengine_gameplay_world_runtime::gameplay::PlayerModelBinding>(skin.owner)
-                .map(|binding| binding.target_height.max(1.0))
-                .unwrap_or(2.0);
-            let (center_ws, radius_ws) = world
-                .get::<GlobalTransform>(skin.owner)
-                .map(|owner_global| {
-                    let center =
-                        owner_global
-                            .0
-                            .transform_point3(Vec3::new(0.0, owner_height * 0.5, 0.0));
-                    // Covers full body deformation plus weapon/limb excursions without
-                    // turning the directional atlas into an unbounded dynamic-caster set.
-                    (center, owner_height * 0.80 + 0.45)
-                })
-                .unwrap_or_else(|| {
-                    let center = render_model.transform_point3(Vec3::ZERO);
-                    (center, owner_height * 0.80 + 0.45)
-                });
-            if center_ws.distance_squared(camera_position) > shadow_max_distance_sq
-                || !shadow_caster_visible(this.shadows_current_cull(), center_ws, radius_ws)
+            if source.proxy_center_ws.distance_squared(camera_position) > shadow_max_distance_sq
+                || !shadow_caster_visible(
+                    this.shadows_current_cull(),
+                    source.proxy_center_ws,
+                    source.proxy_radius_ws,
+                )
                 || !shadow_caster_projected_radius_visible(
                     cascade_index,
                     cascade_texel_world_size,
-                    radius_ws,
+                    source.proxy_radius_ws,
                 )
             {
                 continue;
             }
         }
 
-        let material_ref = world
-            .get::<newengine_materials::MaterialRef>(entity)
-            .copied();
+        let material_ref = source.material_ref;
         let resolved = material_ref.and_then(|reference| mats.resolve(reference.id));
         let material_plan = LitMaterialPlan::from_resolved(resolved.as_ref(), prim.color);
         if !material_plan.cast_shadows {
@@ -106,14 +83,11 @@ pub(super) fn draw_skinned_player_primitives_shadow(
                 pose.palette.len(),
             )));
         }
-        let pose_generation = world
-            .get::<newengine_gameplay_world_runtime::gameplay::PlayerModelBinding>(skin.owner)
-            .map(|binding| binding.assignment_revision)
-            .unwrap_or(0);
+        let pose_generation = source.pose_generation;
         let palette_gpu = ensure_skin_palette_gpu(
             &mut this.gpu.meshes.skin_palette_cache,
             &mut this.gpu.lifetimes.resources,
-            skin.owner.stable_u64(),
+            source.owner.stable_u64(),
             pose_generation,
             pose,
             lit.skin_bgl,

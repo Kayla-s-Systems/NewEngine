@@ -38,6 +38,7 @@ fn assignment_from_spec(
             helper_pose_copies: spec.helper_pose_copies.clone(),
             skin_sidecar: spec.skin_sidecar.clone(),
             braid_secondary_motion: spec.braid_secondary_motion.clone(),
+            skeletal_secondary_motion: spec.skeletal_secondary_motion.clone(),
             equipment_ready_animation: spec.equipment_ready_animation.clone(),
             equipment_aim_animation: spec.equipment_aim_animation.clone(),
             equipment_reload_animation: spec.equipment_reload_animation.clone(),

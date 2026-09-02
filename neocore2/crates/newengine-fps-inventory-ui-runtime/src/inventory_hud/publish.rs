@@ -22,7 +22,7 @@ pub(super) fn publish_inventory_hud_state(
             .expect("inventory HUD state initialized");
         let inventory = world.get::<PlayerInventory>(player);
         let catalog = world.resource::<ItemCatalog>();
-        let mission = world.resource::<FpsDemoState>();
+        let mission = world.resource::<FpsObjectiveState>();
         let weapon_state = world.get::<PlayerWeaponState>(player).copied();
         let binding = world.get::<EquippedWeaponBinding>(player).copied();
         let vitals = character_vitals_hud_model(world, player);
@@ -314,7 +314,7 @@ fn base_patch(
     frame_index: u64,
     state: &InventoryHudState,
     inventory: &PlayerInventory,
-    mission: Option<&FpsDemoState>,
+    mission: Option<&FpsObjectiveState>,
     weapon_state: Option<PlayerWeaponState>,
     vitals: Option<CharacterVitalsHudModel>,
     total_weight: f32,
@@ -390,7 +390,7 @@ fn base_patch(
             "mission",
             "progress",
             serde_json::json!(mission
-                .map(FpsDemoState::progress_label)
+                .map(FpsObjectiveState::progress_label)
                 .unwrap_or_default()),
         )
         .with_change(
@@ -858,7 +858,7 @@ pub(super) fn inventory_hud_fingerprint(world: &World, player: EntityId) -> u64 
         push(u64::from(weapon.ammo_in_magazine));
         push(u64::from(weapon.reserve_ammo));
     }
-    if let Some(mission) = world.resource::<FpsDemoState>() {
+    if let Some(mission) = world.resource::<FpsObjectiveState>() {
         push(u64::from(mission.pickups_collected));
         push(u64::from(mission.pickups_total));
         push(u64::from(mission.targets_destroyed));

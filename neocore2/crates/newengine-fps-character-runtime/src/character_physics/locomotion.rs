@@ -3,9 +3,9 @@ use std::collections::BTreeMap;
 use newengine_ecs::{EntityId, World};
 use newengine_engine_runtime::gameplay::{
     emit_animation_pulse, emit_animation_state, emit_gameplay_event, emit_player_event,
-    player_fall_is_confirmed, PhysicsSurface,
-    PlayerController, PlayerEventKind, PlayerFallState, PlayerGroundState, PlayerLandingState,
-    PlayerLocomotionState, PlayerMovementSpeeds, StaticMeshCollider,
+    player_fall_is_confirmed, PhysicsSurface, PlayerController, PlayerEventKind, PlayerFallState,
+    PlayerGroundState, PlayerLandingState, PlayerLocomotionState, PlayerMovementSpeeds,
+    StaticMeshCollider,
 };
 use newengine_math::Vec2;
 use newengine_sim::{CharacterMotor, Velocity};

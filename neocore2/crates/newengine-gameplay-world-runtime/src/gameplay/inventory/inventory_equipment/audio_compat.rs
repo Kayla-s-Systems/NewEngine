@@ -16,7 +16,7 @@ pub fn preload_weapon_audio_definition(audio: &WeaponAudioDefinition) {
         let Some(reference) = audio.clip(action) else {
             continue;
         };
-        let result = if is_yscd_cue_reference(reference) {
+        let result = if is_ysncd_cue_reference(reference) {
             newengine_audio_client::preload_audio_cue(
                 &newengine_audio_api::AudioCuePreloadRequest {
                     cue: newengine_audio_api::SoundCueRef::new(reference.to_owned()),
@@ -33,7 +33,7 @@ pub fn preload_weapon_audio_definition(audio: &WeaponAudioDefinition) {
                     "weapon audio preload: action={:?} ref='{}' kind='{}' provider='{}' bytes={} cached={} status='ready'",
                     action,
                     reference,
-                    if is_yscd_cue_reference(reference) { "yscd-cue" } else { "clip" },
+                    if is_ysncd_cue_reference(reference) { "ysncd-cue" } else { "clip" },
                     ack.provider,
                     ack.bytes,
                     ack.cached,
@@ -64,10 +64,10 @@ pub fn preload_weapon_audio_definition(audio: &WeaponAudioDefinition) {
 }
 
 #[inline]
-fn is_yscd_cue_reference(reference: &str) -> bool {
+fn is_ysncd_cue_reference(reference: &str) -> bool {
     newengine_assets_api::parse_asset_reference(reference)
         .map(|reference| {
-            reference.has_extension("yscd")
+            reference.has_extension("ysncd")
                 && reference
                     .entry
                     .as_deref()
@@ -116,7 +116,7 @@ pub fn play_weapon_item_audio(
             .map(|transform| transform.position),
     };
 
-    let is_cue = is_yscd_cue_reference(&reference);
+    let is_cue = is_ysncd_cue_reference(&reference);
     let result = if is_cue {
         let mut request = newengine_audio_api::AudioCuePlayRequest::new(reference.clone());
         request.gain = component_gain;
@@ -140,7 +140,7 @@ pub fn play_weapon_item_audio(
                     "weapon audio play: action={:?} ref='{}' kind='{}' provider='{}' voice_id={:?} virtualized={} status='accepted'",
                     action,
                     reference,
-                    if is_cue { "yscd-cue" } else { "clip" },
+                    if is_cue { "ysncd-cue" } else { "clip" },
                     ack.provider,
                     ack.voice_id,
                     ack.virtualized,

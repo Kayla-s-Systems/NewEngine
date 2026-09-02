@@ -202,28 +202,6 @@ fn shadow_caster_entity(world: &newengine_ecs::World, entity: newengine_ecs::Ent
 }
 
 #[inline]
-fn shadow_pose_change_invalidates(
-    world: &newengine_ecs::World,
-    entity: newengine_ecs::EntityId,
-) -> bool {
-    if !shadow_caster_entity(world, entity) {
-        return false;
-    }
-    // Wind/sway for instanced foliage is intentionally shadow-stable at P0.
-    // Rebuilding the whole directional/local atlas for every per-instance sway
-    // transform destroys caching. Foliage shadows update opportunistically on
-    // the next real light/caster refresh; alpha-cutout shape remains authored.
-    !world
-        .get::<MeshRenderOptions>(entity)
-        .is_some_and(|options| {
-            matches!(
-                options.role,
-                newengine_model_domain_api::MeshRenderRole::FoliageInstanced
-            )
-        })
-}
-
-#[inline]
 fn quantized_shadow_pose_component(value: f32) -> u64 {
     if !value.is_finite() {
         return 0;
@@ -234,15 +212,30 @@ fn quantized_shadow_pose_component(value: f32) -> u64 {
 }
 
 #[inline]
-fn shadow_caster_pose_hash(world: &newengine_ecs::World) -> u64 {
+fn shadow_caster_pose_hash(
+    world: &newengine_ecs::World,
+    caster_entities: &[newengine_ecs::EntityId],
+) -> u64 {
     use newengine_math::hash_combine_u64;
     let mut xor_hash = 0_u64;
     let mut sum_hash = 0_u64;
     let mut count = 0_u64;
-    for (entity, global) in world.query::<newengine_transform::GlobalTransform>() {
-        if !shadow_pose_change_invalidates(world, entity) {
+    for &entity in caster_entities {
+        // Wind/sway for instanced foliage is intentionally shadow-stable at P0.
+        if world
+            .get::<MeshRenderOptions>(entity)
+            .is_some_and(|options| {
+                matches!(
+                    options.role,
+                    newengine_model_domain_api::MeshRenderRole::FoliageInstanced
+                )
+            })
+        {
             continue;
         }
+        let Some(global) = world.get::<newengine_transform::GlobalTransform>(entity) else {
+            continue;
+        };
         let mut h = entity.stable_u64();
         for value in global.0.to_cols_array() {
             h = hash_combine_u64(h, quantized_shadow_pose_component(value));
@@ -255,32 +248,32 @@ fn shadow_caster_pose_hash(world: &newengine_ecs::World) -> u64 {
 }
 
 #[inline]
-fn shadow_skin_pose_hash(world: &newengine_ecs::World) -> u64 {
+fn shadow_skin_pose_hash(
+    world: &newengine_ecs::World,
+    caster_entities: &[newengine_ecs::EntityId],
+) -> u64 {
     use newengine_math::hash_combine_u64;
     let mut xor_hash = 0_u64;
     let mut sum_hash = 0_u64;
     let mut count = 0_u64;
-    for (entity, skin) in
-        world.query::<newengine_gameplay_world_runtime::gameplay::PlayerSkinBinding>()
-    {
-        if !shadow_caster_entity(world, entity) {
+    for &entity in caster_entities {
+        let Some(skin) =
+            world.get::<newengine_gameplay_world_runtime::gameplay::PlayerSkinBinding>(entity)
+        else {
             continue;
-        }
+        };
         let Some(pose) =
             world.get::<newengine_gameplay_world_runtime::gameplay::PlayerSkinPose>(skin.owner)
         else {
             continue;
         };
-        // `PlayerSkinPose.revision` is a publication counter and advances every render
-        // frame even when the resulting palette is numerically unchanged. Hash the
-        // quantized palette itself so shadow refresh follows real deformation, not cadence.
+        // PlayerSkinPose.revision is the authoritative publication revision. Shadow admission
+        // needs only freshness, not a second O(joints) content hash of a palette that animation
+        // already produced and published. A revision change may conservatively redraw an identical
+        // silhouette, but can never retain stale deformation.
         let mut h = hash_combine_u64(entity.stable_u64(), skin.owner.stable_u64());
+        h = hash_combine_u64(h, pose.revision);
         h = hash_combine_u64(h, pose.palette.len() as u64);
-        for matrix in &pose.palette {
-            for value in matrix.to_cols_array() {
-                h = hash_combine_u64(h, quantized_shadow_pose_component(value));
-            }
-        }
         xor_hash ^= h.rotate_left((entity.stable_u64() & 63) as u32);
         sum_hash = sum_hash.wrapping_add(h.wrapping_mul(0xd6e8_feb8_6659_fd93));
         count = count.saturating_add(1);
@@ -288,15 +281,22 @@ fn shadow_skin_pose_hash(world: &newengine_ecs::World) -> u64 {
     hash_combine_u64(hash_combine_u64(count, xor_hash), sum_hash)
 }
 
-fn shadow_caster_membership_hash(world: &newengine_ecs::World) -> u64 {
+fn rebuild_shadow_caster_membership(
+    world: &newengine_ecs::World,
+    caster_entities: &mut Vec<newengine_ecs::EntityId>,
+) -> u64 {
     use newengine_math::hash_combine_u64;
+    use std::collections::HashSet;
+    caster_entities.clear();
+    let mut seen = HashSet::<u64>::new();
     let mut xor_hash = 0_u64;
     let mut sum_hash = 0_u64;
     let mut count = 0_u64;
     let mut add = |entity: newengine_ecs::EntityId, geometry_key: u64| {
-        if !shadow_caster_entity(world, entity) {
+        if !shadow_caster_entity(world, entity) || !seen.insert(entity.stable_u64()) {
             return;
         }
+        caster_entities.push(entity);
         let material_key = world
             .get::<MaterialRef>(entity)
             .map(|material| material.id.raw())
@@ -330,7 +330,11 @@ fn shadow_caster_membership_hash(world: &newengine_ecs::World) -> u64 {
 impl RuntimeRenderController {
     #[inline]
     fn observe_shadow_caster_revision(&mut self, world: &newengine_ecs::World) -> u64 {
+        let current_tick = world.tick();
         let since_tick = self.shadows.caster_observed_tick;
+        if since_tick != 0 && since_tick == current_tick {
+            return self.shadows.caster_revision;
+        }
         let first_observation = since_tick == 0;
 
         let membership_maybe_dirty = first_observation
@@ -354,7 +358,8 @@ impl RuntimeRenderController {
             || world.any_added_since::<DisplayVisibility>(since_tick);
 
         let entity_changed = if membership_maybe_dirty {
-            let membership_hash = shadow_caster_membership_hash(world);
+            let membership_hash =
+                rebuild_shadow_caster_membership(world, &mut self.shadows.caster_entities);
             let changed =
                 first_observation || membership_hash != self.shadows.caster_membership_hash;
             self.shadows.caster_membership_hash = membership_hash;
@@ -366,14 +371,14 @@ impl RuntimeRenderController {
         // Transform propagation marks many static GlobalTransform components changed each
         // frame. Compare actual caster matrices instead of ECS change ticks, otherwise a
         // perfectly static scene can never reuse its shadow atlas.
-        let pose_hash = shadow_caster_pose_hash(world);
+        let pose_hash = shadow_caster_pose_hash(world, &self.shadows.caster_entities);
         let bounds_changed = first_observation || pose_hash != self.shadows.caster_pose_hash;
         self.shadows.caster_pose_hash = pose_hash;
 
         // Skin deformation changes shadow geometry without changing the entity GlobalTransform.
-        // Compare quantized palette content so actual deformation refreshes the atlas while a
-        // publication-only revision bump cannot force a full CSM redraw.
-        let skin_pose_hash = shadow_skin_pose_hash(world);
+        // PlayerSkinPose revision is the publication freshness contract; do not re-hash hundreds
+        // of already-produced matrices inside shadow admission.
+        let skin_pose_hash = shadow_skin_pose_hash(world, &self.shadows.caster_entities);
         let skin_pose_changed =
             first_observation || skin_pose_hash != self.shadows.caster_skin_pose_hash;
         self.shadows.caster_skin_pose_hash = skin_pose_hash;
@@ -409,7 +414,7 @@ impl RuntimeRenderController {
             || material_changed
             || visibility_changed;
 
-        self.shadows.caster_observed_tick = world.tick();
+        self.shadows.caster_observed_tick = current_tick;
         if changed {
             self.shadows.caster_revision = self.shadows.caster_revision.saturating_add(1).max(1);
             self.shadows.caster_entity_change_count = self
@@ -640,7 +645,7 @@ mod temporal_shadow_cache_tests {
     }
 
     #[test]
-    fn skin_shadow_hash_tracks_palette_content_not_publication_revision() {
+    fn skin_shadow_hash_tracks_publication_revision_without_rehashing_palette_content() {
         let mut world = newengine_ecs::World::new();
         let owner = world.spawn();
         let visual = world.spawn();
@@ -667,25 +672,26 @@ mod temporal_shadow_cache_tests {
             },
         );
 
-        let baseline = shadow_skin_pose_hash(&world);
+        let casters = vec![visual];
+        let baseline = shadow_skin_pose_hash(&world, &casters);
         world
             .get_mut::<newengine_gameplay_world_runtime::gameplay::PlayerSkinPose>(owner)
             .expect("skin pose")
             .revision = 2;
-        let revision_only = shadow_skin_pose_hash(&world);
-        assert_eq!(
-            baseline, revision_only,
-            "publication revision alone must not redraw CSM"
+        let published = shadow_skin_pose_hash(&world, &casters);
+        assert_ne!(
+            baseline, published,
+            "published skin revision must invalidate shadow geometry"
         );
         world
             .get_mut::<newengine_gameplay_world_runtime::gameplay::PlayerSkinPose>(owner)
             .expect("skin pose")
             .palette[0] =
             newengine_math::Mat4::from_translation(newengine_math::Vec3::new(0.02, 0.0, 0.0));
-        let deformed = shadow_skin_pose_hash(&world);
-        assert_ne!(
-            baseline, deformed,
-            "actual skin deformation must invalidate shadow geometry"
+        let uncommitted = shadow_skin_pose_hash(&world, &casters);
+        assert_eq!(
+            published, uncommitted,
+            "palette mutation without publication revision is outside the component contract"
         );
     }
 }

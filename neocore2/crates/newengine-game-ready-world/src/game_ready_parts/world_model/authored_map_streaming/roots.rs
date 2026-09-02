@@ -20,7 +20,7 @@ pub(super) struct GameReadyAuthoredMapPrimitiveResidency {
 
 pub(super) fn record_static_world_primitive_residency(
     world: &mut newengine_ecs::World,
-    prefab: &GameReadyPrefabSpec,
+    prefab: &AuthoredWorldPlacementSpec,
     decoded: &[super::super::foliage::DecodedPrefabMeshPart],
 ) {
     let Some(coord) = prefab.authored_cell else {
@@ -214,7 +214,7 @@ fn ensure_domain_root(
 pub(super) fn static_world_parent_for_prefab(
     world: &newengine_ecs::World,
     default_parent: EntityId,
-    prefab: &GameReadyPrefabSpec,
+    prefab: &AuthoredWorldPlacementSpec,
 ) -> EntityId {
     let domain = static_world_prefab_domain(prefab);
     prefab

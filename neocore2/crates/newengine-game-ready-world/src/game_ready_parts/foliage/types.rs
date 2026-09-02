@@ -36,6 +36,6 @@ pub(crate) struct DeferredFoliageSpawn {
     pub(crate) material_specs: GameReadyMaterialSetSpec,
     pub(crate) palette: GameReadyPaletteSpec,
     pub(crate) foliage: GameReadyFoliageSpec,
-    pub(crate) prefabs: Vec<GameReadyPrefabSpec>,
+    pub(crate) prefabs: Vec<AuthoredWorldPlacementSpec>,
     pub(crate) player_start: Vec3,
 }

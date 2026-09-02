@@ -54,6 +54,7 @@ struct PluginLightProviderJson {
 pub(crate) struct LightExtractionProviderRegistry {
     providers: Vec<Arc<dyn LightExtractionProvider>>,
     external_providers: Vec<ExternalLightExtractionProviderDesc>,
+    plugin_snapshot_revision: Option<u64>,
 }
 
 impl LightExtractionProviderRegistry {
@@ -62,20 +63,8 @@ impl LightExtractionProviderRegistry {
         Self {
             providers: Vec::new(),
             external_providers: Vec::new(),
+            plugin_snapshot_revision: None,
         }
-    }
-
-    #[inline]
-    pub(crate) fn from_runtime_providers(providers: Vec<Arc<dyn LightExtractionProvider>>) -> Self {
-        Self {
-            providers,
-            external_providers: Vec::new(),
-        }
-    }
-
-    #[inline]
-    pub(crate) fn runtime_provider_arcs(&self) -> Vec<Arc<dyn LightExtractionProvider>> {
-        self.providers.clone()
     }
 
     pub(crate) fn register_provider(&mut self, provider: Arc<dyn LightExtractionProvider>) {
@@ -117,6 +106,11 @@ impl LightExtractionProviderRegistry {
     }
 
     pub(crate) fn sync_plugin_capabilities(&mut self, snapshot: &PluginsSnapshot) {
+        if self.plugin_snapshot_revision == Some(snapshot.revision) {
+            return;
+        }
+        self.plugin_snapshot_revision = Some(snapshot.revision);
+        self.external_providers.clear();
         for plugin in snapshot.plugins.iter() {
             for capability in plugin.capabilities.iter() {
                 if capability.role != CapabilityRole::Provides {

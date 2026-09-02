@@ -243,6 +243,17 @@ impl AudioSceneRuntimeModule {
         self.tick = self.tick.wrapping_add(1);
         let playback_available = self.refresh_provider();
         let (emitters, environment_frame) = self.snapshot_emitters();
+        if !emitters.is_empty() && (self.tick <= 3 || self.tick % 300 == 0) {
+            newengine_ulog_api::ulog::info!(
+                "audio scene runtime: tick={} emitters={} playback_available={} provider='{}' managed={} autoplay_armed={} policy='throttled-runtime-health'",
+                self.tick,
+                emitters.len(),
+                playback_available,
+                self.provider.as_deref().unwrap_or(""),
+                self.managed.len(),
+                self.autoplay_armed.len(),
+            );
+        }
         let live_keys = emitters
             .iter()
             .map(|snapshot| snapshot.stable_key)
@@ -371,6 +382,31 @@ impl AudioSceneRuntimeModule {
             request.environment = frame.environment;
             match play_audio_cue(&request) {
                 Ok(Some(ack)) if ack.accepted => {
+                    newengine_ulog_api::ulog::info!(
+                        "audio emitter autoplay accepted entity_key={} cue={} provider={} voice_id={:?} voice_ids={:?} virtualized={} message={} diagnostics={:?}",
+                        stable_key,
+                        cue,
+                        ack.provider,
+                        ack.voice_id,
+                        ack.voice_ids,
+                        ack.virtualized,
+                        ack.message,
+                        ack.diagnostics,
+                    );
+                    let waiting_for_output = ack.virtualized
+                        && ack.diagnostics.iter().any(|line| {
+                            line.contains("output_state='initializing'")
+                                || line.contains("audio output device is still initializing")
+                        });
+                    if waiting_for_output {
+                        if let Some(voice_id) = ack.voice_id {
+                            let _ = stop_audio_voice(voice_id);
+                        }
+                        self.retry_after_tick
+                            .insert(stable_key, self.tick.saturating_add(1));
+                        self.clear_error(stable_key);
+                        continue;
+                    }
                     if let Some(voice_id) = ack.voice_id {
                         self.managed.insert(
                             stable_key,

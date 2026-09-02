@@ -99,7 +99,7 @@ fn camera_required_vec3(
 }
 
 fn hydrate_camera_definition(
-    profile: &mut GameReadyMapProfile,
+    profile: &mut AuthoredWorldProfile,
     entry: &serde_json::Value,
     definition_ref: &str,
 ) -> Result<usize, String> {
@@ -611,7 +611,7 @@ fn hydrate_camera_definition(
 }
 
 pub(crate) fn apply_required_camera_definition(
-    profile: &mut GameReadyMapProfile,
+    profile: &mut AuthoredWorldProfile,
 ) -> Result<(), String> {
     if !profile.gameplay.camera.declared {
         return Err("player camera is not declared by the authored map".to_owned());

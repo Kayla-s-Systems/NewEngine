@@ -103,9 +103,7 @@ impl AudioRuntimeState {
         let mut materialized_stream_stats = None;
         let control = match source {
             VoiceSource::Clip { uri, .. } => {
-                let clip_bytes = self.clip_bytes(&uri)?;
-                let decoder = Decoder::try_from(Cursor::new(clip_bytes))
-                    .map_err(|error| format!("audio decode failed '{uri}': {error}"))?;
+                let decoder = self.clip_source(&uri)?;
                 let spectral = SpectralFilterControl::new(acoustic);
                 let environment = EnvironmentFilterControl::new(environment_state);
                 if let Some(spatial) = spatial {
@@ -227,14 +225,13 @@ impl AudioRuntimeState {
                         DynamicSpectralSource::new(stream, spectral.clone()),
                         vec![1.0],
                     );
-                    let rendered: Box<dyn Source + Send> = Box::new(
-                        DynamicSpatialEnvironmentSource::new_with_late_binding(
+                    let rendered: Box<dyn Source + Send> =
+                        Box::new(DynamicSpatialEnvironmentSource::new_with_late_binding(
                             mono,
                             environment.clone(),
                             spatial_control.clone(),
                             late_binding.clone(),
-                        ),
-                    );
+                        ));
                     let render = render_graph.add_boxed_source(
                         rendered,
                         volume,
@@ -251,13 +248,12 @@ impl AudioRuntimeState {
                         late_binding: late_binding.clone(),
                     }
                 } else {
-                    let rendered: Box<dyn Source + Send> = Box::new(
-                        DynamicEnvironmentSource::new_with_late_binding(
+                    let rendered: Box<dyn Source + Send> =
+                        Box::new(DynamicEnvironmentSource::new_with_late_binding(
                             DynamicSpectralSource::new(stream, spectral.clone()),
                             environment.clone(),
                             late_binding.clone(),
-                        ),
-                    );
+                        ));
                     let render = render_graph.add_boxed_source(
                         rendered,
                         volume,
@@ -355,6 +351,10 @@ impl AudioRuntimeState {
             match self.materialize_voice(voice_id, now) {
                 Ok(()) => {
                     self.materialization_errors.remove(&voice_id);
+                    newengine_ulog_api::ulog::info!(
+                        "audio virtualization: promoted voice_id={} physical=true source=rebalance",
+                        voice_id
+                    );
                 }
                 Err(error) => {
                     self.materialization_errors.insert(voice_id, error.clone());

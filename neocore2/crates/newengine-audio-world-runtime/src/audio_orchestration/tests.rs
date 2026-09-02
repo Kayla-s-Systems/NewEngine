@@ -71,7 +71,7 @@ fn prearmed_play_due_handoff_does_not_replay_provider_start() {
         action: AudioTransportAction::Play {
             instance_id,
             object_id: AudioObjectId(9),
-            request: AudioPlayInstanceRequest::new("project/audio/exact.yscd@cue"),
+            request: AudioPlayInstanceRequest::new("project/audio/exact.ysncd@cue"),
         },
     });
     let instance = runtime

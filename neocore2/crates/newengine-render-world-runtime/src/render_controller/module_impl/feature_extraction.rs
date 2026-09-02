@@ -30,15 +30,19 @@ impl FeatureExtractionFrame {
         plugin_snapshot: Option<&PluginsSnapshot>,
         trace_frame: bool,
     ) -> EngineResult<Self> {
-        let mut registry = RenderDrawListProviderRegistry::from_runtime_providers(
-            controller
-                .features
-                .draw_list_providers
-                .runtime_provider_arcs(),
-        );
-        if let Some(snapshot) = plugin_snapshot {
-            registry.sync_plugin_capabilities(snapshot);
-        }
+        let mut profile = TimedBreakdown::new();
+        profile.time("plugin_sync", || -> EngineResult<()> {
+            if let Some(snapshot) = plugin_snapshot {
+                controller
+                    .features
+                    .draw_list_providers
+                    .sync_plugin_capabilities(snapshot);
+            }
+            Ok(())
+        })?;
+        let registry = profile.time("registry_snapshot", || -> EngineResult<_> {
+            Ok(controller.features.draw_list_providers.frame_snapshot())
+        })?;
         if trace_frame {
             newengine_ulog_api::ulog::debug!(
                 "render draw-list providers: {}",
@@ -46,13 +50,16 @@ impl FeatureExtractionFrame {
             );
         }
 
-        let providers = registry.providers();
+        let providers = profile.time("provider_list", || -> EngineResult<_> {
+            Ok(registry.providers())
+        })?;
         let visibility = extraction.visibility();
-        let mut draw_lists =
-            RuntimeDrawListSet::extract(visibility, extraction, providers.as_slice());
-        registry.add_external_draw_lists(visibility, &mut draw_lists);
-
-        let mut profile = TimedBreakdown::new();
+        let draw_lists = profile.time("draw_list_set", || -> EngineResult<_> {
+            let mut lists =
+                RuntimeDrawListSet::extract(visibility, extraction, providers.as_slice());
+            registry.add_external_draw_lists(visibility, &mut lists);
+            Ok(lists)
+        })?;
         {
             let mut build_ctx = DrawListBuildCtx::new(controller, render, &draw_lists);
             profile.time("pass_state", || {
@@ -63,10 +70,31 @@ impl FeatureExtractionFrame {
                 profile.time(provider.id(), || {
                     provider.extract(extraction, &mut build_ctx)
                 })?;
+                let primitive = build_ctx.take_primitive_stage_profile();
+                if primitive.sampled {
+                    profile.push_measurement(
+                        "primitive.directional_shadow",
+                        primitive.directional_shadow_ms,
+                    );
+                    profile.push_measurement("primitive.local_shadow", primitive.local_shadow_ms);
+                    profile.push_measurement("primitive.gbuffer", primitive.gbuffer_ms);
+                    profile.push_measurement("primitive.forward", primitive.forward_ms);
+                }
             }
         }
 
         drop(providers);
+        if extraction.runtime
+            && controller.frame.frame_index.is_multiple_of(30)
+            && newengine_runtime_policy::render_runtime_policy().primitive_stage_log
+        {
+            newengine_ulog_api::ulog::info!(
+                "render.feature.providers.profile: frame={} total_ms={:.3} {}",
+                controller.frame.frame_index,
+                profile.total_ms(),
+                profile.breakdown(),
+            );
+        }
         let draw_list_descs = draw_lists.descriptors();
         Ok(Self {
             registry,

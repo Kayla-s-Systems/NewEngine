@@ -228,6 +228,9 @@ pub(crate) struct SkyDynamicsFrame {
 
 #[derive(Clone, Debug)]
 pub(crate) struct SkyCycleRuntime {
+    /// Project-authored stable identity for the active world/scene. Runtime code must never
+    /// synthesize a product-specific world id.
+    pub world_instance_id: String,
     pub anchor: Option<EntityId>,
     pub sun: Option<EntityId>,
     pub enabled: bool,

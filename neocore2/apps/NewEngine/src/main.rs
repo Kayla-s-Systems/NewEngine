@@ -17,7 +17,7 @@ use newengine_plugin_host::{
 };
 use newengine_project_api::{
     runtime_profile_service_id, GAME_MANIFEST_ENV, PROJECT_BROWSER_PRESENT_METHOD_V1,
-    PROJECT_BROWSER_SERVICE_ID, RUNTIME_PROFILE_LAUNCH_METHOD_V1,
+    PROJECT_BROWSER_SERVICE_ID, PROJECT_DIR_ENV, ROOT_DIR_ENV, RUNTIME_PROFILE_LAUNCH_METHOD_V1,
 };
 use newengine_project_runtime::{
     default_projects_root, game_manifest_request_from_process,
@@ -77,6 +77,7 @@ fn main() -> ExitCode {
 
 fn run() -> Result<(), String> {
     let (runtime_config_path, runtime_config) = load_engine_runtime_config()?;
+    install_process_root_dir_authority(&runtime_config_path)?;
     runtime_config.apply_process_env(&runtime_config_path)?;
 
     if env::args().any(|arg| arg == "--build-standalone") {
@@ -106,8 +107,7 @@ fn run() -> Result<(), String> {
         return run_project_selection(&runtime_config_path);
     }
 
-    let manifest_path =
-        project_request_from_cli().or_else(game_manifest_request_from_process);
+    let manifest_path = project_request_from_cli().or_else(game_manifest_request_from_process);
     let Some(manifest_path) = manifest_path else {
         if runtime_config.runtime.startup_window {
             return run_project_selection(&runtime_config_path);
@@ -128,6 +128,7 @@ fn dispatch_project_launch(
     // normal runtime composition and are discovered as optional capabilities.
     exclude_project_browser_from_runtime();
 
+    env::set_var(PROJECT_DIR_ENV, &project.project_root);
     env::set_var(GAME_MANIFEST_ENV, &project.manifest_path);
     env::remove_var("NEWENGINE_PROJECT");
     env::set_var(
@@ -791,6 +792,54 @@ fn append_env_list_unique(name: &str, value: &str) {
         entries.push(value.to_owned());
     }
     env::set_var(name, entries.join(","));
+}
+
+fn install_process_root_dir_authority(runtime_config_path: &Path) -> Result<PathBuf, String> {
+    if let Some(explicit) = env::var_os(ROOT_DIR_ENV).filter(|value| !value.is_empty()) {
+        let path = PathBuf::from(explicit);
+        if !path.is_absolute() {
+            return Err(format!(
+                "{ROOT_DIR_ENV} must be absolute, got '{}'",
+                path.display()
+            ));
+        }
+        let root = std::fs::canonicalize(&path).unwrap_or(path);
+        env::set_var(ROOT_DIR_ENV, &root);
+        return Ok(root);
+    }
+
+    let mut seeds = Vec::<PathBuf>::new();
+    seeds.push(runtime_config_path.to_path_buf());
+    if let Ok(cwd) = env::current_dir() {
+        seeds.push(cwd);
+    }
+    if let Ok(exe) = env::current_exe() {
+        seeds.push(exe);
+    }
+
+    for seed in seeds {
+        let start = if seed.is_file() {
+            seed.parent().map(Path::to_path_buf).unwrap_or(seed)
+        } else {
+            seed
+        };
+        for ancestor in start.ancestors() {
+            if ancestor.join("NewEngine").is_dir()
+                && ancestor.join("pluginsRuntime").is_dir()
+                && ancestor.join("Projects").is_dir()
+            {
+                let root =
+                    std::fs::canonicalize(ancestor).unwrap_or_else(|_| ancestor.to_path_buf());
+                env::set_var(ROOT_DIR_ENV, &root);
+                return Ok(root);
+            }
+        }
+    }
+
+    Err(format!(
+        "{ROOT_DIR_ENV} is not set and NorthStar root auto-detection failed from runtime config '{}'",
+        runtime_config_path.display()
+    ))
 }
 
 fn env_bool(name: &str, default: bool) -> bool {

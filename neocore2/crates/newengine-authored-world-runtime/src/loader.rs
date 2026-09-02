@@ -1,8 +1,6 @@
 use std::collections::BTreeMap;
 
-use newengine_assets_api::{
-    maps_method, MapCellRequestV1, MapIndexV1, MapRefRequestV1, MapResolvedCellV2,
-};
+use newengine_assets_api::{MapCellRequestV1, MapIndexV1, MapRefRequestV1, MapResolvedCellV2};
 use newengine_definitions_runtime::{DefinitionEntryV1, DefinitionRefRequest};
 
 #[inline]
@@ -11,7 +9,9 @@ pub(crate) fn placement_requires_definition(
 ) -> Result<bool, String> {
     match placement.apply_mode.trim().to_ascii_lowercase().as_str() {
         "metadata_only" => Ok(false),
-        "instantiate" | "static" | "static_mesh" | "visual" | "dynamic" | "dynamic_physics" => Ok(true),
+        "instantiate" | "static" | "static_mesh" | "visual" | "dynamic" | "dynamic_physics" => {
+            Ok(true)
+        }
         other => Err(format!(
             "authored-world placement '{}' has unsupported apply_mode '{}'; expected metadata_only|instantiate|static|static_mesh|visual|dynamic|dynamic_physics",
             placement.id, other
@@ -36,16 +36,19 @@ fn call_json<Request: serde::Serialize, Response: serde::de::DeserializeOwned>(
         .map_err(|error| error.to_string())?
         .ok_or_else(|| format!("required authored-world gateway '{service}' is unavailable"))?;
     serde_json::from_slice(&bytes).map_err(|error| {
-        format!("authored-world gateway response decode failed service='{service}' method='{method}' err='{error}'")
+        format!(
+            "authored-world gateway response decode failed service='{service}' method='{method}' err='{error}'"
+        )
     })
 }
 
-pub(crate) fn load_authored_map(logical_path: &str) -> Result<LoadedAuthoredMap, String> {
+/// Resolve and validate the canonical authored map index through the maps gateway.
+pub fn load_authored_map_index(logical_path: &str) -> Result<(String, MapIndexV1), String> {
     let map_ref =
         newengine_assets_api::map_entry_ref(logical_path, newengine_assets_api::MAP_INDEX_ENTRY);
     let index: MapIndexV1 = call_json(
         newengine_assets_api::ENGINE_ASSETS_MAPS_SERVICE_ID,
-        maps_method::INDEX_V1,
+        newengine_assets_api::maps_method::INDEX_V1,
         &MapRefRequestV1 {
             map_ref: map_ref.clone(),
         },
@@ -56,26 +59,52 @@ pub(crate) fn load_authored_map(logical_path: &str) -> Result<LoadedAuthoredMap,
             errors.join(" | ")
         )
     })?;
+    Ok((map_ref, index))
+}
+
+/// Resolve and validate one authored map cell through the maps gateway.
+pub fn load_authored_map_cell(
+    map_ref: &str,
+    coord: newengine_assets_api::MapCellCoordV1,
+) -> Result<MapResolvedCellV2, String> {
+    let resolved: MapResolvedCellV2 = call_json(
+        newengine_assets_api::ENGINE_ASSETS_MAPS_SERVICE_ID,
+        newengine_assets_api::maps_method::CELL_V2,
+        &MapCellRequestV1 {
+            map_ref: map_ref.to_owned(),
+            coord,
+        },
+    )?;
+    resolved.cell.validate().map_err(|errors| {
+        format!(
+            "authored-world map cell invalid map='{map_ref}' cell={},{}: {}",
+            coord.x,
+            coord.z,
+            errors.join(" | ")
+        )
+    })?;
+    Ok(resolved)
+}
+
+/// Resolve a typed authored definition entry through the definitions gateway.
+pub fn load_authored_definition_entry(definition_ref: &str) -> Result<DefinitionEntryV1, String> {
+    call_json(
+        newengine_assets_api::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
+        newengine_assets_api::definitions_method::ENTRY_JSON_V1,
+        &DefinitionRefRequest {
+            definition_ref: definition_ref.to_owned(),
+            ..Default::default()
+        },
+    )
+}
+
+pub(crate) fn load_authored_map(logical_path: &str) -> Result<LoadedAuthoredMap, String> {
+    let (map_ref, index) = load_authored_map_index(logical_path)?;
 
     let mut cells = Vec::with_capacity(index.cells.len());
     let mut definitions = BTreeMap::new();
     for cell_ref in &index.cells {
-        let resolved: MapResolvedCellV2 = call_json(
-            newengine_assets_api::ENGINE_ASSETS_MAPS_SERVICE_ID,
-            maps_method::CELL_V2,
-            &MapCellRequestV1 {
-                map_ref: map_ref.clone(),
-                coord: cell_ref.coord,
-            },
-        )?;
-        resolved.cell.validate().map_err(|errors| {
-            format!(
-                "authored-world map cell invalid map='{map_ref}' cell={},{}: {}",
-                cell_ref.coord.x,
-                cell_ref.coord.z,
-                errors.join(" | ")
-            )
-        })?;
+        let resolved = load_authored_map_cell(&map_ref, cell_ref.coord)?;
         for placement in resolved
             .cell
             .placements
@@ -87,14 +116,7 @@ pub(crate) fn load_authored_map(logical_path: &str) -> Result<LoadedAuthoredMap,
             {
                 continue;
             }
-            let entry: DefinitionEntryV1 = call_json(
-                newengine_assets_api::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
-                newengine_assets_api::definitions_method::ENTRY_JSON_V1,
-                &DefinitionRefRequest {
-                    definition_ref: placement.definition_ref.clone(),
-                    ..Default::default()
-                },
-            )?;
+            let entry = load_authored_definition_entry(&placement.definition_ref)?;
             definitions.insert(placement.definition_ref.clone(), entry);
         }
         cells.push(resolved);

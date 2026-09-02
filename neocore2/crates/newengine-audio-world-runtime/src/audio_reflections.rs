@@ -26,12 +26,16 @@ use types::{
     ReflectionEmitterCandidate, ReflectionProbeLeg, SecondOrderAggregate, SecondOrderProbeLeg,
 };
 
-const AUDIO_REFLECTION_QUERY_NAMESPACE: u64 = 0xa0d0_0000_0000_0000;
+const AUDIO_REFLECTION_QUERY_NAMESPACE: u64 = 0xa0e0_0000_0000_0000;
 const AUDIO_REFLECTION_QUERY_COUNTER_MASK: u64 = 0x000f_ffff_ffff_ffff;
 const MAX_REFLECTION_EMITTERS_PER_TICK: usize = 12;
 const MAX_SECOND_ORDER_PATHS_PER_EMITTER: usize = 4;
 const REFLECTION_ENDPOINT_EPSILON: f32 = 0.04;
 const SECOND_ORDER_MIDDLE_SEGMENT_EPSILON: f32 = 0.05;
+/// Early reflections are a secondary acoustic field. Sampling at 15 Hz keeps room response
+/// perceptually continuous while avoiding first/second-order geometry construction on all 60 Hz
+/// rigid-body ticks. The last observation remains authoritative between samples.
+const REFLECTION_QUERY_INTERVAL_TICKS: u64 = 4;
 
 /// Bounded first-order reflection visibility contributor. It emits only provider-neutral
 /// `PhysicsQueryDto::Ray` segments; room/material semantics remain engine/audio-domain data.
@@ -39,6 +43,7 @@ pub struct AudioReflectionPhysicsQueryProvider {
     pending: Mutex<BTreeMap<u64, PendingReflectionRay>>,
     pending_second_order: Mutex<BTreeMap<u64, PendingSecondOrderRay>>,
     next_query: AtomicU64,
+    sample_tick: AtomicU64,
 }
 
 impl Default for AudioReflectionPhysicsQueryProvider {
@@ -53,6 +58,7 @@ impl AudioReflectionPhysicsQueryProvider {
             pending: Mutex::new(BTreeMap::new()),
             pending_second_order: Mutex::new(BTreeMap::new()),
             next_query: AtomicU64::new(1),
+            sample_tick: AtomicU64::new(0),
         }
     }
 
@@ -65,6 +71,11 @@ impl AudioReflectionPhysicsQueryProvider {
         AUDIO_REFLECTION_QUERY_NAMESPACE
             | (self.next_query.fetch_add(1, Ordering::Relaxed)
                 & AUDIO_REFLECTION_QUERY_COUNTER_MASK)
+    }
+
+    #[inline]
+    fn sample_due(&self) -> bool {
+        self.sample_tick.fetch_add(1, Ordering::Relaxed) % REFLECTION_QUERY_INTERVAL_TICKS == 0
     }
 
     fn emitter_candidates(&self, world: &World, listener: Vec3) -> Vec<ReflectionEmitterCandidate> {
@@ -251,6 +262,11 @@ impl GameplayPhysicsQueryProvider for AudioReflectionPhysicsQueryProvider {
         let listener_array = listener_state.listener.sanitized().position;
         let listener = Vec3::new(listener_array[0], listener_array[1], listener_array[2]);
         if !listener.is_finite() {
+            self.pending.lock().clear();
+            self.pending_second_order.lock().clear();
+            return Vec::new();
+        }
+        if !self.sample_due() {
             self.pending.lock().clear();
             self.pending_second_order.lock().clear();
             return Vec::new();

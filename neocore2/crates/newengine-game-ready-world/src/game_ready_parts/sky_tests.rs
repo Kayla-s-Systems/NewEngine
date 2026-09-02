@@ -2,6 +2,7 @@ use super::*;
 
 fn test_cycle() -> SkyCycleRuntime {
     SkyCycleRuntime {
+        world_instance_id: "test.world".to_owned(),
         anchor: None,
         sun: None,
         enabled: true,

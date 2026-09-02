@@ -100,10 +100,20 @@ impl RuntimeDrawListSet {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub(in crate::render_controller::module_impl) struct PrimitiveProviderStageProfile {
+    pub(in crate::render_controller::module_impl) sampled: bool,
+    pub(in crate::render_controller::module_impl) directional_shadow_ms: f32,
+    pub(in crate::render_controller::module_impl) local_shadow_ms: f32,
+    pub(in crate::render_controller::module_impl) gbuffer_ms: f32,
+    pub(in crate::render_controller::module_impl) forward_ms: f32,
+}
+
 pub(crate) struct DrawListBuildCtx<'a> {
     controller: &'a mut RuntimeRenderController,
     render: &'a mut dyn RenderApi,
     lists: &'a RuntimeDrawListSet,
+    primitive_stage_profile: PrimitiveProviderStageProfile,
 }
 
 impl<'a> DrawListBuildCtx<'a> {
@@ -117,7 +127,15 @@ impl<'a> DrawListBuildCtx<'a> {
             controller,
             render,
             lists,
+            primitive_stage_profile: PrimitiveProviderStageProfile::default(),
         }
+    }
+
+    #[inline]
+    pub(in crate::render_controller::module_impl) fn take_primitive_stage_profile(
+        &mut self,
+    ) -> PrimitiveProviderStageProfile {
+        std::mem::take(&mut self.primitive_stage_profile)
     }
 
     pub(crate) fn record<T>(
@@ -296,6 +314,7 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
     }
 
     fn record_primitive_mesh_shadow(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
+        let stage_started = std::time::Instant::now();
         if ctx.shadow_frame.cascade_count > 1 {
             for cascade_index in 0..ctx.shadow_frame.cascade_count as usize {
                 let cascade = ctx.shadow_frame.cascade(cascade_index);
@@ -319,24 +338,26 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                         )
                     })?;
             }
-            return Ok(());
+        } else {
+            let _ = self.record(RenderDrawListKind::ShadowCasters, |this, r| {
+                super::super::passes::draw_primitives_shadow(
+                    this,
+                    r,
+                    ctx.scene,
+                    ctx.lit,
+                    ctx.shadow_frame.light_mvp,
+                    &ctx.lights,
+                    ctx.runtime,
+                    ctx.camera_position,
+                    0,
+                    0.0,
+                    super::super::passes::ShadowUboViewKey::directional(0),
+                )
+            })?;
         }
-
-        let _ = self.record(RenderDrawListKind::ShadowCasters, |this, r| {
-            super::super::passes::draw_primitives_shadow(
-                this,
-                r,
-                ctx.scene,
-                ctx.lit,
-                ctx.shadow_frame.light_mvp,
-                &ctx.lights,
-                ctx.runtime,
-                ctx.camera_position,
-                0,
-                0.0,
-                super::super::passes::ShadowUboViewKey::directional(0),
-            )
-        })?;
+        self.primitive_stage_profile.sampled = true;
+        self.primitive_stage_profile.directional_shadow_ms =
+            stage_started.elapsed().as_secs_f32() * 1000.0;
         Ok(())
     }
 
@@ -344,6 +365,7 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
         &mut self,
         ctx: &SceneExtractionCtx<'_>,
     ) -> EngineResult<()> {
+        let stage_started = std::time::Instant::now();
         let count = ctx
             .local_shadow_frame
             .view_count
@@ -373,10 +395,14 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                 )
             })?;
         }
+        self.primitive_stage_profile.sampled = true;
+        self.primitive_stage_profile.local_shadow_ms =
+            stage_started.elapsed().as_secs_f32() * 1000.0;
         Ok(())
     }
 
     fn record_primitive_mesh_gbuffer(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
+        let stage_started = std::time::Instant::now();
         let _ = self.record_shadow_phase(RenderGraphPassKind::GBuffer, |this, r| {
             r.set_viewport(Viewport::full(ctx.viewport_extent))?;
             r.set_scissor(RectI32::new(
@@ -398,10 +424,13 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                 ctx.deferred,
             )
         })?;
+        self.primitive_stage_profile.sampled = true;
+        self.primitive_stage_profile.gbuffer_ms = stage_started.elapsed().as_secs_f32() * 1000.0;
         Ok(())
     }
 
     fn record_primitive_mesh_forward(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
+        let stage_started = std::time::Instant::now();
         let _ = self.record(RenderDrawListKind::OpaqueForward, |this, r| {
             super::super::passes::draw_primitives(
                 this,
@@ -418,6 +447,8 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                 ctx.deferred,
             )
         })?;
+        self.primitive_stage_profile.sampled = true;
+        self.primitive_stage_profile.forward_ms = stage_started.elapsed().as_secs_f32() * 1000.0;
         Ok(())
     }
 

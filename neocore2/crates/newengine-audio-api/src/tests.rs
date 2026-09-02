@@ -35,7 +35,7 @@ fn play_request_sanitizes_runtime_controls() {
     assert_eq!(request.gain, 1.0);
     assert_eq!(request.speed, 0.05);
 
-    let mut cue = AudioCuePlayRequest::new("shared/audio/test.yscd@test");
+    let mut cue = AudioCuePlayRequest::new("shared/audio/test.ysncd@test");
     cue.pitch = -10.0;
     cue.gain = f32::NAN;
     let cue = cue.sanitized();
@@ -113,7 +113,7 @@ fn sound_cue_carries_authored_attenuation() {
 
 #[test]
 fn audio_emitter_is_a_stable_semantic_component_payload() {
-    let emitter = AudioEmitter::new("shared/audio/test.yscd@test");
+    let emitter = AudioEmitter::new("shared/audio/test.ysncd@test");
     let json = serde_json::to_value(&emitter).expect("serialize emitter");
     let decoded: AudioEmitter = serde_json::from_value(json).expect("decode emitter");
     assert_eq!(decoded, emitter);

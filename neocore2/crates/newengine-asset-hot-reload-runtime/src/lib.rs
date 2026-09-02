@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fs,
     path::{Path, PathBuf},
     sync::mpsc::{self, Receiver, TryRecvError},
@@ -53,10 +53,22 @@ pub struct AssetFileWatcherConfig {
 impl Default for AssetFileWatcherConfig {
     fn default() -> Self {
         Self {
-            poll_interval: Duration::from_millis(250),
+            poll_interval: Duration::from_millis(1_000),
             debounce: Duration::from_millis(120),
             max_files: 50_000,
             watch_engine_mounts: false,
+        }
+    }
+}
+
+impl AssetFileWatcherConfig {
+    /// Editor-owned runtime Play keeps live reload, but filesystem discovery is background
+    /// authoring work and must not run at frame-adjacent 4 Hz cadence. One scan per second keeps
+    /// iteration responsive while moving recursive metadata walks out of the p95 frame window.
+    pub fn interactive_play() -> Self {
+        Self {
+            poll_interval: Duration::from_millis(1_000),
+            ..Self::default()
         }
     }
 }
@@ -97,13 +109,13 @@ impl Default for AssetHotReloadReportV1 {
 #[derive(Debug)]
 struct ScanBatch {
     scan_unix_ms: u64,
-    files: BTreeMap<PathBuf, FileStamp>,
+    files: HashMap<PathBuf, FileStamp>,
 }
 
 #[derive(Debug)]
 pub struct AssetFileWatcherRuntime {
     config: AssetFileWatcherConfig,
-    known: Option<BTreeMap<PathBuf, FileStamp>>,
+    known: Option<HashMap<PathBuf, FileStamp>>,
     pending: BTreeMap<String, u64>,
     scan_rx: Option<Receiver<ScanBatch>>,
     next_scan_unix_ms: u64,
@@ -216,6 +228,12 @@ impl AssetFileWatcherRuntime {
 
         let roots = watched_roots(registry, &self.config);
         let config = self.config.clone();
+        let capacity_hint = self
+            .known
+            .as_ref()
+            .map(|known| known.len())
+            .unwrap_or(1_024)
+            .min(config.max_files);
         let interval_ms = config.poll_interval.as_millis().max(1) as u64;
         let (scan_tx, scan_rx) = mpsc::channel::<ScanBatch>();
         let request = TaskRequest::new("asset-hot-reload-scan")
@@ -230,7 +248,7 @@ impl AssetFileWatcherRuntime {
             .cancellable(false);
 
         let _ticket = jobs.submit_request(request, move || {
-            let files = scan_watched_roots(&roots, &config);
+            let files = scan_watched_roots(&roots, &config, capacity_hint);
             let _ = scan_tx.send(ScanBatch {
                 scan_unix_ms: unix_ms_now(),
                 files,
@@ -242,6 +260,13 @@ impl AssetFileWatcherRuntime {
 }
 
 pub fn install_asset_file_watcher(resources: &mut Resources) {
+    install_asset_file_watcher_with_config(resources, AssetFileWatcherConfig::default());
+}
+
+pub fn install_asset_file_watcher_with_config(
+    resources: &mut Resources,
+    config: AssetFileWatcherConfig,
+) {
     if asset_hot_reload_disabled() || resources.get::<AssetFileWatcherRuntime>().is_some() {
         return;
     }
@@ -251,7 +276,7 @@ pub fn install_asset_file_watcher(resources: &mut Resources) {
     let Some(jobs) = resources.get::<ThreadPoolHandle>().cloned() else {
         return;
     };
-    let mut watcher = AssetFileWatcherRuntime::default();
+    let mut watcher = AssetFileWatcherRuntime::new(config);
     watcher.prime(&registry, &jobs);
     resources.insert(watcher);
 }
@@ -348,16 +373,17 @@ fn watched_roots(registry: &ContentMountRegistry, config: &AssetFileWatcherConfi
 fn scan_watched_files(
     registry: &ContentMountRegistry,
     config: &AssetFileWatcherConfig,
-) -> BTreeMap<PathBuf, FileStamp> {
+) -> HashMap<PathBuf, FileStamp> {
     let roots = watched_roots(registry, config);
-    scan_watched_roots(&roots, config)
+    scan_watched_roots(&roots, config, 1_024)
 }
 
 fn scan_watched_roots(
     roots: &[PathBuf],
     config: &AssetFileWatcherConfig,
-) -> BTreeMap<PathBuf, FileStamp> {
-    let mut out = BTreeMap::new();
+    capacity_hint: usize,
+) -> HashMap<PathBuf, FileStamp> {
+    let mut out = HashMap::with_capacity(capacity_hint.min(config.max_files));
     for root in roots {
         scan_dir(root, config.max_files, &mut out);
         if out.len() >= config.max_files {
@@ -368,8 +394,8 @@ fn scan_watched_roots(
 }
 
 fn diff_changed_paths(
-    previous: &BTreeMap<PathBuf, FileStamp>,
-    next: &BTreeMap<PathBuf, FileStamp>,
+    previous: &HashMap<PathBuf, FileStamp>,
+    next: &HashMap<PathBuf, FileStamp>,
 ) -> Vec<PathBuf> {
     let mut changed_paths = BTreeSet::<PathBuf>::new();
     for (path, stamp) in next {
@@ -385,7 +411,7 @@ fn diff_changed_paths(
     changed_paths.into_iter().collect()
 }
 
-fn scan_dir(root: &Path, max_files: usize, out: &mut BTreeMap<PathBuf, FileStamp>) {
+fn scan_dir(root: &Path, max_files: usize, out: &mut HashMap<PathBuf, FileStamp>) {
     if out.len() >= max_files {
         return;
     }
@@ -501,7 +527,7 @@ mod tests {
         let a = PathBuf::from("a.nemat");
         let b = PathBuf::from("b.nemat");
         let c = PathBuf::from("c.nemat");
-        let mut before = BTreeMap::new();
+        let mut before = HashMap::new();
         before.insert(
             a.clone(),
             FileStamp {
@@ -516,7 +542,7 @@ mod tests {
                 modified_ns: 2,
             },
         );
-        let mut after = BTreeMap::new();
+        let mut after = HashMap::new();
         after.insert(
             a.clone(),
             FileStamp {

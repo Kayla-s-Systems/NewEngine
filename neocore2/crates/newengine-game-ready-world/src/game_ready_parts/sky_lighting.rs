@@ -4,6 +4,7 @@ use super::*;
 pub(crate) fn configure_game_ready_lighting(
     world: &mut newengine_ecs::World,
     environment_parent: EntityId,
+    world_instance_id: &str,
     spec: &GameReadyLightingSpec,
     sky: &GameReadySkySpec,
 ) {
@@ -67,6 +68,7 @@ pub(crate) fn configure_game_ready_lighting(
     sync_game_ready_day_night_to_engine_time(&spec.day_night);
 
     world.insert_resource(SkyCycleRuntime {
+        world_instance_id: world_instance_id.to_owned(),
         anchor: Some(sky_cycle_anchor),
         sun: Some(sun_entity),
         enabled: spec.day_night.enabled,

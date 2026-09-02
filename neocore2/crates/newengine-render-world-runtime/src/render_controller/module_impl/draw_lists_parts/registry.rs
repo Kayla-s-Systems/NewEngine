@@ -55,6 +55,7 @@ pub(crate) struct RenderDrawListProviderRegistry {
     providers: Vec<Arc<dyn RenderDrawListProvider>>,
     external_providers: Vec<ExternalRenderDrawListProviderDesc>,
     reported_route_warnings: Mutex<HashSet<String>>,
+    plugin_snapshot_revision: Option<u64>,
 }
 
 impl RenderDrawListProviderRegistry {
@@ -64,21 +65,19 @@ impl RenderDrawListProviderRegistry {
             providers: Vec::new(),
             external_providers: Vec::new(),
             reported_route_warnings: Mutex::new(HashSet::new()),
+            plugin_snapshot_revision: None,
         }
     }
 
-    #[inline]
-    pub(crate) fn from_runtime_providers(providers: Vec<Arc<dyn RenderDrawListProvider>>) -> Self {
+    /// Cheap immutable frame snapshot. Plugin capability JSON is parsed only when the
+    /// host snapshot revision changes, never once per rendered frame.
+    pub(crate) fn frame_snapshot(&self) -> Self {
         Self {
-            providers,
-            external_providers: Vec::new(),
+            providers: self.providers.clone(),
+            external_providers: self.external_providers.clone(),
             reported_route_warnings: Mutex::new(HashSet::new()),
+            plugin_snapshot_revision: self.plugin_snapshot_revision,
         }
-    }
-
-    #[inline]
-    pub(crate) fn runtime_provider_arcs(&self) -> Vec<Arc<dyn RenderDrawListProvider>> {
-        self.providers.clone()
     }
 
     pub(crate) fn register_provider(&mut self, provider: Arc<dyn RenderDrawListProvider>) {
@@ -120,6 +119,14 @@ impl RenderDrawListProviderRegistry {
     }
 
     pub(crate) fn sync_plugin_capabilities(&mut self, snapshot: &PluginsSnapshot) {
+        if self.plugin_snapshot_revision == Some(snapshot.revision) {
+            return;
+        }
+        self.plugin_snapshot_revision = Some(snapshot.revision);
+        self.external_providers.clear();
+        if let Ok(mut warnings) = self.reported_route_warnings.lock() {
+            warnings.clear();
+        }
         for plugin in snapshot.plugins.iter() {
             for capability in plugin.capabilities.iter() {
                 if capability.role != CapabilityRole::Provides {

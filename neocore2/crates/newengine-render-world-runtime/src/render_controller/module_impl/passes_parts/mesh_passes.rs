@@ -25,9 +25,7 @@ use super::mesh_visibility::{
     terrain_receive_shadows_enabled, transform_sphere,
 };
 use crate::render_controller::RuntimeRenderController;
-use newengine_gameplay_world_runtime::gameplay::{
-    display_shadow_caster_visible_in_mode, display_visible_in_mode,
-};
+use newengine_gameplay_world_runtime::gameplay::display_visible_in_mode;
 use newengine_gameplay_world_runtime::gameplay::{
     EnvironmentDomeRenderState, TerrainMaterialLayers,
 };

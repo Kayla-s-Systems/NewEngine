@@ -666,7 +666,7 @@ mod tests {
     fn v2_offsets_keep_type_id_and_flags_distinct() {
         let metadata = br#"{"schema":"metadata"}"#;
         let bytes = encode_list_file(ListFileEncodeRequest {
-            content_kind: LIST_FILE_CONTENT_KIND_NEFTD,
+            content_kind: LIST_FILE_CONTENT_KIND_YFD,
             content_schema_version: 1,
             entry_count: 5,
             additional_flags: 0,
@@ -681,7 +681,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             u16::from_le_bytes([bytes[6], bytes[7]]) as u32,
-            LIST_FILE_CONTENT_KIND_NEFTD
+            LIST_FILE_CONTENT_KIND_YFD
         );
         assert_eq!(
             u16::from_le_bytes([bytes[8], bytes[9]]),

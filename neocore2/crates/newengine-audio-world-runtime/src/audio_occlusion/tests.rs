@@ -18,7 +18,7 @@ fn provider_emits_bounded_multi_ray_batch_for_nearest_spatial_emitters() {
                 ..Transform::default()
             },
         );
-        let mut emitter = AudioEmitter::new("shared/audio/test.yscd@test");
+        let mut emitter = AudioEmitter::new("shared/audio/test.ysncd@test");
         emitter.occlusion.ray_count = 3;
         let _ = world.insert(entity, emitter);
     }
@@ -44,7 +44,7 @@ fn crowded_scene_budget_keeps_nearest_emitter_and_rotates_fair_slots() {
                 ..Transform::default()
             },
         );
-        let mut emitter = AudioEmitter::new("shared/audio/test.yscd@test");
+        let mut emitter = AudioEmitter::new("shared/audio/test.ysncd@test");
         emitter.occlusion.ray_count = 1;
         let _ = world.insert(entity, emitter);
     }
@@ -78,7 +78,7 @@ fn partial_probe_blockage_is_obstruction_not_full_occlusion() {
             ..Transform::default()
         },
     );
-    let mut emitter = AudioEmitter::new("shared/audio/test.yscd@test");
+    let mut emitter = AudioEmitter::new("shared/audio/test.ysncd@test");
     emitter.occlusion.ray_count = 3;
     let _ = world.insert(emitter_entity, emitter);
     let blocker = world.spawn();
@@ -125,7 +125,7 @@ fn all_probe_rays_blocked_produces_full_occlusion() {
             ..Transform::default()
         },
     );
-    let mut emitter = AudioEmitter::new("shared/audio/test.yscd@test");
+    let mut emitter = AudioEmitter::new("shared/audio/test.ysncd@test");
     emitter.occlusion.ray_count = 3;
     let _ = world.insert(emitter_entity, emitter);
     let blocker = world.spawn();
@@ -170,7 +170,7 @@ fn bidirectional_center_probe_resolves_single_blocker_thickness() {
             ..Transform::default()
         },
     );
-    let mut emitter = AudioEmitter::new("shared/audio/test.yscd@test");
+    let mut emitter = AudioEmitter::new("shared/audio/test.ysncd@test");
     emitter.occlusion.ray_count = 1;
     let _ = world.insert(emitter_entity, emitter);
     let blocker = world.spawn();

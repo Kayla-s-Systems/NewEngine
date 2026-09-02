@@ -140,6 +140,7 @@ pub fn assignment(variant: &FpsPlayableCharacterPolicy) -> Option<PlayerModelAss
                     right_shoulder_joint: rig.right_shoulder_joint.clone(),
                 },
             ),
+            skeletal_secondary_motion: None,
             equipment_ready_animation: variant.presentation.equipment_ready_animation.clone(),
             equipment_aim_animation: variant.presentation.equipment_aim_animation.clone(),
             equipment_reload_animation: variant.presentation.equipment_reload_animation.clone(),

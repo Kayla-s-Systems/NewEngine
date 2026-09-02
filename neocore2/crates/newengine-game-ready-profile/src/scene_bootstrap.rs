@@ -1,21 +1,12 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use std::{any::Any, sync::Arc};
+use std::sync::Arc;
 
-use newengine_asset_bootstrap_runtime::mount_profile_content_best_effort;
-use newengine_assets::AssetServiceClient;
-use newengine_core::{
-    render::SceneLaunchStatus, EngineLifecycleEvent, EngineReadinessKey, EngineReadinessSnapshot,
-    EngineResult, Module, ModuleCtx, Resources,
-};
+use newengine_core::Resources;
 use newengine_game_data::GameDataProvider;
-use newengine_project_api::ProjectContentMountState;
-use newengine_ui_api::UiPresentationFlowState;
 
-use crate::GAME_READY_MOUNT_SPEC;
-
-/// Product-owned adapter for the generic engine scene-bootstrap boundary.
-/// The engine never selects this provider by name; the active application profile injects it.
+/// Transitional assembler while authored player/sky/mission enrichment is extracted into generic
+/// runtime units. Lifecycle/readiness ownership already lives in `newengine-authored-world-runtime`.
 pub(crate) struct GameReadyWorldSceneBootstrapProvider {
     game_data_provider: Arc<dyn GameDataProvider>,
 }
@@ -58,313 +49,53 @@ impl newengine_engine_runtime::SceneBootstrapProvider for GameReadyWorldSceneBoo
         );
         primary
             .map(|entity| newengine_engine_runtime::SceneBootstrapResult::new(Some(entity)))
-            .ok_or_else(|| {
-                "authored GameReady world bootstrap returned no primary entity".to_owned()
-            })
+            .ok_or_else(|| "authored world bootstrap returned no primary entity".to_owned())
     }
 }
 
-const GAME_READY_SCENE_BOOTSTRAP_REQUIRES: &[EngineReadinessKey] =
-    &[EngineReadinessKey::EnginePluginsReady];
+/// Transitional completion hook. The graph is project-authored; the generic authored-world
+/// lifecycle invokes this without knowing anything about GameReady or audio policy.
+pub(crate) struct ProjectAudioMixBootstrapCompletion;
 
-pub(crate) struct GameReadySceneBootstrapModule {
-    scene: Arc<newengine_scene_runtime::SceneBridge>,
-    bootstrapped: bool,
-    failed_services_generation: Option<u64>,
-    waiting_logged: bool,
-    project_mount_wait_logged: bool,
-    presentation_deferred_logged: bool,
-}
-
-impl GameReadySceneBootstrapModule {
-    #[inline]
-    pub(crate) fn new(scene: Arc<newengine_scene_runtime::SceneBridge>) -> Self {
-        Self {
-            scene,
-            bootstrapped: false,
-            failed_services_generation: None,
-            waiting_logged: false,
-            project_mount_wait_logged: false,
-            presentation_deferred_logged: false,
-        }
-    }
-
-    #[inline]
-    fn log_waiting_once(&mut self, origin: &'static str) {
-        if self.waiting_logged {
-            return;
-        }
-        self.waiting_logged = true;
-        newengine_ulog_api::ulog::info!(
-            "game-ready runtime: waiting for AssetManager/geometryImporter readiness before scene bootstrap origin='{}'",
-            origin
-        );
-    }
-
-    #[inline]
-    fn presentation_bootstrap_allowed<E: Send + 'static>(
-        &mut self,
-        ctx: &ModuleCtx<'_, E>,
-        origin: &'static str,
-    ) -> bool {
-        if presentation_flow_allows_bootstrap(ctx.resources()) {
-            return true;
-        }
-        let flow = ctx
-            .resources()
-            .get::<UiPresentationFlowState>()
-            .expect("blocked presentation flow state");
-        if !self.presentation_deferred_logged {
-            self.presentation_deferred_logged = true;
-            newengine_ulog_api::ulog::info!(
-                "game-ready runtime: scene bootstrap deferred by authored presentation flow origin='{}' flow='{}' state='{}' surface='{}'",
-                origin,
-                flow.flow_id,
-                flow.state_id,
-                flow.active_surface_id.as_deref().unwrap_or("<none>"),
-            );
-        }
-        false
-    }
-
-    #[inline]
-    fn try_bootstrap_if_allowed<E: Send + 'static>(
-        &mut self,
-        ctx: &mut ModuleCtx<'_, E>,
-        origin: &'static str,
-    ) -> EngineResult<()> {
-        let project_content_ready = ctx
-            .resources()
-            .get::<ProjectContentMountState>()
-            .map(ProjectContentMountState::ready)
-            .unwrap_or(true);
-        if !project_content_ready {
-            if !self.project_mount_wait_logged {
-                self.project_mount_wait_logged = true;
-                newengine_ulog_api::ulog::info!(
-                    "game-ready runtime: waiting for selected project content mounts before scene bootstrap origin='{}'",
-                    origin,
-                );
-            }
-            return Ok(());
-        }
-        if !self.presentation_bootstrap_allowed(ctx, origin) {
-            return Ok(());
-        }
-        self.try_bootstrap(ctx, origin)
-    }
-
-    #[inline]
-    fn try_bootstrap<E: Send + 'static>(
-        &mut self,
-        ctx: &mut ModuleCtx<'_, E>,
-        origin: &'static str,
-    ) -> EngineResult<()> {
-        let services_generation = newengine_plugin_host::services_generation();
-        if !bootstrap_attempt_allowed(
-            self.bootstrapped,
-            self.failed_services_generation,
-            services_generation,
-        ) {
-            return Ok(());
-        }
-
-        if !newengine_plugin_host::has_service(newengine_assets::consts::ASSET_SERVICE_ID) {
-            self.log_waiting_once(origin);
-            return Ok(());
-        }
-
-        let assets = AssetServiceClient::new(newengine_plugin_host::default_host_api());
-        mount_profile_content_best_effort(&assets, GAME_READY_MOUNT_SPEC);
-
-        match self.scene.bootstrap_profile_scene_now() {
-            Some(player) => {
-                if let Err(error) =
-                    install_project_audio_mix_graph(ctx.resources_mut(), &self.scene)
-                {
-                    self.failed_services_generation = Some(services_generation);
-                    newengine_ulog_api::ulog::error!(
-                        "game-ready runtime: authored audio mix bootstrap failed err='{}' policy='no hidden route fallback'",
-                        error
-                    );
-                    ctx.resources_mut().insert(SceneLaunchStatus::loading(
-                        "Audio mix bootstrap failed",
-                        "Project AudioMixGraph was not installed",
-                        error,
-                        0.997,
-                    ));
-                    return Ok(());
-                }
-                self.failed_services_generation = None;
-                self.bootstrapped = true;
-                let selected_player_authority = self.scene.selection_authority_handle();
-                newengine_ulog_api::ulog::info!(
-                    "game-ready runtime: CPU scene bootstrapped via lifecycle dispatch origin='{}' selected_player_cache={:?} selected_player_authority={:?}; waiting for launch gate before public Play",
-                    origin,
-                    player,
-                    selected_player_authority
-                );
-            }
-            None => {
-                self.failed_services_generation = Some(services_generation);
-                newengine_ulog_api::ulog::warn!(
-                    "game-ready runtime: scene bootstrap failed after readiness dispatch origin='{}' service_generation={}; publishing engine.ui loading failure overlay and suspending retry until the capability graph changes",
-                    origin,
-                    services_generation
-                );
-                ctx.resources_mut().insert(SceneLaunchStatus::loading(
-                    "Scene bootstrap failed",
-                    "Authored world was not loaded",
-                    "The strict data-driven .ymap bootstrap failed before playable-world handoff. Emergency fallback profiles are forbidden, so the host keeps the loading/error surface visible instead of presenting a black viewport. Check the preceding game-ready asset diagnostics for the exact AssetManager decode failure.",
-                    0.995,
-                ));
-            }
-        }
-
-        Ok(())
-    }
-}
-
-fn install_project_audio_mix_graph(
-    resources: &mut Resources,
-    scene: &Arc<newengine_scene_runtime::SceneBridge>,
-) -> Result<(), String> {
-    let graph = {
-        let scene = scene.scene();
-        let scene = scene.read();
-        let snapshot = scene
-            .world()
-            .resource::<newengine_game_data::GameDataSnapshot>()
-            .ok_or("GameReady scene did not publish GameDataSnapshot before audio mix bootstrap")?;
-        snapshot.data().audio.mix_graph.clone()
-    };
-    graph
-        .validate()
-        .map_err(|error| format!("project audio.mix_graph invalid: {error}"))?;
-    let handle = resources
-        .get::<newengine_audio_world_runtime::AudioOrchestrationHandle>()
-        .cloned()
-        .ok_or("GameReady requires AudioOrchestrationHandle for authored audio.mix_graph")?;
-    handle
-        .install_mix_graph(graph.clone())
-        .map_err(|error| format!("project audio.mix_graph installation failed: {error}"))?;
-    newengine_ulog_api::ulog::info!(
-        "game-ready audio mix graph queued routes={} snapshots={} voice_budgets={} authority='project GameData V2 -> AudioOrchestration'",
-        graph.buses.len(),
-        graph.snapshots.len(),
-        graph.voice_budgets.len(),
-    );
-    Ok(())
-}
-
-fn bootstrap_attempt_allowed(
-    bootstrapped: bool,
-    failed_services_generation: Option<u64>,
-    current_services_generation: u64,
-) -> bool {
-    !bootstrapped && failed_services_generation != Some(current_services_generation)
-}
-
-impl<E: Send + 'static> Module<E> for GameReadySceneBootstrapModule {
-    #[inline]
+impl newengine_authored_world_runtime::AuthoredWorldBootstrapCompletion
+    for ProjectAudioMixBootstrapCompletion
+{
     fn id(&self) -> &'static str {
-        "app.game_ready_scene_bootstrap"
+        "project.audio-mix"
     }
 
-    #[inline]
-    fn startup_requires(&self) -> &'static [EngineReadinessKey] {
-        GAME_READY_SCENE_BOOTSTRAP_REQUIRES
-    }
-
-    #[inline]
-    fn start(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
-        let origin = if ctx
-            .resources()
-            .get::<EngineReadinessSnapshot>()
-            .map(|s| s.engine_plugins_ready)
-            .unwrap_or(false)
-        {
-            "startup-graph-engine-plugins-ready"
-        } else {
-            "startup-graph-unexpected-early-start"
+    fn complete(
+        &self,
+        resources: &mut Resources,
+        scene: &Arc<newengine_scene_runtime::SceneBridge>,
+    ) -> Result<(), String> {
+        let graph = {
+            let scene = scene.scene();
+            let scene = scene.read();
+            let snapshot = scene
+                .world()
+                .resource::<newengine_game_data::GameDataSnapshot>()
+                .ok_or(
+                    "authored scene did not publish GameDataSnapshot before audio mix bootstrap",
+                )?;
+            snapshot.data().audio.mix_graph.clone()
         };
-        self.try_bootstrap_if_allowed(ctx, origin)
-    }
-
-    #[inline]
-    fn on_event(&mut self, ctx: &mut ModuleCtx<'_, E>, event: &dyn Any) -> EngineResult<()> {
-        let Some(event) = event.downcast_ref::<EngineLifecycleEvent>() else {
-            return Ok(());
-        };
-
-        match event {
-            EngineLifecycleEvent::EnginePluginsReady { origin, .. } => {
-                self.try_bootstrap_if_allowed(ctx, origin)
-            }
-            EngineLifecycleEvent::EngineStartCompleted { .. } => {
-                if self.bootstrapped
-                    || !self.presentation_bootstrap_allowed(ctx, "engine-start-completed")
-                {
-                    Ok(())
-                } else {
-                    self.log_waiting_once("engine-start-completed");
-                    Ok(())
-                }
-            }
-        }
-    }
-
-    #[inline]
-    fn update(&mut self, ctx: &mut ModuleCtx<'_, E>) -> EngineResult<()> {
-        if !self.bootstrapped
-            && newengine_plugin_host::has_service(newengine_assets::consts::ASSET_SERVICE_ID)
-        {
-            self.try_bootstrap_if_allowed(ctx, "update-readiness-fallback")?;
-        }
+        graph
+            .validate()
+            .map_err(|error| format!("project audio.mix_graph invalid: {error}"))?;
+        let handle = resources
+            .get::<newengine_audio_world_runtime::AudioOrchestrationHandle>()
+            .cloned()
+            .ok_or("project audio.mix_graph requires AudioOrchestrationHandle")?;
+        handle
+            .install_mix_graph(graph.clone())
+            .map_err(|error| format!("project audio.mix_graph installation failed: {error}"))?;
+        newengine_ulog_api::ulog::info!(
+            "project audio mix graph queued routes={} snapshots={} voice_budgets={} authority='project GameData -> AudioOrchestration'",
+            graph.buses.len(),
+            graph.snapshots.len(),
+            graph.voice_budgets.len(),
+        );
         Ok(())
-    }
-}
-
-fn presentation_flow_allows_bootstrap(resources: &Resources) -> bool {
-    resources
-        .get::<UiPresentationFlowState>()
-        .map(UiPresentationFlowState::allows_world_bootstrap)
-        .unwrap_or(true)
-}
-
-#[cfg(test)]
-mod presentation_flow_tests {
-    use super::*;
-
-    #[test]
-    fn failed_bootstrap_retries_only_after_service_graph_revision() {
-        assert!(bootstrap_attempt_allowed(false, None, 10));
-        assert!(!bootstrap_attempt_allowed(false, Some(10), 10));
-        assert!(bootstrap_attempt_allowed(false, Some(10), 11));
-        assert!(!bootstrap_attempt_allowed(true, Some(10), 11));
-    }
-
-    #[test]
-    fn absent_presentation_flow_keeps_legacy_bootstrap_behavior() {
-        assert!(presentation_flow_allows_bootstrap(&Resources::default()));
-    }
-
-    #[test]
-    fn authored_frontend_can_gate_world_bootstrap() {
-        let mut resources = Resources::default();
-        resources.insert(UiPresentationFlowState {
-            flow_id: "game.frontend".to_owned(),
-            state_id: "main_menu".to_owned(),
-            blocks_world_bootstrap: true,
-            blocks_gameplay_input: true,
-            ..UiPresentationFlowState::default()
-        });
-        assert!(!presentation_flow_allows_bootstrap(&resources));
-
-        resources
-            .get_mut::<UiPresentationFlowState>()
-            .expect("flow state")
-            .blocks_world_bootstrap = false;
-        assert!(presentation_flow_allows_bootstrap(&resources));
     }
 }

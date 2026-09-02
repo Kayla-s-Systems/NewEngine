@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 static MULTI_ADAPTER_SERVICE_DISABLED: AtomicBool = AtomicBool::new(false);
 
-pub(super) fn canonical_ydd_prefab_ref(prefab: &GameReadyPrefabSpec) -> Result<String, String> {
+pub(super) fn canonical_ydd_prefab_ref(prefab: &AuthoredWorldPlacementSpec) -> Result<String, String> {
     let source = prefab.source.trim().replace('\\', "/");
     if source.is_empty() {
         return Err(format!(

@@ -1,7 +1,7 @@
 use super::*;
 
 // Strict data-driven mode: authored .ymap is required; no emergency runtime profile is generated.
-impl Default for RawGameReadyPayload {
+impl Default for RawAuthoredWorldPayload {
     fn default() -> Self {
         Self {
             title: default_title(),
@@ -14,6 +14,7 @@ impl Default for RawGameReadyPayload {
             foliage: RawFoliageSpec::default(),
             prefabs: Vec::new(),
             definitions: Vec::new(),
+            audio: RawAudioSpec::default(),
             gameplay: RawGameplaySpec::default(),
             palette: RawPaletteSpec::default(),
         }

@@ -1,7 +1,88 @@
 use super::*;
 
-impl RawGameReadyPayload {
-    pub(super) fn into_profile(self) -> GameReadyMapProfile {
+fn sanitize_audio_emitter_spec(raw: RawAudioEmitterSpec) -> Option<GameReadyAudioEmitterSpec> {
+    let cue = raw.cue.trim().replace('\\', "/");
+    let cue_lower = cue.to_ascii_lowercase();
+    if cue.is_empty()
+        || !cue_lower.contains(".ysncd@")
+        || cue.starts_with('/')
+        || cue.contains(":/")
+        || cue.split('/').any(|part| part == "..")
+    {
+        newengine_ulog_api::ulog::warn!(
+            "authored-world audio emitter rejected id='{}' cue='{}' reason='expected project-relative .ysncd@cue reference'",
+            raw.id,
+            raw.cue
+        );
+        return None;
+    }
+
+    let mut occlusion = newengine_audio_api::AudioOcclusionSettings::default();
+    occlusion.enabled = raw.occlusion_enabled.unwrap_or(occlusion.enabled);
+    if let Some(value) = raw.occlusion_max_distance {
+        occlusion.max_distance = value;
+    }
+    if let Some(value) = raw.occlusion_ray_count {
+        occlusion.ray_count = value;
+    }
+    if let Some(value) = raw.occlusion_probe_radius {
+        occlusion.probe_radius = value;
+    }
+    if let Some(value) = raw.obstruction_gain {
+        occlusion.obstruction_gain = value;
+    }
+    if let Some(value) = raw.occlusion_gain {
+        occlusion.occlusion_gain = value;
+    }
+    if let Some(value) = raw.occlusion_attack_seconds {
+        occlusion.attack_seconds = value;
+    }
+    if let Some(value) = raw.occlusion_release_seconds {
+        occlusion.release_seconds = value;
+    }
+    let occlusion = occlusion.sanitized();
+
+    let id = {
+        let authored = raw.id.trim();
+        if authored.is_empty() {
+            cue.rsplit_once('@')
+                .map(|(_, entry)| entry.trim())
+                .filter(|entry| !entry.is_empty())
+                .unwrap_or("audio_emitter")
+                .to_owned()
+        } else {
+            authored.to_owned()
+        }
+    };
+    let position = raw.position;
+    if !position.iter().all(|value| value.is_finite()) {
+        newengine_ulog_api::ulog::warn!(
+            "authored-world audio emitter rejected id='{}' reason='non-finite position'",
+            id
+        );
+        return None;
+    }
+    let emitter = newengine_audio_api::AudioEmitter {
+        cue,
+        enabled: raw.enabled.unwrap_or(true),
+        autoplay: raw.autoplay.unwrap_or(true),
+        gain: raw
+            .gain
+            .filter(|value| value.is_finite())
+            .unwrap_or(1.0)
+            .clamp(0.0, 4.0),
+        spatial: raw.spatial.unwrap_or(true),
+        occlusion,
+    };
+    Some(GameReadyAudioEmitterSpec {
+        id,
+        position: Vec3::new(position[0], position[1], position[2]),
+        emitter,
+    })
+}
+
+impl RawAuthoredWorldPayload {
+    pub(super) fn into_profile(self) -> AuthoredWorldProfile {
         let terrain_chunk_radius = self.terrain.streaming.chunk_radius.clamp(
             0,
             newengine_scene::SceneStreamingBudget::MAX_RESIDENT_RADIUS,
@@ -125,7 +206,7 @@ impl RawGameReadyPayload {
             presentation: death_presentation,
         };
 
-        GameReadyMapProfile {
+        AuthoredWorldProfile {
             title: self.title,
             objective: self.objective,
             authored_map_streaming: None,
@@ -200,6 +281,7 @@ impl RawGameReadyPayload {
                     helper_pose_copies: Vec::new(),
                     skin_sidecar: None,
                     braid_secondary_motion: None,
+                    skeletal_secondary_motion: None,
                     equipment_ready_animation: None,
                     equipment_aim_animation: None,
                     equipment_reload_animation: None,
@@ -324,6 +406,12 @@ impl RawGameReadyPayload {
                 .into_iter()
                 .filter_map(sanitize_definition_instance_spec)
                 .collect(),
+            audio_emitters: self
+                .audio
+                .emitters
+                .into_iter()
+                .filter_map(sanitize_audio_emitter_spec)
+                .collect(),
             acoustic_materials: newengine_audio_api::AcousticMaterialLibrary::default(),
             gameplay: GameReadyGameplaySpec {
                 default_status: non_empty_or(self.gameplay.default_status, default_status_text()),
@@ -415,7 +503,7 @@ impl RawGameReadyPayload {
                     gravity: self.gameplay.physics.gravity.clamp(0.0, 80.0),
                     contact_skin: self.gameplay.physics.contact_skin.clamp(0.0, 0.50),
                 },
-                mission: GameReadyMissionSpec {
+                mission: AuthoredMissionSpec {
                     core_material: sanitize_asset_path(Some(self.gameplay.mission.core_material)),
                     target_material: sanitize_asset_path(Some(
                         self.gameplay.mission.target_material,

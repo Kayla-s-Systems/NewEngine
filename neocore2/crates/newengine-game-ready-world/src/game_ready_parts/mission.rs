@@ -1,6 +1,6 @@
 use super::foliage::{decode_runtime_ydd_prefab, terrain_height, DecodedPrefabMeshPart};
 use super::*;
-use crate::content::GameReadyMissionPickupSpec;
+use crate::content::AuthoredMissionPickupSpec;
 
 const MISSION_STREAMING_PIN_OWNER: &str = "game-ready.mission";
 
@@ -44,7 +44,7 @@ fn pin_mission_asset(world: &mut newengine_ecs::World, logical_path: &str) -> Re
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(super) struct GameReadyMissionSpawnSummary {
+pub(super) struct AuthoredMissionSpawnSummary {
     /// Mission-objective pickups only (relay cores, etc.).
     pub pickups: u32,
     /// Inventory-backed authored world pickups. These never affect mission-core totals.
@@ -58,7 +58,7 @@ pub(super) struct GameReadyMissionSpawnSummary {
 struct DeferredWorldItemPickup {
     parent: EntityId,
     terrain: EntityId,
-    spec: GameReadyMissionPickupSpec,
+    spec: AuthoredMissionPickupSpec,
     attempts: u32,
 }
 
@@ -109,7 +109,7 @@ fn mission_material(
 
 fn register_mission_materials(
     mats: &MaterialRegistry,
-    mission: &GameReadyMissionSpec,
+    mission: &AuthoredMissionSpec,
 ) -> Result<MissionMaterials, String> {
     Ok(MissionMaterials {
         core: mission_material(
@@ -202,7 +202,7 @@ fn normalize_character_actor_presentation_basis(
 fn attach_enemy_character_foundation(
     world: &mut newengine_ecs::World,
     entity: EntityId,
-    target: &crate::content::GameReadyMissionTargetSpec,
+    target: &crate::content::AuthoredMissionTargetSpec,
 ) {
     let radius = target.scale.x.abs().max(target.scale.z.abs()).max(0.1);
     let half_height = (target.scale.y.abs() - radius).max(0.1);
@@ -367,15 +367,15 @@ fn attach_enemy_character_foundation(
     }
 }
 
-pub(super) fn spawn_game_ready_mission(
+pub(super) fn instantiate_authored_mission(
     world: &mut newengine_ecs::World,
     prims: &mut PrimitiveRegistry,
     mats: &MaterialRegistry,
     parent: EntityId,
     terrain: EntityId,
-    mission: &GameReadyMissionSpec,
-) -> Result<GameReadyMissionSpawnSummary, String> {
-    let mut summary = GameReadyMissionSpawnSummary::default();
+    mission: &AuthoredMissionSpec,
+) -> Result<AuthoredMissionSpawnSummary, String> {
+    let mut summary = AuthoredMissionSpawnSummary::default();
     for material_ref in [
         mission.core_material.as_deref(),
         mission.target_material.as_deref(),
@@ -387,7 +387,7 @@ pub(super) fn spawn_game_ready_mission(
     {
         if let Err(error) = pin_mission_asset(world, material_ref) {
             newengine_ulog_api::ulog::warn!(
-                "game-ready mission asset pin failed asset='{}' class='mission' owner='{}' err='{}'",
+                "authored mission asset pin failed asset='{}' class='mission' owner='{}' err='{}'",
                 material_ref,
                 MISSION_STREAMING_PIN_OWNER,
                 error,
@@ -423,7 +423,7 @@ pub(super) fn spawn_game_ready_mission(
         );
         let _ = world.insert(
             entity,
-            FpsDemoPickup {
+            FpsObjectivePickup {
                 radius: pickup.radius,
             },
         );
@@ -455,7 +455,7 @@ pub(super) fn spawn_game_ready_mission(
             target.scale,
         );
         attach_enemy_character_foundation(world, entity, target);
-        let _ = world.insert(entity, FpsDemoTarget);
+        let _ = world.insert(entity, FpsObjectiveTarget);
         summary.targets = summary.targets.saturating_add(1);
     }
 
@@ -474,7 +474,7 @@ pub(super) fn spawn_game_ready_mission(
         );
         let _ = world.insert(
             entity,
-            FpsDemoHazard {
+            FpsObjectiveHazard {
                 radius: hazard.radius,
             },
         );
@@ -496,7 +496,7 @@ pub(super) fn spawn_game_ready_mission(
         );
         let _ = world.insert(
             entity,
-            FpsDemoGoal {
+            FpsObjectiveGoal {
                 radius: goal.radius,
             },
         );
@@ -511,7 +511,7 @@ pub(super) fn spawn_game_ready_mission(
     }
 
     newengine_ulog_api::ulog::info!(
-        "game-ready mission spawned: pickups={} item_pickups={} targets={} hazards={} goals={} policy='all generic mission presentation materials are project-authored'",
+        "authored mission instantiated: pickups={} item_pickups={} targets={} hazards={} goals={} policy='all generic mission presentation materials are project-authored'",
         summary.pickups,
         summary.item_pickups,
         summary.targets,
@@ -564,7 +564,7 @@ mod world_item_runtime_tests {
     fn authored_ai_target_composes_shared_character_damage_and_ai_foundation() {
         let mut world = newengine_ecs::World::new();
         let entity = world.spawn();
-        let target = crate::content::GameReadyMissionTargetSpec {
+        let target = crate::content::AuthoredMissionTargetSpec {
             id: "dummy.enemy.test".to_owned(),
             character_ref: None,
             position: Vec3::ZERO,

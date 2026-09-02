@@ -108,6 +108,8 @@ pub fn sync_prelaunch_service_physics(world: &mut World, physics_api: &PhysicsAp
         0,
         1.0 / 60.0,
         &mut sync.static_mesh_revisions,
+        &mut sync.static_mesh_observed_tick,
+        &mut sync.static_mesh_backlog_pending,
         &queries,
     );
     let submitted = input.colliders.len() as u32;
@@ -185,6 +187,11 @@ pub struct PhysicsSyncModule {
     /// Last static-mesh revision acknowledged by the service-backed physics world.
     /// Full triangle arrays cross the service boundary only on add/change.
     static_mesh_revisions: BTreeMap<u64, u64>,
+    /// Last ECS change-tracking tick inspected for static-mesh membership/transform deltas.
+    /// Steady fixed ticks skip the O(N static mesh) revision scan when no relevant component changed.
+    static_mesh_observed_tick: u64,
+    /// True while bounded static-collider registration still has unsent changed entries.
+    static_mesh_backlog_pending: bool,
     step_failure_count: u64,
 }
 
@@ -259,6 +266,8 @@ pub(super) fn step_service_physics(
         fixed_tick,
         dt,
         &mut sync.static_mesh_revisions,
+        &mut sync.static_mesh_observed_tick,
+        &mut sync.static_mesh_backlog_pending,
         gameplay_queries,
     );
     let input_build_ms = input_started.elapsed().as_secs_f32() * 1000.0;

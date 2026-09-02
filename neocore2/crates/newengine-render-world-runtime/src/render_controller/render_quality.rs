@@ -38,10 +38,10 @@ pub(crate) fn material_texture_async_decode_ceiling(tier: RenderHardwareTier) ->
     let cpu_cap = cpu.saturating_sub(2).clamp(1, 16);
     let tier_cap = match tier {
         RenderHardwareTier::Headless => 1,
-        RenderHardwareTier::LegacyGtx => 2,
-        RenderHardwareTier::Gtx => 4,
-        RenderHardwareTier::Rtx => 8,
-        RenderHardwareTier::Unknown => 4,
+        RenderHardwareTier::LegacyGtx => 1,
+        RenderHardwareTier::Gtx => 2,
+        RenderHardwareTier::Rtx => 4,
+        RenderHardwareTier::Unknown => 2,
     };
     cpu_cap.min(tier_cap).max(1)
 }
@@ -82,9 +82,12 @@ mod texture_streaming_quality_tests {
             material_texture_async_decode_ceiling(RenderHardwareTier::Headless),
             1
         );
-        assert!(material_texture_async_decode_ceiling(RenderHardwareTier::LegacyGtx) <= 2);
-        assert!(material_texture_async_decode_ceiling(RenderHardwareTier::Gtx) <= 4);
-        assert!(material_texture_async_decode_ceiling(RenderHardwareTier::Rtx) <= 8);
+        assert_eq!(
+            material_texture_async_decode_ceiling(RenderHardwareTier::LegacyGtx),
+            1
+        );
+        assert!(material_texture_async_decode_ceiling(RenderHardwareTier::Gtx) <= 2);
+        assert!(material_texture_async_decode_ceiling(RenderHardwareTier::Rtx) <= 4);
         assert!(material_texture_async_decode_ceiling(RenderHardwareTier::Rtx) >= 1);
     }
 

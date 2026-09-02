@@ -6,16 +6,16 @@ use super::xml::{parse_map_definition_payload, parse_payload, parse_ymap_xml_pay
 use newengine_assets::{AssetDecodeRequest, ASSET_LIST_FILE_BODY_OUTPUT};
 use newengine_authored_xml as authored_xml;
 
-pub(crate) fn load_game_ready_map_profile() -> Result<GameReadyMapProfile, Vec<String>> {
+pub(crate) fn load_authored_world_profile() -> Result<AuthoredWorldProfile, Vec<String>> {
     load_profile_from_asset_manager()
 }
 
-fn load_profile_from_asset_manager() -> Result<GameReadyMapProfile, Vec<String>> {
+fn load_profile_from_asset_manager() -> Result<AuthoredWorldProfile, Vec<String>> {
     use newengine_assets::AssetService;
 
     if !newengine_core::has_engine_gateway_route(newengine_assets_api::ENGINE_ASSET_SERVICE_ID) {
         newengine_ulog_api::ulog::debug!(
-            "game-ready: AssetManager service '{}' unavailable while resolving authored map",
+            "authored-world: AssetManager service '{}' unavailable while resolving authored map",
             newengine_assets_api::ENGINE_ASSET_SERVICE_ID
         );
         return Err(vec![format!(
@@ -28,7 +28,7 @@ fn load_profile_from_asset_manager() -> Result<GameReadyMapProfile, Vec<String>>
         newengine_assets::AssetServiceClient::new(newengine_plugin_host::default_host_api());
     let candidates = profile_asset_candidates();
     newengine_ulog_api::ulog::info!(
-        "game-ready ymap read: begin gateway='{}' candidates={} mount_policy='profile-owned VFS mounts already established' decode_policy='AssetManager decode_v1 only'",
+        "authored-world ymap read: begin gateway='{}' candidates={} mount_policy='profile-owned VFS mounts already established' decode_policy='AssetManager decode_v1 only'",
         newengine_assets_api::ENGINE_ASSET_SERVICE_ID,
         candidates.len(),
     );
@@ -36,7 +36,7 @@ fn load_profile_from_asset_manager() -> Result<GameReadyMapProfile, Vec<String>>
     let mut errors = Vec::new();
     for (index, logical_path) in candidates.into_iter().enumerate() {
         newengine_ulog_api::ulog::info!(
-            "game-ready ymap read: candidate begin index={} path='{}'",
+            "authored-world ymap read: candidate begin index={} path='{}'",
             index,
             logical_path,
         );
@@ -47,13 +47,13 @@ fn load_profile_from_asset_manager() -> Result<GameReadyMapProfile, Vec<String>>
                     .map(|v| v.to_string())
                     .unwrap_or_else(|te| format!("{{\"trace_error\":\"{te}\"}}"));
                 newengine_ulog_api::ulog::info!(
-                    "game-ready ymap read: candidate selected index={} path='{}' trace={}",
+                    "authored-world ymap read: candidate selected index={} path='{}' trace={}",
                     index,
                     logical_path,
                     trace,
                 );
                 newengine_ulog_api::ulog::info!(
-                    "game-ready: loaded authored map asset='{}'",
+                    "authored-world: loaded authored map asset='{}'",
                     logical_path,
                 );
                 return Ok(profile);
@@ -65,7 +65,7 @@ fn load_profile_from_asset_manager() -> Result<GameReadyMapProfile, Vec<String>>
                     .unwrap_or_else(|te| format!("{{\"trace_error\":\"{te}\"}}"));
                 let message = format!("path='{logical_path}' err='{e}' trace={trace}");
                 newengine_ulog_api::ulog::info!(
-                    "game-ready ymap read: candidate rejected index={} {}",
+                    "authored-world ymap read: candidate rejected index={} {}",
                     index,
                     message
                 );
@@ -80,7 +80,7 @@ fn load_profile_from_asset_manager() -> Result<GameReadyMapProfile, Vec<String>>
 fn load_profile_asset(
     assets: &newengine_assets::AssetServiceClient,
     logical_path: &str,
-) -> Result<GameReadyMapProfile, String> {
+) -> Result<AuthoredWorldProfile, String> {
     let (map_reference, descriptor) = assets
         .require_semantic_asset_reference_v1(
             logical_path,
@@ -94,7 +94,7 @@ fn load_profile_asset(
         })?;
 
     newengine_ulog_api::ulog::info!(
-        "game-ready map read: canonical accepted path='{}' module='{}' kind='{}'",
+        "authored-world map read: canonical accepted path='{}' module='{}' kind='{}'",
         map_reference.logical_path,
         descriptor.module_id,
         descriptor.asset_kind,
@@ -108,7 +108,7 @@ fn load_profile_asset(
         format_descriptor: None,
     };
     newengine_ulog_api::ulog::info!(
-        "game-ready ymap read: decode start path='{}' output='{}' selector=null",
+        "authored-world ymap read: decode start path='{}' output='{}' selector=null",
         logical_path,
         output_kind,
     );
@@ -116,7 +116,7 @@ fn load_profile_asset(
         format!("asset.decode_v1 failed path='{logical_path}' output='{output_kind}' err='{e}'")
     })?;
     newengine_ulog_api::ulog::info!(
-        "game-ready ymap read: decode complete path='{}' output='{}' payload_bytes={}",
+        "authored-world ymap read: decode complete path='{}' output='{}' payload_bytes={}",
         logical_path,
         output_kind,
         payload.len(),
@@ -140,7 +140,7 @@ fn load_profile_asset(
     let value = parse_ymap_xml_payload(&payload, logical_path)?;
     log_ymap_value_summary(logical_path, &value);
     newengine_ulog_api::ulog::info!(
-        "game-ready: decoded authored .ymap path='{}' output='{}' policy='NEF8/ListFile body from engine.assets; XML map semantics stay outside AssetManager'",
+        "authored-world: decoded authored .ymap path='{}' output='{}' policy='NEF8/ListFile body from engine.assets; XML map semantics stay outside AssetManager'",
         logical_path,
         output_kind
     );
@@ -163,58 +163,6 @@ fn ymap_schema(payload: &[u8], logical_path: &str) -> Result<String, String> {
         .unwrap_or_default()
         .trim()
         .to_owned())
-}
-
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(default)]
-struct ResolvedMapDefinitionRefs {
-    drawable_refs: Vec<String>,
-    material_refs: Vec<String>,
-    collision_refs: Vec<String>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(default)]
-struct ResolvedMapDefinitionModelExplanation {
-    collision_policy: String,
-}
-
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(default)]
-struct ResolvedMapDefinitionEntry {
-    refs: ResolvedMapDefinitionRefs,
-    semantic_tags: Vec<String>,
-    model_explanation: ResolvedMapDefinitionModelExplanation,
-    arbitrary_metadata: std::collections::BTreeMap<String, serde_json::Value>,
-}
-
-fn load_resolved_map_definition(
-    definition_ref: &str,
-) -> Result<ResolvedMapDefinitionEntry, String> {
-    let payload = serde_json::to_vec(&serde_json::json!({ "definition_ref": definition_ref }))
-        .map_err(|e| {
-            format!(
-                "discrete YMAP definition request encode failed definition_ref='{definition_ref}' err='{e}'"
-            )
-        })?;
-    let bytes = newengine_core::call_service_v1_optional(
-        newengine_assets_api::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
-        newengine_assets_api::definitions_method::ENTRY_JSON_V1,
-        &payload,
-    )
-    .map_err(|e| {
-        format!(
-            "engine.assets.definitions request failed definition_ref='{definition_ref}' err='{e}'"
-        )
-    })?
-    .ok_or_else(|| {
-        format!("engine.assets.definitions route unavailable definition_ref='{definition_ref}'")
-    })?;
-    serde_json::from_slice(&bytes).map_err(|e| {
-        format!(
-            "engine.assets.definitions returned invalid definition DTO definition_ref='{definition_ref}' err='{e}'"
-        )
-    })
 }
 
 fn cell_distance(
@@ -266,137 +214,15 @@ fn load_discrete_cell(
     map_ref: &str,
     coord: newengine_assets_api::MapCellCoordV1,
 ) -> Result<newengine_assets_api::MapResolvedCellV2, String> {
-    let cell_request = serde_json::to_vec(&newengine_assets_api::MapCellRequestV1 {
-        map_ref: map_ref.to_owned(),
-        coord,
-    })
-    .map_err(|e| format!("discrete YMAP cell request encode failed map='{map_ref}' err='{e}'"))?;
-    let cell_bytes = newengine_core::call_service_v1_optional(
-        newengine_assets_api::ENGINE_ASSETS_MAPS_SERVICE_ID,
-        newengine_assets_api::maps_method::CELL_V2,
-        &cell_request,
-    )
-    .map_err(|e| {
-        format!(
-            "engine.assets.maps cell request failed map='{map_ref}' cell={},{} err='{e}'",
-            coord.x, coord.z
-        )
-    })?
-    .ok_or_else(|| {
-        format!(
-            "engine.assets.maps route unavailable while loading map='{map_ref}' cell={},{}",
-            coord.x, coord.z
-        )
-    })?;
-    serde_json::from_slice(&cell_bytes).map_err(|e| {
-        format!(
-            "engine.assets.maps returned invalid MapResolvedCellV2 map='{map_ref}' cell={},{} err='{e}'",
-            coord.x, coord.z
-        )
-    })
-}
-
-#[derive(Clone, Debug, Default)]
-struct DefinitionSurfaceBinding {
-    id: String,
-    events: std::collections::BTreeMap<String, String>,
-    ballistic_material: Option<newengine_engine_runtime::gameplay::BallisticMaterialResponse>,
-    ground_placement_surface: bool,
-}
-
-fn definition_surface_binding(definition: &ResolvedMapDefinitionEntry) -> DefinitionSurfaceBinding {
-    fn parse(value: &serde_json::Value) -> Option<DefinitionSurfaceBinding> {
-        let object = value.as_object()?;
-        let id = object
-            .get("id")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or_default()
-            .trim()
-            .to_owned();
-        let events = object
-            .get("events")
-            .and_then(serde_json::Value::as_object)
-            .into_iter()
-            .flat_map(|events| events.iter())
-            .filter_map(|(signal, event_id)| {
-                let signal = signal.trim().to_owned();
-                let event_id = event_id.as_str()?.trim().to_owned();
-                (!signal.is_empty() && !event_id.is_empty()).then_some((signal, event_id))
-            })
-            .collect();
-        let ballistic_material = object
-            .get("ballistics")
-            .and_then(serde_json::Value::as_object)
-            .map(|ballistics| {
-                let f32_or = |key: &str, default: f32| {
-                    ballistics
-                        .get(key)
-                        .and_then(|value| {
-                            value
-                                .as_f64()
-                                .map(|v| v as f32)
-                                .or_else(|| value.as_str()?.parse::<f32>().ok())
-                        })
-                        .unwrap_or(default)
-                };
-                let bool_or = |key: &str, default: bool| {
-                    ballistics
-                        .get(key)
-                        .and_then(|value| {
-                            value.as_bool().or_else(|| {
-                                match value.as_str()?.trim().to_ascii_lowercase().as_str() {
-                                    "1" | "true" | "yes" | "on" => Some(true),
-                                    "0" | "false" | "no" | "off" => Some(false),
-                                    _ => None,
-                                }
-                            })
-                        })
-                        .unwrap_or(default)
-                };
-                newengine_engine_runtime::gameplay::BallisticMaterialResponse {
-                    penetration_resistance_j_per_m: f32_or(
-                        "penetration_resistance_j_per_m",
-                        f32::INFINITY,
-                    ),
-                    entry_energy_cost_j: f32_or("entry_energy_cost_j", f32::INFINITY),
-                    damage_transfer_multiplier: f32_or("damage_transfer_multiplier", 1.0),
-                    impulse_transfer_multiplier: f32_or("impulse_transfer_multiplier", 1.0),
-                    ricochet_allowed: bool_or("ricochet_allowed", false),
-                    ricochet_max_incidence_dot: f32_or("ricochet_max_incidence_dot", 0.0),
-                    ricochet_energy_retention: f32_or("ricochet_energy_retention", 0.0),
-                }
-                .sanitized()
-            });
-        let ground_placement_surface = object
-            .get("ground_placement_surface")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false);
-        Some(DefinitionSurfaceBinding {
-            id,
-            events,
-            ballistic_material,
-            ground_placement_surface,
-        })
-    }
-
-    for root_name in ["metadata", "namespaces"] {
-        let Some(root) = definition
-            .arbitrary_metadata
-            .get(root_name)
-            .and_then(serde_json::Value::as_object)
-        else {
-            continue;
-        };
-        if let Some(binding) = root.get("engine.physics.surface").and_then(parse) {
-            return binding;
-        }
-    }
-    DefinitionSurfaceBinding::default()
+    newengine_authored_world_runtime::load_authored_map_cell(map_ref, coord)
 }
 
 fn apply_discrete_placement(
-    profile: &mut GameReadyMapProfile,
-    definition_cache: &mut std::collections::BTreeMap<String, ResolvedMapDefinitionEntry>,
+    profile: &mut AuthoredWorldProfile,
+    definition_cache: &mut std::collections::BTreeMap<
+        String,
+        newengine_authored_world_runtime::AuthoredDefinitionEntry,
+    >,
     logical_path: &str,
     coord: newengine_assets_api::MapCellCoordV1,
     include_render: bool,
@@ -440,7 +266,7 @@ fn apply_discrete_placement(
             apply_mode: GameReadyDefinitionApplyMode::MetadataOnly,
         });
         newengine_ulog_api::ulog::info!(
-            "game-ready: authored player camera selected id='{}' definition_ref='{}' position={:?} rotation_ypr={:?} policy='YMAP declares camera instance; YTYP defines behavior'",
+            "authored-world: authored player camera selected id='{}' definition_ref='{}' position={:?} rotation_ypr={:?} policy='YMAP declares camera instance; YTYP defines behavior'",
             profile.gameplay.camera.instance_id,
             profile.gameplay.camera.definition_ref,
             profile.gameplay.camera.position,
@@ -466,7 +292,7 @@ fn apply_discrete_placement(
         );
         profile.player.yaw = placement.transform.rotation_ypr[0];
         newengine_ulog_api::ulog::info!(
-            "game-ready: authored player spawn selected id='{}' position={:?} yaw={:.3} policy='YMAP spawn marker owns map start position'",
+            "authored-world: authored player spawn selected id='{}' position={:?} yaw={:.3} policy='YMAP spawn marker owns map start position'",
             placement.id,
             profile.player.start,
             profile.player.yaw,
@@ -500,7 +326,10 @@ fn apply_discrete_placement(
     let definition = if let Some(existing) = definition_cache.get(&placement.definition_ref) {
         existing.clone()
     } else {
-        let parsed = load_resolved_map_definition(&placement.definition_ref).map_err(|e| {
+        let parsed = newengine_authored_world_runtime::load_authored_definition_entry(
+            &placement.definition_ref,
+        )
+        .map_err(|e| {
             format!(
                 "discrete YMAP placement '{}' definition_ref='{}' resolution failed: {e}",
                 placement.id, placement.definition_ref
@@ -527,7 +356,8 @@ fn apply_discrete_placement(
         .first()
         .cloned()
         .unwrap_or_default();
-    let surface_binding = definition_surface_binding(&definition);
+    let surface_binding =
+        newengine_authored_world_runtime::project_authored_definition_surface(&definition);
     let position = Vec3::new(
         placement.transform.position[0],
         placement.transform.position[1],
@@ -554,7 +384,7 @@ fn apply_discrete_placement(
     if !collision_only
         && ((!dynamic_physics && include_render) || (dynamic_physics && include_simulation))
     {
-        profile.prefabs.push(GameReadyPrefabSpec {
+        profile.prefabs.push(AuthoredWorldPlacementSpec {
             id: placement.id.clone(),
             authored_map_ref: logical_path.to_owned(),
             authored_placement_id: placement.id.clone(),
@@ -596,7 +426,7 @@ fn apply_discrete_placement(
             .first()
             .cloned()
             .unwrap_or(drawable_ref);
-        profile.prefabs.push(GameReadyPrefabSpec {
+        profile.prefabs.push(AuthoredWorldPlacementSpec {
             id: if collision_only {
                 placement.id.clone()
             } else {
@@ -639,27 +469,9 @@ fn apply_discrete_placement(
 
 fn load_discrete_map_profile(
     logical_path: &str,
-    authored_profile: Option<GameReadyMapProfile>,
-) -> Result<GameReadyMapProfile, String> {
-    let map_ref =
-        newengine_assets_api::map_entry_ref(logical_path, newengine_assets_api::MAP_INDEX_ENTRY);
-    let request = serde_json::to_vec(&newengine_assets_api::MapRefRequestV1 {
-        map_ref: map_ref.clone(),
-    })
-    .map_err(|e| {
-        format!("discrete YMAP index request encode failed path='{logical_path}' err='{e}'")
-    })?;
-    let index_bytes = newengine_core::call_service_v1_optional(
-        newengine_assets_api::ENGINE_ASSETS_MAPS_SERVICE_ID,
-        newengine_assets_api::maps_method::INDEX_V1,
-        &request,
-    )
-    .map_err(|e| format!("engine.assets.maps index request failed map='{map_ref}' err='{e}'"))?
-    .ok_or_else(|| format!("engine.assets.maps route unavailable while loading map='{map_ref}'"))?;
-    let index: newengine_assets_api::MapIndexV1 =
-        serde_json::from_slice(&index_bytes).map_err(|e| {
-            format!("engine.assets.maps returned invalid MapIndexV1 map='{map_ref}' err='{e}'")
-        })?;
+    authored_profile: Option<AuthoredWorldProfile>,
+) -> Result<AuthoredWorldProfile, String> {
+    let (map_ref, index) = newengine_authored_world_runtime::load_authored_map_index(logical_path)?;
 
     let authored_profile_present = authored_profile.is_some();
     let mut profile = if let Some(profile) = authored_profile {
@@ -667,7 +479,7 @@ fn load_discrete_map_profile(
     } else {
         parse_payload(
             serde_json::json!({}),
-            "game-ready.mode-defaults",
+            "authored-world.defaults",
             logical_path,
         )?
     };
@@ -765,8 +577,10 @@ fn load_discrete_map_profile(
         .collect::<Vec<_>>();
     initial_cells.sort_by_key(|coord| (cell_distance(*coord, spawn_cell), coord.x, coord.z));
 
-    let mut definition_cache =
-        std::collections::BTreeMap::<String, ResolvedMapDefinitionEntry>::new();
+    let mut definition_cache = std::collections::BTreeMap::<
+        String,
+        newengine_authored_world_runtime::AuthoredDefinitionEntry,
+    >::new();
     let mut initial_placement_ids = std::collections::BTreeMap::new();
     for coord in initial_cells.iter().copied() {
         let resolved = load_discrete_cell(&map_ref, coord)?;
@@ -815,7 +629,7 @@ fn load_discrete_map_profile(
         ));
     }
 
-    profile.authored_map_streaming = Some(GameReadyAuthoredMapStreamingSpec {
+    profile.authored_map_streaming = Some(AuthoredMapStreamingSpec {
         map_ref: map_ref.clone(),
         index: index.clone(),
         initial_render_cells: initial_render_cells.clone(),
@@ -829,7 +643,7 @@ fn load_discrete_map_profile(
     });
 
     newengine_ulog_api::ulog::info!(
-        "game-ready: loaded discrete YMAP v2 map='{}' cells_total={} cells_initial={} prefabs_initial={} resolved_definitions={} spawn_cell={},{} render_radius={} simulation_radius={} render_unload_radius={} simulation_unload_radius={} policy='index-resident; dual-domain cell payloads stream by player position'",
+        "authored-world: loaded discrete YMAP v2 map='{}' cells_total={} cells_initial={} prefabs_initial={} resolved_definitions={} spawn_cell={},{} render_radius={} simulation_radius={} render_unload_radius={} simulation_unload_radius={} policy='index-resident; dual-domain cell payloads stream by player position'",
         map_ref,
         index.cells.len(),
         initial_cells.len(),

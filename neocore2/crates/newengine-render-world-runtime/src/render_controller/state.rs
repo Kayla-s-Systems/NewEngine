@@ -194,6 +194,9 @@ pub(super) struct RenderShadowRuntimeState {
     pub(super) warmup_defer_frames_remaining: u8,
     pub(super) caster_observed_tick: u64,
     pub(super) caster_membership_hash: u64,
+    /// Cached authoritative caster membership. Rebuilt only when ECS membership/material/visibility
+    /// change ticks say topology may have changed; per-frame pose checks iterate this bounded list.
+    pub(super) caster_entities: Vec<newengine_ecs::EntityId>,
     pub(super) caster_pose_hash: u64,
     /// Animated skin palettes are render-cadence shadow geometry. Tracking their
     /// revision prevents a cached atlas from holding an old skeletal silhouette
@@ -243,6 +246,7 @@ impl RenderShadowRuntimeState {
             warmup_defer_frames_remaining: super::render_quality::SHADOW_WARMUP_DEFER_FRAMES,
             caster_observed_tick: 0,
             caster_membership_hash: 0,
+            caster_entities: Vec::new(),
             caster_pose_hash: 0,
             caster_skin_pose_hash: 0,
             caster_revision: 0,
@@ -586,6 +590,9 @@ pub(super) struct RenderFrameRuntimeState {
     /// Frame-coherent primitive extraction reused by shadow, GBuffer and forward passes.
     pub(super) primitive_scene_snapshot:
         Option<Arc<super::module_impl::frame_snapshots::PrimitiveSceneSnapshot>>,
+    /// CSM skinned caster admission captured once and reused by every directional cascade.
+    pub(super) skinned_shadow_scene_snapshot:
+        Option<Arc<super::module_impl::frame_snapshots::SkinnedShadowSceneSnapshot>>,
     pub(super) sim_schedule: newengine_sim::SimSchedule,
     pub(super) gameplay_systems:
         newengine_gameplay_world_runtime::gameplay::GameplaySystemProviderRegistry,
@@ -609,6 +616,7 @@ impl RenderFrameRuntimeState {
             pending_pick_additive: false,
             last_camera_snapshot: None,
             primitive_scene_snapshot: None,
+            skinned_shadow_scene_snapshot: None,
             sim_schedule: newengine_gameplay_world_runtime::gameplay::default_sim_schedule(),
             gameplay_systems: newengine_gameplay_world_runtime::gameplay::GameplaySystemProviderRegistry::new(),
             gameplay_content: newengine_gameplay_world_runtime::gameplay::GameplayContentProviderRegistry::new(),

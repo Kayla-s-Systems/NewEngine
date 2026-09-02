@@ -23,7 +23,7 @@ pub(super) fn parse_ymap_xml_payload(
     }
     let child_elements = root.children().filter(|child| child.is_element()).count();
     newengine_ulog_api::ulog::info!(
-        "game-ready ymap read: XML accepted path='{}' payload_bytes={} root='{}' schema='{}' child_elements={}",
+        "authored-world ymap read: XML accepted path='{}' payload_bytes={} root='{}' schema='{}' child_elements={}",
         logical_path,
         payload.len(),
         root.tag_name().name(),
@@ -55,7 +55,7 @@ pub(super) fn parse_ymap_xml_payload(
 pub(super) fn parse_map_definition_payload(
     value: serde_json::Value,
     logical_path: &str,
-) -> Result<GameReadyMapProfile, String> {
+) -> Result<AuthoredWorldProfile, String> {
     let schema = value
         .get("schema")
         .and_then(|v| v.as_str())
@@ -87,8 +87,8 @@ pub(super) fn parse_payload(
     value: serde_json::Value,
     source_label: &str,
     logical_path: &str,
-) -> Result<GameReadyMapProfile, String> {
-    let raw: RawGameReadyPayload = serde_json::from_value(value)
+) -> Result<AuthoredWorldProfile, String> {
+    let raw: RawAuthoredWorldPayload = serde_json::from_value(value)
         .map_err(|e| format!("map payload parse failed source='{source_label}': {e}"))?;
     let mut profile = raw.into_profile();
     for prefab in &mut profile.prefabs {
@@ -125,6 +125,7 @@ fn ymap_node_object(node: authored_xml::XmlNode<'_, '_>) -> serde_json::Value {
         || tag.eq_ignore_ascii_case("targets")
         || tag.eq_ignore_ascii_case("hazards")
         || tag.eq_ignore_ascii_case("goals")
+        || tag.eq_ignore_ascii_case("emitters")
     {
         let items = node
             .children()
@@ -186,6 +187,7 @@ fn ymap_insert_child(
         "Target" => "targets",
         "Hazard" => "hazards",
         "Goal" => "goals",
+        "Emitter" => "emitters",
         other => other,
     };
     match map.get_mut(key) {
@@ -280,5 +282,32 @@ mod tests {
         let profile = parse_map_definition_payload(value, "maps/ai-invalid.ymap")
             .expect("malformed AI target is sanitized out rather than defaulted");
         assert!(profile.gameplay.mission.targets.is_empty());
+    }
+
+    #[test]
+    fn ymap_audio_emitters_project_to_native_audio_components() {
+        let xml = r#"<YmapMapDefinition schema="newengine.map.definition.v2">
+  <map id="audio-test"><profile><audio><emitters>
+    <Emitter id="room_bed" cue="audio/ambience/room/room.ysncd@room_tone"
+             position="0,2,-3" gain="0.16" spatial="false" occlusion_enabled="false" />
+    <Emitter id="air_leak" cue="audio/ambience/room/room.ysncd@air_leak"
+             position="4.5,2.2,-3" gain="0.10" spatial="true" occlusion_enabled="true" />
+  </emitters></audio></profile></map>
+</YmapMapDefinition>"#;
+        let value = parse_ymap_xml_payload(xml.as_bytes(), "maps/audio-test.ymap")
+            .expect("parse authored XML audio");
+        let profile = parse_map_definition_payload(value, "maps/audio-test.ymap")
+            .expect("project typed audio profile");
+        assert_eq!(profile.audio_emitters.len(), 2);
+        let bed = &profile.audio_emitters[0];
+        assert_eq!(bed.id, "room_bed");
+        assert_eq!(bed.position, Vec3::new(0.0, 2.0, -3.0));
+        assert!(!bed.emitter.spatial);
+        assert!(!bed.emitter.occlusion.enabled);
+        assert!((bed.emitter.gain - 0.16).abs() < 1.0e-6);
+        let leak = &profile.audio_emitters[1];
+        assert!(leak.emitter.spatial);
+        assert!(leak.emitter.occlusion.enabled);
+        assert_eq!(leak.emitter.cue, "audio/ambience/room/room.ysncd@air_leak");
     }
 }

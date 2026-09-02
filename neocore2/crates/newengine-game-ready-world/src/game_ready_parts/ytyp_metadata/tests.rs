@@ -113,16 +113,14 @@ fn equipment_ready_sample_phase_family_attributes_are_open_ended() {
         .as_deref(),
         Some("long_gun")
     );
-    assert!(
-        player::equipment_ready_sample_phase_family_from_attribute("equipment_ready_sample_phase")
-            .is_none()
-    );
-    assert!(
-        player::equipment_ready_sample_phase_family_from_attribute(
-            "equipment_pistol_aim_sample_phase"
-        )
-        .is_none()
-    );
+    assert!(player::equipment_ready_sample_phase_family_from_attribute(
+        "equipment_ready_sample_phase"
+    )
+    .is_none());
+    assert!(player::equipment_ready_sample_phase_family_from_attribute(
+        "equipment_pistol_aim_sample_phase"
+    )
+    .is_none());
 }
 
 #[test]

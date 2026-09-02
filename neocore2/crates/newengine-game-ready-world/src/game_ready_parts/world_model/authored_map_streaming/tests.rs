@@ -1,40 +1,5 @@
 use super::*;
 
-fn index_with_cells(coords: &[(i32, i32)]) -> newengine_assets_api::MapIndexV1 {
-    let mut index = newengine_assets_api::MapIndexV1 {
-        map_id: "test".to_owned(),
-        cell_size: 64.0,
-        cells: coords
-            .iter()
-            .map(|(x, z)| {
-                newengine_assets_api::MapCellRefV1::canonical(
-                    newengine_assets_api::MapCellCoordV1::new(*x, *z),
-                )
-            })
-            .collect(),
-        ..Default::default()
-    };
-    index.normalize();
-    index
-}
-
-#[test]
-fn desired_cell_generation_scales_with_radius_not_world_cell_count() {
-    let index = index_with_cells(&[(-100, -100), (-1, -1), (0, 0), (1, 0), (1, 1), (100, 100)]);
-    let mut desired = BTreeSet::new();
-    append_existing_cells(
-        &index,
-        newengine_assets_api::MapCellCoordV1::new(0, 0),
-        1,
-        &mut desired,
-    );
-    assert!(desired.contains(&newengine_assets_api::MapCellCoordV1::new(0, 0)));
-    assert!(desired.contains(&newengine_assets_api::MapCellCoordV1::new(1, 0)));
-    assert!(desired.contains(&newengine_assets_api::MapCellCoordV1::new(1, 1)));
-    assert!(!desired.contains(&newengine_assets_api::MapCellCoordV1::new(100, 100)));
-    assert_eq!(desired.len(), 4);
-}
-
 #[test]
 fn domain_root_owns_prefab_and_cell_root_despawns_as_one_subtree() {
     let mut world = newengine_ecs::World::new();
@@ -56,7 +21,7 @@ fn domain_root_owns_prefab_and_cell_root_despawns_as_one_subtree() {
     let child = world.spawn();
     let _ = world.insert(child, Transform::default());
     let _ = set_parent(&mut world, child, Some(render_root));
-    let prefab = GameReadyPrefabSpec {
+    let prefab = AuthoredWorldPlacementSpec {
         id: "p".to_owned(),
         authored_map_ref: "maps/test.ymap".to_owned(),
         authored_placement_id: "p".to_owned(),
@@ -64,7 +29,7 @@ fn domain_root_owns_prefab_and_cell_root_despawns_as_one_subtree() {
         authored_discrete_placement: true,
         authored_primary: true,
         source: "models/test.ydd".to_owned(),
-        proxy: STATIC_WORLD_PROXY.to_owned(),
+        proxy: newengine_authored_world_runtime::WORLD_STATIC_PROXY.to_owned(),
         material: String::new(),
         surface_id: String::new(),
         surface_events: std::collections::BTreeMap::new(),

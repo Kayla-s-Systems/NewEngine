@@ -236,6 +236,38 @@ mod tests {
     }
 
     #[test]
+    fn character_turn_step_is_consumed_only_by_apply_intents_stage() {
+        use crate::{
+            CharacterFacingTurnStepRequest, CharacterMotor, ControllerIntentQueue, MotorInput,
+        };
+        use newengine_transform::Transform;
+
+        let mut schedule = default_schedule();
+        let mut world = World::new();
+        let entity = world.spawn();
+        let _ = world.insert(entity, Transform::default());
+        let _ = world.insert(entity, CharacterMotor::default());
+        let _ = world.insert(entity, MotorInput::default());
+        let _ = world.insert(entity, CharacterFacingTurnStepRequest { yaw_delta: 0.25 });
+        let frame = SimFrame::new(1.0 / 60.0, 1);
+
+        schedule.run_stage(&mut world, SimStage::Controllers, frame);
+
+        assert!(world
+            .get::<CharacterFacingTurnStepRequest>(entity)
+            .is_some());
+        assert!(world
+            .resource::<ControllerIntentQueue>()
+            .is_some_and(|queue| !queue.is_empty()));
+
+        schedule.run_stage(&mut world, SimStage::ApplyIntents, frame);
+
+        assert!(world
+            .get::<CharacterFacingTurnStepRequest>(entity)
+            .is_none());
+    }
+
+    #[test]
     fn default_controller_stage_forms_access_mask_parallel_then_serial_batches() {
         let mut schedule = default_schedule();
         schedule.sort_if_needed();

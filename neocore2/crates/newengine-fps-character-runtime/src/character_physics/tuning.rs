@@ -1,11 +1,11 @@
 use newengine_ecs::World;
 use newengine_engine_runtime::gameplay::PhysicsWorldSettings;
-use newengine_gameplay_fps_api::{FpsDemoRules, FpsPlayerTuning};
+use newengine_gameplay_fps_api::{FpsPlayerTuning, FpsRuntimeRules};
 
 #[inline]
 pub(super) fn tuning(world: &World) -> FpsPlayerTuning {
     world
-        .resource::<FpsDemoRules>()
+        .resource::<FpsRuntimeRules>()
         .map(|rules| rules.player.sanitized())
         .unwrap_or_else(|| FpsPlayerTuning::default().sanitized())
 }

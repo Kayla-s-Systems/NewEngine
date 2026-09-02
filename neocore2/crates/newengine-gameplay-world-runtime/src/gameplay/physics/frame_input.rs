@@ -8,6 +8,7 @@ use newengine_physics_contracts::PhysicsBodyDesc;
 use newengine_sim::{AngularVelocity, Velocity};
 use newengine_transform::Transform;
 use std::collections::{BTreeMap, BTreeSet};
+use std::time::Instant;
 
 use crate::gameplay::{
     GameplayPhysicsQueryProviderRegistry, PendingPhysicsImpulse, PhysicsWorldSettings,
@@ -25,8 +26,14 @@ pub(super) fn build_frame_input(
     fixed_tick: u64,
     dt: f32,
     static_mesh_revisions: &mut BTreeMap<u64, u64>,
+    static_mesh_observed_tick: &mut u64,
+    static_mesh_backlog_pending: &mut bool,
     gameplay_queries: &GameplayPhysicsQueryProviderRegistry,
 ) -> PhysicsFrameInput {
+    let profile = fixed_tick <= 4
+        || (fixed_tick.is_multiple_of(30)
+            && newengine_runtime_policy::simulation_runtime_policy().physics_stage_log);
+    let total_started = profile.then(Instant::now);
     let physics_world = world
         .resource::<PhysicsWorldSettings>()
         .copied()
@@ -40,23 +47,38 @@ pub(super) fn build_frame_input(
         .resource::<crate::gameplay::WorldActivationState>()
         .map(|gate| gate.is_ready())
         .unwrap_or(true);
+    let body_started = profile.then(Instant::now);
     let mut bodies = if gameplay_bodies_active {
         collect_body_snapshots(world)
     } else {
         Vec::new()
     };
     bodies.sort_by_key(|body| body.entity);
+    let body_ms = body_started
+        .map(|t| t.elapsed().as_secs_f64() * 1000.0)
+        .unwrap_or(0.0);
 
+    let terrain_started = profile.then(Instant::now);
     let mut colliders = collect_terrain_colliders(world, &bodies, physics_world.contact_skin);
+    let terrain_ms = terrain_started
+        .map(|t| t.elapsed().as_secs_f64() * 1000.0)
+        .unwrap_or(0.0);
+    let static_started = profile.then(Instant::now);
     let (static_colliders, mut static_commands) = collect_static_mesh_colliders(
         world,
         static_mesh_revisions,
+        static_mesh_observed_tick,
+        static_mesh_backlog_pending,
         fixed_tick,
         physics_world.static_collider_batch_size,
     );
+    let static_ms = static_started
+        .map(|t| t.elapsed().as_secs_f64() * 1000.0)
+        .unwrap_or(0.0);
     colliders.extend(static_colliders);
     colliders.sort_by_key(|collider| collider.entity);
     static_commands.sort_by_key(|command| command.seq);
+    let command_started = profile.then(Instant::now);
     let mut commands = static_commands;
     commands.extend(
         world
@@ -71,10 +93,17 @@ pub(super) fn build_frame_input(
             }),
     );
     commands.sort_by_key(|command| command.seq);
+    let command_ms = command_started
+        .map(|t| t.elapsed().as_secs_f64() * 1000.0)
+        .unwrap_or(0.0);
+    let query_started = profile.then(Instant::now);
     let mut queries = gameplay_queries.collect_queries(world);
     queries.sort_by_key(|query| query.seq);
+    let query_ms = query_started
+        .map(|t| t.elapsed().as_secs_f64() * 1000.0)
+        .unwrap_or(0.0);
 
-    PhysicsFrameInput {
+    let packet = PhysicsFrameInput {
         frame_index,
         fixed_tick,
         dt: dt.clamp(0.0001, 0.05),
@@ -84,15 +113,57 @@ pub(super) fn build_frame_input(
         colliders,
         commands,
         queries,
+    };
+    if profile {
+        let total_ms = total_started
+            .map(|t| t.elapsed().as_secs_f64() * 1000.0)
+            .unwrap_or(0.0);
+        newengine_ulog_api::ulog::info!(
+            "physics.input.stage.profile: frame={} fixed_tick={} total_ms={:.3} body_ms={:.3} terrain_ms={:.3} static_ms={:.3} command_ms={:.3} query_ms={:.3} bodies={} colliders={} commands={} queries={}",
+            frame_index,
+            fixed_tick,
+            total_ms,
+            body_ms,
+            terrain_ms,
+            static_ms,
+            command_ms,
+            query_ms,
+            packet.bodies.len(),
+            packet.colliders.len(),
+            packet.commands.len(),
+            packet.queries.len(),
+        );
     }
+    packet
 }
 
 fn collect_static_mesh_colliders(
     world: &World,
     known_revisions: &mut BTreeMap<u64, u64>,
+    observed_tick: &mut u64,
+    backlog_pending: &mut bool,
     fixed_tick: u64,
     batch_size: usize,
 ) -> (Vec<PhysicsFrameColliderSnapshot>, Vec<PhysicsCommandDto>) {
+    // Full static-mesh revision scans are structural work, not fixed-step work. Use ECS change
+    // tracking to prove the static set is unchanged and return an empty delta immediately. This
+    // keeps moving gameplay bodies from forcing an O(N static colliders) scan every 60 Hz tick.
+    let since_tick = *observed_tick;
+    let current_tick = world.tick();
+    if since_tick != 0 && !*backlog_pending {
+        let membership_dirty = world.entities_changed_since(since_tick)
+            || world.any_changed_since::<StaticMeshCollider>(since_tick)
+            || world.any_added_since::<StaticMeshCollider>(since_tick);
+        let static_transform_dirty = world.any_changed_since::<Transform>(since_tick)
+            && world
+                .query_changed::<Transform>(since_tick)
+                .any(|(entity, _)| world.get::<StaticMeshCollider>(entity).is_some());
+        if !membership_dirty && !static_transform_dirty {
+            *observed_tick = current_tick;
+            return (Vec::new(), Vec::new());
+        }
+    }
+
     // First collect only cheap revision metadata. Mesh arrays are cloned only for the bounded
     // batch that actually crosses the service boundary on this fixed tick.
     let mut current_entities = BTreeSet::<u64>::new();
@@ -168,6 +239,7 @@ fn collect_static_mesh_colliders(
         known_revisions.insert(entity_key, revision);
     }
 
+    *backlog_pending = pending_before > snapshots.len();
     if !snapshots.is_empty() || !commands.is_empty() {
         newengine_ulog_api::ulog::info!(
             "physics sync: static mesh delta fixed_tick={} registered={} removed={} pending_before={} pending_after={} batch_limit={} vertices={} triangles={} policy='bounded register-on-change; removals immediate; geometry omitted from steady-state packets'",
@@ -182,6 +254,7 @@ fn collect_static_mesh_colliders(
         );
     }
 
+    *observed_tick = current_tick;
     (snapshots, commands)
 }
 
@@ -285,8 +358,19 @@ mod tests {
         );
 
         let mut revisions = BTreeMap::new();
+        let mut observed_tick = 0;
+        let mut backlog_pending = false;
         let queries = GameplayPhysicsQueryProviderRegistry::new();
-        let prelaunch = build_frame_input(&world, 1, 1, 1.0 / 60.0, &mut revisions, &queries);
+        let prelaunch = build_frame_input(
+            &world,
+            1,
+            1,
+            1.0 / 60.0,
+            &mut revisions,
+            &mut observed_tick,
+            &mut backlog_pending,
+            &queries,
+        );
         assert!(prelaunch.bodies.is_empty());
         assert_eq!(prelaunch.colliders.len(), 1);
 
@@ -294,7 +378,16 @@ mod tests {
             .resource_mut::<crate::gameplay::WorldActivationState>()
             .unwrap()
             .mark_ready(2, "collision ready");
-        let active = build_frame_input(&world, 2, 2, 1.0 / 60.0, &mut revisions, &queries);
+        let active = build_frame_input(
+            &world,
+            2,
+            2,
+            1.0 / 60.0,
+            &mut revisions,
+            &mut observed_tick,
+            &mut backlog_pending,
+            &queries,
+        );
         assert_eq!(active.bodies.len(), 1);
     }
 
@@ -342,12 +435,16 @@ mod tests {
         let _ = world.insert(entity, collider);
 
         let mut static_mesh_revisions = BTreeMap::new();
+        let mut observed_tick = 0;
+        let mut backlog_pending = false;
         let input = build_frame_input(
             &world,
             1,
             1,
             1.0 / 60.0,
             &mut static_mesh_revisions,
+            &mut observed_tick,
+            &mut backlog_pending,
             &GameplayPhysicsQueryProviderRegistry::new(),
         );
         let snapshot = input
@@ -370,11 +467,35 @@ mod tests {
             2,
             1.0 / 60.0,
             &mut static_mesh_revisions,
+            &mut observed_tick,
+            &mut backlog_pending,
             &GameplayPhysicsQueryProviderRegistry::new(),
         );
         assert!(
             second.colliders.is_empty(),
             "unchanged static mesh must not be resent"
+        );
+
+        world.advance_tick();
+        world
+            .get_mut_tracked::<Transform>(entity)
+            .expect("static mesh transform")
+            .position
+            .x += 1.0;
+        let moved = build_frame_input(
+            &world,
+            3,
+            3,
+            1.0 / 60.0,
+            &mut static_mesh_revisions,
+            &mut observed_tick,
+            &mut backlog_pending,
+            &GameplayPhysicsQueryProviderRegistry::new(),
+        );
+        assert_eq!(
+            moved.colliders.len(),
+            1,
+            "changed static transform must resend collider"
         );
     }
 
@@ -402,15 +523,40 @@ mod tests {
 
         let mut revisions = BTreeMap::new();
         let queries = GameplayPhysicsQueryProviderRegistry::new();
-        let first = collect_static_mesh_colliders(&world, &mut revisions, 1, 128);
+        let mut observed_tick = 0;
+        let mut backlog_pending = false;
+        let first = collect_static_mesh_colliders(
+            &world,
+            &mut revisions,
+            &mut observed_tick,
+            &mut backlog_pending,
+            1,
+            128,
+        );
         assert_eq!(first.0.len(), 128);
         assert_eq!(revisions.len(), 128);
 
-        let second = collect_static_mesh_colliders(&world, &mut revisions, 2, 128);
+        world.advance_tick();
+        let second = collect_static_mesh_colliders(
+            &world,
+            &mut revisions,
+            &mut observed_tick,
+            &mut backlog_pending,
+            2,
+            128,
+        );
         assert_eq!(second.0.len(), 2);
         assert_eq!(revisions.len(), 130);
 
-        let third = collect_static_mesh_colliders(&world, &mut revisions, 3, 128);
+        world.advance_tick();
+        let third = collect_static_mesh_colliders(
+            &world,
+            &mut revisions,
+            &mut observed_tick,
+            &mut backlog_pending,
+            3,
+            128,
+        );
         assert!(third.0.is_empty());
         assert!(third.1.is_empty());
         let _ = queries;
@@ -431,15 +577,20 @@ mod tests {
         );
         let entity_key = entity.stable_u64();
         let mut revisions = BTreeMap::new();
+        let mut observed_tick = 0;
+        let mut backlog_pending = false;
         let first = build_frame_input(
             &world,
             1,
             1,
             1.0 / 60.0,
             &mut revisions,
+            &mut observed_tick,
+            &mut backlog_pending,
             &GameplayPhysicsQueryProviderRegistry::new(),
         );
         assert_eq!(first.colliders.len(), 1);
+        world.advance_tick();
         world.despawn(entity);
         let second = build_frame_input(
             &world,
@@ -447,6 +598,8 @@ mod tests {
             2,
             1.0 / 60.0,
             &mut revisions,
+            &mut observed_tick,
+            &mut backlog_pending,
             &GameplayPhysicsQueryProviderRegistry::new(),
         );
         assert!(second.commands.iter().any(|command| matches!(

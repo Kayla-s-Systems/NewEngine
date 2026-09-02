@@ -9,8 +9,11 @@ mod specs;
 #[path = "profile_parse/xml.rs"]
 mod xml;
 
-pub(crate) use load::load_game_ready_map_profile;
-pub(super) use specs::{RawDefinitionInstanceSpec, RawFoliageSpec, RawPrefabSpec, RawShadowSpec};
+pub(crate) use load::load_authored_world_profile;
+pub(super) use specs::{
+    RawAudioEmitterSpec, RawAudioSpec, RawDefinitionInstanceSpec, RawFoliageSpec, RawPrefabSpec,
+    RawShadowSpec,
+};
 
 // Child modules intentionally share only the raw-payload/sanitize namespace through this
 // facade. Asset I/O, XML conversion and runtime projection remain separate responsibilities.

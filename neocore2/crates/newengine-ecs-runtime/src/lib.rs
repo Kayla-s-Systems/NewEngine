@@ -447,7 +447,7 @@ mod semantic_component_tests {
         let mut world = newengine_ecs::World::new();
         let entity = world.spawn();
         let payload = serde_json::json!({
-            "cue": "shared/audio/weapon/rifle/rifle.yscd@fire",
+            "cue": "shared/audio/weapon/rifle/rifle.ysncd@fire",
             "enabled": true,
             "autoplay": false,
             "gain": 0.8,
@@ -463,7 +463,7 @@ mod semantic_component_tests {
         let emitter = world
             .get::<newengine_audio_api::AudioEmitter>(entity)
             .expect("audio emitter component");
-        assert_eq!(emitter.cue, "shared/audio/weapon/rifle/rifle.yscd@fire");
+        assert_eq!(emitter.cue, "shared/audio/weapon/rifle/rifle.ysncd@fire");
         assert_eq!(emitter.gain, 0.8);
 
         let (ok, message) = EngineEcsGatewayService::remove_semantic_component(

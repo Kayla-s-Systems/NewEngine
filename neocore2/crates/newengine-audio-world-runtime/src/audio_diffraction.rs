@@ -27,6 +27,14 @@ const AUDIO_DIFFRACTION_QUERY_NAMESPACE: u64 = 0xa0d0_0000_0000_0000;
 const AUDIO_DIFFRACTION_QUERY_COUNTER_MASK: u64 = 0x000f_ffff_ffff_ffff;
 const MAX_DIFFRACTION_EMITTERS_PER_TICK: usize = 8;
 const MAX_EDGE_CANDIDATES_PER_EMITTER: usize = 6;
+/// Only a bounded set of edges nearest the blocked direct path proceeds to the expensive
+/// diffraction geometry solve. This keeps collider complexity out of the fixed-tick budget.
+const MAX_EDGE_GEOMETRY_PREFILTER: usize = 24;
+/// Edge diffraction is a secondary acoustic field, not a rigid-body control signal.
+/// Sampling it at 10 Hz preserves perceptual continuity while avoiding a full blocker-edge
+/// geometry solve on every 60 Hz physics tick. The latest observation remains authoritative
+/// between samples; direct occlusion continues to update every fixed tick.
+const DIFFRACTION_QUERY_INTERVAL_TICKS: u64 = 6;
 const EDGE_VISIBILITY_ENDPOINT_EPSILON: f32 = 0.04;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -107,6 +115,7 @@ pub struct AudioDiffractionPhysicsQueryProvider {
     tracked_emitters: Mutex<BTreeSet<u64>>,
     clear_emitters: Mutex<BTreeSet<u64>>,
     next_query: AtomicU64,
+    sample_tick: AtomicU64,
 }
 
 impl Default for AudioDiffractionPhysicsQueryProvider {
@@ -123,6 +132,7 @@ impl AudioDiffractionPhysicsQueryProvider {
             tracked_emitters: Mutex::new(BTreeSet::new()),
             clear_emitters: Mutex::new(BTreeSet::new()),
             next_query: AtomicU64::new(1),
+            sample_tick: AtomicU64::new(0),
         }
     }
 
@@ -136,6 +146,11 @@ impl AudioDiffractionPhysicsQueryProvider {
         let value =
             self.next_query.fetch_add(1, Ordering::Relaxed) & AUDIO_DIFFRACTION_QUERY_COUNTER_MASK;
         AUDIO_DIFFRACTION_QUERY_NAMESPACE | value.max(1)
+    }
+
+    #[inline]
+    fn sample_due(&self) -> bool {
+        self.sample_tick.fetch_add(1, Ordering::Relaxed) % DIFFRACTION_QUERY_INTERVAL_TICKS == 0
     }
 
     fn static_mesh_entities(world: &World) -> BTreeMap<u64, EntityId> {
@@ -246,6 +261,37 @@ impl AudioDiffractionPhysicsQueryProvider {
             },
         );
         edges
+    }
+
+    fn nearest_edges_to_direct_path(
+        edges: &[CachedWorldEdge],
+        source: [f32; 3],
+        receiver: [f32; 3],
+    ) -> Vec<CachedWorldEdge> {
+        let mut nearest = Vec::<(f32, CachedWorldEdge)>::with_capacity(
+            MAX_EDGE_GEOMETRY_PREFILTER.min(edges.len()),
+        );
+        for &edge in edges {
+            let metric = edge_direct_path_distance_sq(edge, source, receiver);
+            if !metric.is_finite() {
+                continue;
+            }
+            let insert_at = nearest
+                .binary_search_by(|(distance, existing)| {
+                    distance
+                        .total_cmp(&metric)
+                        .then_with(|| existing.vertex_indices.cmp(&edge.vertex_indices))
+                })
+                .unwrap_or_else(|index| index);
+            if insert_at >= MAX_EDGE_GEOMETRY_PREFILTER {
+                continue;
+            }
+            nearest.insert(insert_at, (metric, edge));
+            if nearest.len() > MAX_EDGE_GEOMETRY_PREFILTER {
+                nearest.pop();
+            }
+        }
+        nearest.into_iter().map(|(_, edge)| edge).collect()
     }
 
     fn blocker_material(
@@ -368,6 +414,12 @@ impl GameplayPhysicsQueryProvider for AudioDiffractionPhysicsQueryProvider {
             self.update_tracking(BTreeSet::new());
             return Vec::new();
         }
+        if !self.sample_due() {
+            // A previous diffraction observation remains valid until the next acoustic sample.
+            // Never carry unresolved ray bookkeeping across skipped physics ticks.
+            self.pending.lock().clear();
+            return Vec::new();
+        }
 
         let mesh_entities = Self::static_mesh_entities(world);
         self.edge_cache
@@ -391,11 +443,12 @@ impl GameplayPhysicsQueryProvider for AudioDiffractionPhysicsQueryProvider {
                 candidate.position.z,
             ];
             let receiver = [listener.x, listener.y, listener.z];
-            let mut paths = edges
-                .iter()
+            let prefiltered_edges = Self::nearest_edges_to_direct_path(&edges, source, receiver);
+            let mut paths = prefiltered_edges
+                .into_iter()
                 .filter_map(|edge| {
                     edge_diffraction_geometry(edge.endpoints, source, receiver)
-                        .map(|geometry| (*edge, geometry))
+                        .map(|geometry| (edge, geometry))
                 })
                 .filter(|(_, geometry)| {
                     geometry.excess_length_m > 1.0e-4 && geometry.bend_angle_radians > 1.0e-3
@@ -539,6 +592,49 @@ impl GameplayPhysicsQueryProvider for AudioDiffractionPhysicsQueryProvider {
     }
 }
 
+#[inline]
+fn edge_direct_path_distance_sq(
+    edge: CachedWorldEdge,
+    source: [f32; 3],
+    receiver: [f32; 3],
+) -> f32 {
+    let midpoint = [
+        (edge.endpoints[0][0] + edge.endpoints[1][0]) * 0.5,
+        (edge.endpoints[0][1] + edge.endpoints[1][1]) * 0.5,
+        (edge.endpoints[0][2] + edge.endpoints[1][2]) * 0.5,
+    ];
+    let direct = [
+        receiver[0] - source[0],
+        receiver[1] - source[1],
+        receiver[2] - source[2],
+    ];
+    let direct_len_sq = direct[0] * direct[0] + direct[1] * direct[1] + direct[2] * direct[2];
+    if direct_len_sq <= 1.0e-8 {
+        let dx = midpoint[0] - source[0];
+        let dy = midpoint[1] - source[1];
+        let dz = midpoint[2] - source[2];
+        return dx * dx + dy * dy + dz * dz;
+    }
+    let from_source = [
+        midpoint[0] - source[0],
+        midpoint[1] - source[1],
+        midpoint[2] - source[2],
+    ];
+    let t =
+        ((from_source[0] * direct[0] + from_source[1] * direct[1] + from_source[2] * direct[2])
+            / direct_len_sq)
+            .clamp(0.0, 1.0);
+    let closest = [
+        source[0] + direct[0] * t,
+        source[1] + direct[1] * t,
+        source[2] + direct[2] * t,
+    ];
+    let dx = midpoint[0] - closest[0];
+    let dy = midpoint[1] - closest[1];
+    let dz = midpoint[2] - closest[2];
+    dx * dx + dy * dy + dz * dz
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -593,7 +689,7 @@ mod tests {
                 ..Transform::default()
             },
         );
-        let mut audio = AudioEmitter::new("shared/audio/test.yscd@edge");
+        let mut audio = AudioEmitter::new("shared/audio/test.ysncd@edge");
         audio.occlusion = AudioOcclusionSettings::default();
         let _ = world.insert(emitter, audio);
         let _ = world.insert(
@@ -650,6 +746,55 @@ mod tests {
             .expect("diffraction observation");
         assert_eq!(observation.blocker_entity, Some(blocker.stable_u64()));
         assert!(observation.paths.iter().all(|path| path.visible));
+    }
+
+    #[test]
+    fn edge_geometry_prefilter_is_bounded_and_prefers_direct_path() {
+        let mut edges = Vec::new();
+        for index in 0..128_u32 {
+            let y = 50.0 + index as f32;
+            edges.push(CachedWorldEdge {
+                vertex_indices: [index * 2, index * 2 + 1],
+                endpoints: [[0.0, y, -1.0], [0.0, y, 1.0]],
+                wedge_angle_radians: 1.0,
+            });
+        }
+        let direct_edge = CachedWorldEdge {
+            vertex_indices: [999, 1_000],
+            endpoints: [[0.0, 0.05, -1.0], [0.0, 0.05, 1.0]],
+            wedge_angle_radians: 1.0,
+        };
+        edges.push(direct_edge);
+        let selected = AudioDiffractionPhysicsQueryProvider::nearest_edges_to_direct_path(
+            &edges,
+            [-4.0, 0.0, 0.0],
+            [4.0, 0.0, 0.0],
+        );
+        assert!(selected.len() <= MAX_EDGE_GEOMETRY_PREFILTER);
+        assert_eq!(
+            selected.first().unwrap().vertex_indices,
+            direct_edge.vertex_indices
+        );
+    }
+
+    #[test]
+    fn diffraction_sampling_is_bounded_to_acoustic_cadence() {
+        let (world, _, _) = world_with_blocker();
+        let provider = AudioDiffractionPhysicsQueryProvider::new();
+        assert!(
+            !provider.collect_queries(&world).is_empty(),
+            "first sample must run immediately"
+        );
+        for _ in 1..DIFFRACTION_QUERY_INTERVAL_TICKS {
+            assert!(
+                provider.collect_queries(&world).is_empty(),
+                "intermediate fixed ticks must reuse the last diffraction observation"
+            );
+        }
+        assert!(
+            !provider.collect_queries(&world).is_empty(),
+            "next acoustic interval must refresh diffraction queries"
+        );
     }
 
     #[test]

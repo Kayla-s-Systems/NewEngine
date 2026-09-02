@@ -83,6 +83,11 @@ impl TimedBreakdown {
         self.started.elapsed().as_secs_f32() * 1000.0
     }
 
+    #[inline]
+    pub(super) fn push_measurement(&mut self, label: impl Into<String>, elapsed_ms: f32) {
+        self.parts.push((label.into(), elapsed_ms.max(0.0)));
+    }
+
     pub(super) fn breakdown(&self) -> String {
         self.parts
             .iter()

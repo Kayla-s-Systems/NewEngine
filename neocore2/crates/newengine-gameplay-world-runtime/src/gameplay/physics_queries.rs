@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+use std::time::Instant;
 
 use newengine_ecs::{EntityId, World};
 use newengine_physics_api::{PhysicsQueryDto, PhysicsQueryHitDto};
@@ -54,9 +55,24 @@ impl GameplayPhysicsQueryProviderRegistry {
     }
 
     pub fn collect_queries(&self, world: &World) -> Vec<PhysicsQueryDto> {
+        let profile_enabled =
+            newengine_runtime_policy::simulation_runtime_policy().physics_stage_log;
         let mut queries = Vec::new();
         for provider in &self.providers {
-            queries.extend(provider.collect_queries(world));
+            let started = profile_enabled.then(Instant::now);
+            let batch = provider.collect_queries(world);
+            if let Some(started) = started {
+                let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
+                if elapsed_ms >= 0.1 || !batch.is_empty() {
+                    newengine_ulog_api::ulog::info!(
+                        "physics.query-provider.profile: provider='{}' elapsed_ms={:.3} queries={}",
+                        provider.id(),
+                        elapsed_ms,
+                        batch.len(),
+                    );
+                }
+            }
+            queries.extend(batch);
         }
         queries
     }

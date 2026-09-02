@@ -3,8 +3,8 @@
 
 use newengine_game_data::GameDataSnapshot;
 use newengine_gameplay_fps_api::{
-    FpsDemoGoal, FpsDemoHazard, FpsDemoPickup, FpsDemoRules, FpsDemoState, FpsDemoTarget,
-    FpsMotionResponseTuning, FpsPlayerTuning,
+    FpsMotionResponseTuning, FpsObjectiveGoal, FpsObjectiveHazard, FpsObjectivePickup,
+    FpsObjectiveState, FpsObjectiveTarget, FpsPlayerTuning, FpsRuntimeRules,
 };
 
 #[path = "game_ready_parts/animation_events.rs"]
@@ -84,12 +84,12 @@ use newengine_engine_runtime::gameplay::{spawn_player_controller, WorldActivatio
 use newengine_engine_runtime::world_authoring::bootstrap_runtime_scene_foundation;
 
 use self::content::{
-    load_game_ready_map_profile, GameReadyDayNightSpec, GameReadyDefinitionApplyMode,
+    load_authored_world_profile, AuthoredMissionSpec, AuthoredWorldProfile,
+    GameReadyAudioEmitterSpec, GameReadyDayNightSpec, GameReadyDefinitionApplyMode,
     GameReadyDefinitionInstanceSpec, GameReadyFoliageSpec, GameReadyGameplaySpec,
-    GameReadyLightingSpec, GameReadyMapProfile, GameReadyMaterialSetSpec, GameReadyMaterialSpec,
-    GameReadyMissionSpec, GameReadyPaletteSpec, GameReadyPrefabSpec, GameReadyShadowSpec,
-    GameReadySkyAtmosphereSpec, GameReadySkySpec, GameReadyTerrainHeightmapSpec,
-    GameReadyTerrainSpec,
+    GameReadyLightingSpec, GameReadyMaterialSetSpec, GameReadyMaterialSpec, GameReadyPaletteSpec,
+    AuthoredWorldPlacementSpec, GameReadyShadowSpec, GameReadySkyAtmosphereSpec, GameReadySkySpec,
+    GameReadyTerrainHeightmapSpec, GameReadyTerrainSpec,
 };
 use newengine_engine_runtime::world_authoring::{
     apply_exact_material, apply_primitive_material_instance as apply_primitive_instance,

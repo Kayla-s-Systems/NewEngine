@@ -146,7 +146,7 @@ fn upsert_loaded_material(
     response.descriptor.sanitize_in_place();
     // `m00`, `m01`, ... are library-local selectors, not globally unique material names.
     // Registry identity must include the canonical NEMAT source or different libraries will
-    // overwrite each other (for example Abby m00 and rifle m00).
+    // overwrite each other (for example character m00 and rifle m00).
     let registry_name = material_registry_identity(&response.source, fallback_name);
     let display_name = if response.name.trim().is_empty() {
         fallback_name
@@ -264,7 +264,10 @@ mod material_identity_tests {
         );
         assert_ne!(
             material_registry_identity("shared/materials/weapon_rifle.nemat@m00", "m00"),
-            material_registry_identity("shared/materials/characters/abby.nemat@m00", "m00")
+            material_registry_identity(
+                "shared/materials/characters/sample_character.nemat@m00",
+                "m00"
+            )
         );
     }
 }

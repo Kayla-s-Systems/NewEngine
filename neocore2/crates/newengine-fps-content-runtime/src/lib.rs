@@ -11,7 +11,7 @@ use newengine_engine_runtime::gameplay::{
     ItemId, PlayerController, PlayerInventory,
 };
 use newengine_gameplay_fps_api::{
-    FpsActorLoadoutRequest, FpsDemoRules, FpsGameplayPolicyProvider, FpsGameplayPolicySnapshot,
+    FpsActorLoadoutRequest, FpsGameplayPolicyProvider, FpsGameplayPolicySnapshot, FpsRuntimeRules,
 };
 use newengine_gameplay_script_api::ScriptedStateMachineEventRequest;
 use newengine_gameplay_script_runtime::{
@@ -309,7 +309,7 @@ fn install_policy_resources(world: &mut GameplayWorld, policy: &FpsGameplayPolic
             reconciled
         );
     }
-    if let Some(rules) = world.resource_mut::<FpsDemoRules>() {
+    if let Some(rules) = world.resource_mut::<FpsRuntimeRules>() {
         let mission = &policy.mission;
         rules.default_status = mission.default_status.clone();
         rules.pickup_status = mission.pickup_status.clone();
@@ -320,7 +320,7 @@ fn install_policy_resources(world: &mut GameplayWorld, policy: &FpsGameplayPolic
         rules.failed_progress_label = mission.failed_progress_label.clone();
         rules.completed_progress_label = mission.completed_progress_label.clone();
     }
-    if let Some(state) = world.resource_mut::<newengine_gameplay_fps_api::FpsDemoState>() {
+    if let Some(state) = world.resource_mut::<newengine_gameplay_fps_api::FpsObjectiveState>() {
         state.failed_progress_label = policy.mission.failed_progress_label.clone();
         state.completed_progress_label = policy.mission.completed_progress_label.clone();
         if !state.completed && !state.failed {

@@ -214,8 +214,10 @@ where
         }
         let dry = self.input.next()?;
         self.refresh_controls();
+        let [source_gain, listener_gain] =
+            normalized_reverb_send_gains(self.source_params.gain, self.listener_params.gain);
         if let Some(binding) = self.late_binding.as_ref() {
-            binding.inject(dry, self.source_params.gain, self.listener_params.gain, 1);
+            binding.inject(dry, source_gain, listener_gain, 1);
         }
         let direct = self.direct_path.process(dry, self.direct_params);
         // Tanks are stereo internally: feed the same mono frame twice so channel-dependent early
@@ -243,15 +245,15 @@ where
             self.spatial,
         );
         let left = direct * direct_gain[0]
-            + source_early[0] * self.source_params.gain
-            + listener_early[0] * self.listener_params.gain
-            + source_left.late * self.source_params.gain
-            + listener_left.late * self.listener_params.gain;
+            + source_early[0] * source_gain
+            + listener_early[0] * listener_gain
+            + source_left.late * source_gain
+            + listener_left.late * listener_gain;
         let right = direct * direct_gain[1]
-            + source_early[1] * self.source_params.gain
-            + listener_early[1] * self.listener_params.gain
-            + source_right.late * self.source_params.gain
-            + listener_right.late * self.listener_params.gain;
+            + source_early[1] * source_gain
+            + listener_early[1] * listener_gain
+            + source_right.late * source_gain
+            + listener_right.late * listener_gain;
         self.pending_right = Some(right);
         Some(left)
     }
@@ -375,19 +377,19 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         let dry = self.input.next()?;
         self.refresh_controls();
+        let [source_gain, listener_gain] =
+            normalized_reverb_send_gains(self.source_params.gain, self.listener_params.gain);
         if let Some(binding) = self.late_binding.as_ref() {
             binding.inject(
                 dry,
-                self.source_params.gain,
-                self.listener_params.gain,
+                source_gain,
+                listener_gain,
                 usize::from(self.input.channels().get()),
             );
         }
         let direct = self.direct_path.process(dry, self.direct_params);
-        let source_wet =
-            self.source_tank.process(dry, self.source_params) * self.source_params.gain;
-        let listener_wet =
-            self.listener_tank.process(dry, self.listener_params) * self.listener_params.gain;
+        let source_wet = self.source_tank.process(dry, self.source_params) * source_gain;
+        let listener_wet = self.listener_tank.process(dry, self.listener_params) * listener_gain;
         // The direct alternate path owns portal/diffraction delay and spectral loss. Reverb
         // sends remain independent indirect energy and preserve their own room history.
         Some(direct + source_wet + listener_wet)

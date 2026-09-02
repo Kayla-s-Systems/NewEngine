@@ -11,7 +11,9 @@ pub use shared_ui::{
     SHARED_UI_RESUME_ACTION,
 };
 
-pub use content_mounts::{mount_content_registry_best_effort, register_engine_asset_roots};
+pub use content_mounts::{
+    mount_content_registry_best_effort, register_engine_bootstrap_asset_roots,
+};
 pub use launch_env::*;
 pub use project_browser::{
     default_projects_root, discover_game_projects, discover_projects, preferred_game_launch_id,

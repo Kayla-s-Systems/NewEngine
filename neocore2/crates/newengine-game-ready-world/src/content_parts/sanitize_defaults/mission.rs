@@ -19,10 +19,10 @@ fn required_positive_scale(value: [f32; 3]) -> Option<[f32; 3]> {
 }
 
 #[inline]
-pub(in super::super) fn sanitize_prefab_spec(raw: RawPrefabSpec) -> Option<GameReadyPrefabSpec> {
+pub(in super::super) fn sanitize_prefab_spec(raw: RawPrefabSpec) -> Option<AuthoredWorldPlacementSpec> {
     let id = sanitized_required_id(&raw.id)?;
 
-    Some(GameReadyPrefabSpec {
+    Some(AuthoredWorldPlacementSpec {
         authored_placement_id: id.clone(),
         id,
         authored_map_ref: String::new(),
@@ -82,10 +82,10 @@ pub(in super::super) fn sanitize_prefab_spec(raw: RawPrefabSpec) -> Option<GameR
 #[inline]
 pub(in super::super) fn sanitize_mission_pickup_spec(
     raw: RawMissionPickupSpec,
-) -> Option<GameReadyMissionPickupSpec> {
+) -> Option<AuthoredMissionPickupSpec> {
     let id = sanitized_required_id(&raw.id)?;
     let item = raw.item.trim().replace('\\', "/");
-    Some(GameReadyMissionPickupSpec {
+    Some(AuthoredMissionPickupSpec {
         id,
         item: (!item.is_empty()).then_some(item),
         quantity: raw.quantity.clamp(1, 10_000),
@@ -123,7 +123,7 @@ fn parse_patrol_route(raw: Option<&str>) -> Option<Vec<Vec3>> {
 
 pub(in super::super) fn sanitize_mission_target_spec(
     raw: RawMissionTargetSpec,
-) -> Option<GameReadyMissionTargetSpec> {
+) -> Option<AuthoredMissionTargetSpec> {
     let id = sanitized_required_id(&raw.id)?;
     let character_ref = raw
         .character_ref
@@ -242,7 +242,7 @@ pub(in super::super) fn sanitize_mission_target_spec(
     } else {
         None
     };
-    Some(GameReadyMissionTargetSpec {
+    Some(AuthoredMissionTargetSpec {
         id,
         character_ref,
         position: arr3(sanitize_array3_finite(raw.position, [0.0, 0.0, 0.0])),
@@ -254,9 +254,9 @@ pub(in super::super) fn sanitize_mission_target_spec(
 
 pub(in super::super) fn sanitize_mission_hazard_spec(
     raw: RawMissionHazardSpec,
-) -> Option<GameReadyMissionHazardSpec> {
+) -> Option<AuthoredMissionHazardSpec> {
     let id = sanitized_required_id(&raw.id)?;
-    Some(GameReadyMissionHazardSpec {
+    Some(AuthoredMissionHazardSpec {
         id,
         position: arr3(sanitize_array3_finite(raw.position, [0.0, 0.0, 0.0])),
         radius: positive_clamped(raw.radius, 0.2, 32.0)?,
@@ -266,9 +266,9 @@ pub(in super::super) fn sanitize_mission_hazard_spec(
 
 pub(in super::super) fn sanitize_mission_goal_spec(
     raw: RawMissionGoalSpec,
-) -> Option<GameReadyMissionGoalSpec> {
+) -> Option<AuthoredMissionGoalSpec> {
     let id = sanitized_required_id(&raw.id)?;
-    Some(GameReadyMissionGoalSpec {
+    Some(AuthoredMissionGoalSpec {
         id,
         position: arr3(sanitize_array3_finite(raw.position, [0.0, 0.0, 0.0])),
         radius: positive_clamped(raw.radius, 0.2, 32.0)?,
@@ -286,7 +286,7 @@ pub(in super::super) fn sanitize_definition_instance_spec(
     }
     if !definition_ref.to_ascii_lowercase().contains(".ytyp@") {
         newengine_ulog_api::ulog::warn!(
-            "game-ready definitions: rejected definition_ref='{}' reason='expected .ytyp@entry selector'",
+            "authored-world definitions: rejected definition_ref='{}' reason='expected .ytyp@entry selector'",
             definition_ref
         );
         return None;

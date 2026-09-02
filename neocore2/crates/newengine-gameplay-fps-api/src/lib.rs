@@ -17,10 +17,10 @@ pub use policy::{
     FPS_GAMEPLAY_POLICY_SCHEMA, FPS_GAMEPLAY_POLICY_VERSION,
 };
 pub use runtime::{
-    FpsCharacterTraversalMode, FpsCharacterTraversalState, FpsDemoGoal, FpsDemoHazard,
-    FpsDemoPickup, FpsDemoRules, FpsDemoState, FpsDemoTarget, FpsMotionResponseTuning,
-    FpsPlayerTuning, PendingImpactDebrisVisual, PersistentImpactDebris, PersistentImpactDebrisKind,
-    WeaponShellCasing,
+    FpsCharacterTraversalMode, FpsCharacterTraversalState, FpsMotionResponseTuning,
+    FpsObjectiveGoal, FpsObjectiveHazard, FpsObjectivePickup, FpsObjectiveState,
+    FpsObjectiveTarget, FpsPlayerTuning, FpsRuntimeRules, PendingImpactDebrisVisual,
+    PersistentImpactDebris, PersistentImpactDebrisKind, WeaponShellCasing,
 };
 
 use newengine_input_actions_api::ActionCommandFrame;

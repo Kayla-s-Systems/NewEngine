@@ -9,10 +9,11 @@ mod spawn;
 #[path = "world_model/streaming.rs"]
 mod streaming;
 
-const STATIC_WORLD_PROXY: &str = "world_static_ydd";
-const DYNAMIC_WORLD_PROXY: &str = "world_dynamic_ydd";
-const COLLISION_WORLD_PROXY: &str = "world_collision_ydd";
-const BOX_COLLISION_WORLD_PROXY: &str = "world_collision_box";
+use newengine_authored_world_runtime::{
+    WORLD_COLLISION_BOX_PROXY as BOX_COLLISION_WORLD_PROXY,
+    WORLD_COLLISION_PROXY as COLLISION_WORLD_PROXY, WORLD_DYNAMIC_PROXY as DYNAMIC_WORLD_PROXY,
+    WORLD_STATIC_PROXY as STATIC_WORLD_PROXY,
+};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct GroundPlacementSurface;

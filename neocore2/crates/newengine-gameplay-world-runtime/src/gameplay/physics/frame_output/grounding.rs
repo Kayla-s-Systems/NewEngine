@@ -27,7 +27,7 @@ pub(super) fn apply_ground_query_hit(
         return;
     }
     let tuning = world
-        .resource::<FpsDemoRules>()
+        .resource::<FpsRuntimeRules>()
         .map(|rules| rules.player.sanitized())
         .unwrap_or_else(|| FpsPlayerTuning::default().sanitized());
     let max_distance = tuning.contact_skin + tuning.ground_probe_distance;
@@ -68,7 +68,7 @@ pub(super) fn resolve_stand_clearance(
     blocked: &BTreeSet<EntityId>,
 ) {
     let tuning = world
-        .resource::<FpsDemoRules>()
+        .resource::<FpsRuntimeRules>()
         .map(|rules| rules.player.sanitized())
         .unwrap_or_else(|| FpsPlayerTuning::default().sanitized());
     let requested = world
@@ -118,7 +118,7 @@ pub(super) fn update_player_locomotion(
         0.0
     };
     let tuning = world
-        .resource::<FpsDemoRules>()
+        .resource::<FpsRuntimeRules>()
         .map(|rules| rules.player.sanitized())
         .unwrap_or_else(|| FpsPlayerTuning::default().sanitized());
     let players = world

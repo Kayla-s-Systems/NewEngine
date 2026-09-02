@@ -24,8 +24,8 @@ struct StaticWorldDecodeJob {
 
 #[derive(Default)]
 struct StaticWorldSourceQueue {
-    collision: VecDeque<GameReadyPrefabSpec>,
-    visual: VecDeque<GameReadyPrefabSpec>,
+    collision: VecDeque<AuthoredWorldPlacementSpec>,
+    visual: VecDeque<AuthoredWorldPlacementSpec>,
 }
 
 struct GameReadyStaticWorldStreamingState {
@@ -49,7 +49,7 @@ pub(in super::super) fn begin_static_world_prefabs(
     world: &mut newengine_ecs::World,
     _mats: &MaterialRegistry,
     parent: EntityId,
-    prefabs: &[GameReadyPrefabSpec],
+    prefabs: &[AuthoredWorldPlacementSpec],
 ) -> StaticWorldSpawnSummary {
     let mut candidates = prefabs
         .iter()
@@ -137,7 +137,7 @@ pub(super) fn enqueue_static_world_prefabs(
     world: &mut newengine_ecs::World,
     mats: &MaterialRegistry,
     parent: EntityId,
-    prefabs: &[GameReadyPrefabSpec],
+    prefabs: &[AuthoredWorldPlacementSpec],
 ) {
     if prefabs.is_empty() {
         return;
@@ -220,7 +220,7 @@ pub(super) fn cancel_static_world_cell_domain(
             continue;
         };
         let before = queue.collision.len().saturating_add(queue.visual.len());
-        let keep = |prefab: &GameReadyPrefabSpec| {
+        let keep = |prefab: &AuthoredWorldPlacementSpec| {
             !(prefab.authored_map_ref == map_ref
                 && prefab.authored_cell == Some(coord)
                 && super::authored_map_streaming::static_world_prefab_domain(prefab) == domain)
@@ -274,7 +274,7 @@ fn mark_static_world_source_terminal(state: &mut GameReadyStaticWorldStreamingSt
 
 fn pop_static_world_admittable(
     state: &mut GameReadyStaticWorldStreamingState,
-) -> Option<(String, GameReadyPrefabSpec, bool)> {
+) -> Option<(String, AuthoredWorldPlacementSpec, bool)> {
     let (source, collision_tier) = if let Some(source) = state.ready_collision_sources.first() {
         (source.clone(), true)
     } else {

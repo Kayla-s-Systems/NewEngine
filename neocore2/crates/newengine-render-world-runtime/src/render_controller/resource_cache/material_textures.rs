@@ -114,7 +114,7 @@ fn material_texture_decode_request(path: &str, frame_index: u64) -> TaskRequest 
         .with_lane(TaskLane::AssetIo)
         // Texture semantic decode is required for residency, but it is not frame-critical CPU
         // work. Simulation/RenderPrep interactive jobs must remain ahead of it in the shared pool.
-        .with_priority(TaskPriority::Normal)
+        .with_priority(TaskPriority::Background)
         .with_frame_id(frame_index)
         .with_dependency_group(format!("frame.{frame_index}.asset-io.texture-decode"))
         .with_task_domain(task_domain::ENGINE_ASSETS)

@@ -129,9 +129,9 @@ pub(super) fn unit_from_hash(h: u64) -> f32 {
 
 #[inline]
 pub(super) fn choose_foliage_prefab<'a>(
-    prefabs: &'a [GameReadyPrefabSpec],
+    prefabs: &'a [AuthoredWorldPlacementSpec],
     id: &str,
-) -> Option<&'a GameReadyPrefabSpec> {
+) -> Option<&'a AuthoredWorldPlacementSpec> {
     let id = id.trim();
     if id.is_empty() {
         return None;

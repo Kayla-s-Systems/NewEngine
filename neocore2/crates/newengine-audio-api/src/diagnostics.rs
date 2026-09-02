@@ -79,7 +79,7 @@ pub struct AudioDiagnostics {
     pub stream_compressed_bytes_fetched: u64,
     #[serde(default)]
     pub stream_seek_operations: u64,
-    /// Decoded/validated YSCD SoundGraphs currently resident in the cue cache.
+    /// Decoded/validated YSNCD SoundGraphs currently resident in the cue cache.
     #[serde(default)]
     pub cached_sound_graphs: usize,
     /// Persistent Sequence cursor states, scoped by cue/node/object.

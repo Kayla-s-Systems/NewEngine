@@ -12,7 +12,7 @@ use newengine_math::{Mat4, Quat, Vec3};
 use newengine_model_skeleton_api::ModelSkeletonMetadata;
 
 // Player-model animation stays a flat implementation namespace; responsibilities live in focused fragments.
-include!("player_model_animation/braid.rs");
+include!("player_model_animation/skeletal_secondary_motion.rs");
 include!("player_model_animation/binding.rs");
 include!("player_model_animation/look_pose_space.rs");
 include!("player_model_animation/locomotion_graph.rs");

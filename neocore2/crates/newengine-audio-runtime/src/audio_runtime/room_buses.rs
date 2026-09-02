@@ -3,6 +3,24 @@ const ROOM_BUS_INGRESS_FRAMES: usize = 128;
 const ROOM_BUS_SEND_LEAD_FRAMES: u64 = 2;
 const NO_ROOM_BUS_SLOT: u32 = u32::MAX;
 
+const ROOM_BUS_LINEAR_INPUT_LIMIT: f32 = 1.0;
+const ROOM_BUS_INPUT_CEILING: f32 = 2.0;
+
+#[inline]
+fn bounded_room_bus_input(sample: f32) -> f32 {
+    if !sample.is_finite() {
+        return 0.0;
+    }
+    let magnitude = sample.abs();
+    if magnitude <= ROOM_BUS_LINEAR_INPUT_LIMIT {
+        return sample;
+    }
+    let span = (ROOM_BUS_INPUT_CEILING - ROOM_BUS_LINEAR_INPUT_LIMIT).max(f32::EPSILON);
+    let compressed = ROOM_BUS_LINEAR_INPUT_LIMIT
+        + span * (1.0 - (-(magnitude - ROOM_BUS_LINEAR_INPUT_LIMIT) / span).exp());
+    sample.signum() * compressed.min(ROOM_BUS_INPUT_CEILING)
+}
+
 #[inline]
 fn pack_room_bus_sample(frame_tag: u32, sample: f32) -> u64 {
     (u64::from(frame_tag) << 32) | u64::from(sample.to_bits())
@@ -102,7 +120,7 @@ impl LateBusIngress {
                 Ordering::AcqRel,
                 Ordering::Acquire,
             ) {
-                Ok(_) => return if sample.is_finite() { sample } else { 0.0 },
+                Ok(_) => return bounded_room_bus_input(sample),
                 Err(actual) => observed = actual,
             }
         }
@@ -454,14 +472,23 @@ impl RoomBusVoiceBinding {
     fn inject(&self, dry_sample: f32, source_gain: f32, listener_gain: f32, channels: usize) {
         let channel_scale = 1.0 / channels.max(1) as f32;
         let base = dry_sample * self.voice_gain() * channel_scale;
-        self.inject_slot(
-            self.inner.source_slot.load(Ordering::Acquire),
-            base * source_gain.clamp(0.0, 2.0),
-        );
-        self.inject_slot(
-            self.inner.listener_slot.load(Ordering::Acquire),
-            base * listener_gain.clamp(0.0, 2.0),
-        );
+        let source_slot = self.inner.source_slot.load(Ordering::Acquire);
+        let listener_slot = self.inner.listener_slot.load(Ordering::Acquire);
+
+        // A malformed/custom environment may point both semantic sends at the same physical room.
+        // Treat that as one room field, not two coherent injections into the same FDN.
+        if source_slot == listener_slot && source_slot != NO_ROOM_BUS_SLOT {
+            self.inject_slot(
+                source_slot,
+                base * bounded_reverb_send_gain(source_gain.max(listener_gain)),
+            );
+            return;
+        }
+
+        let [source_gain, listener_gain] =
+            normalized_reverb_send_gains(source_gain, listener_gain);
+        self.inject_slot(source_slot, base * source_gain);
+        self.inject_slot(listener_slot, base * listener_gain);
     }
 
     #[inline]
@@ -598,6 +625,43 @@ mod room_bus_tests {
         assert_eq!(registry.binding_count(2), 1);
         drop(clone);
         assert_eq!(registry.binding_count(2), 0);
+    }
+
+    #[test]
+    fn duplicate_source_and_listener_room_slot_injects_only_once() {
+        let registry = Arc::new(RoomBusIngressRegistry::new());
+        let binding = RoomBusVoiceBinding::new(Arc::clone(&registry), 3, 3, 1.0);
+        binding.inject(1.0, 0.8, 0.6, 1);
+        let ingress = &registry.slots[3];
+        ingress.advance_frame();
+        ingress.advance_frame();
+        assert!((ingress.take_current_frame() - 0.8).abs() < 1.0e-6);
+    }
+
+    #[test]
+    fn separate_room_sends_share_one_indirect_energy_budget() {
+        let registry = Arc::new(RoomBusIngressRegistry::new());
+        let binding = RoomBusVoiceBinding::new(Arc::clone(&registry), 2, 4, 1.0);
+        binding.inject(1.0, 0.8, 0.8, 1);
+        for slot in [2usize, 4usize] {
+            let ingress = &registry.slots[slot];
+            ingress.advance_frame();
+            ingress.advance_frame();
+            assert!((ingress.take_current_frame() - 0.5).abs() < 1.0e-6);
+        }
+    }
+
+    #[test]
+    fn room_bus_ingress_soft_bounds_many_coherent_voice_sends() {
+        let ingress = LateBusIngress::new();
+        for _ in 0..8 {
+            ingress.push(1.0);
+        }
+        ingress.advance_frame();
+        ingress.advance_frame();
+        let sample = ingress.take_current_frame();
+        assert!(sample > 1.0, "guard should preserve some overload dynamics");
+        assert!(sample <= ROOM_BUS_INPUT_CEILING, "sample={sample}");
     }
 
     #[test]

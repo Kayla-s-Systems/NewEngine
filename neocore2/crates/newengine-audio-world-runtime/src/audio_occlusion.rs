@@ -83,10 +83,7 @@ impl AudioOcclusionPhysicsQueryProvider {
 
     fn collect_candidates(&self, world: &World, listener: Vec3) -> Vec<AcousticCandidate> {
         let mut candidates = Vec::new();
-        for entity in world.iter_entities() {
-            let Some(emitter) = world.get::<AudioEmitter>(entity) else {
-                continue;
-            };
+        for (entity, emitter) in world.query::<AudioEmitter>() {
             let settings = emitter.occlusion.sanitized();
             if !emitter.enabled
                 || !emitter.spatial

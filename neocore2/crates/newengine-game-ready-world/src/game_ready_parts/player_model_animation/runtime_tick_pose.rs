@@ -195,7 +195,7 @@ fn finalize_player_pose_and_palette(
     }
     timing.support_ik_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
 
-    // Weapon contact IK is a terminal writer for shoulder/elbow/wrist. Abby's deformation rig has
+    // Weapon contact IK is a terminal writer for shoulder/elbow/wrist. The authored deformation rig has
     // parallel *_helper / finger-roll branches that share skin weights with the anatomical hand.
     // They were synchronized before IK, so leaving them there makes the final palette contain two
     // different wrist/finger frames and visibly stretches the fingers. Re-project authored helper
@@ -314,13 +314,13 @@ fn finalize_player_pose_and_palette(
     timing.joint_frames_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
 
     let phase_started = std::time::Instant::now();
-    let (braid_secondary_motion, joint_frames_scratch, palette_scratch) = (
-        &mut binding.braid_secondary_motion,
+    let (skeletal_secondary_motion, joint_frames_scratch, palette_scratch) = (
+        &mut binding.skeletal_secondary_motion,
         &binding.joint_frames_scratch,
         &mut binding.palette_scratch,
     );
-    if let Some(braid) = braid_secondary_motion.as_mut() {
-        if let Err(error) = braid.tick(
+    if let Some(secondary_motion) = skeletal_secondary_motion.as_mut() {
+        if let Err(error) = secondary_motion.tick(
             dt,
             root_velocity_local,
             root_position,

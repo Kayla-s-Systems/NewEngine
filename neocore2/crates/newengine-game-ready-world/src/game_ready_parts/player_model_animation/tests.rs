@@ -1388,7 +1388,7 @@ mod transition_tests {
     }
 
     #[test]
-    fn native_abby_eye_palette_enforces_parent_deformation_invariant() {
+    fn native_eye_palette_enforces_parent_deformation_invariant() {
         let contract = EyeRuntimeContract {
             parent: 0,
             left: 1,

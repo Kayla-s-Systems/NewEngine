@@ -262,6 +262,46 @@ pub(in super::super) struct RawPrefabSpec {
     pub(in super::super) scale: [f32; 3],
 }
 
+#[derive(Debug, Default, Deserialize)]
+pub(in super::super) struct RawAudioSpec {
+    #[serde(default)]
+    pub(in super::super) emitters: Vec<RawAudioEmitterSpec>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(in super::super) struct RawAudioEmitterSpec {
+    #[serde(default)]
+    pub(in super::super) id: String,
+    #[serde(default)]
+    pub(in super::super) cue: String,
+    #[serde(default)]
+    pub(in super::super) enabled: Option<bool>,
+    #[serde(default)]
+    pub(in super::super) autoplay: Option<bool>,
+    #[serde(default)]
+    pub(in super::super) gain: Option<f32>,
+    #[serde(default)]
+    pub(in super::super) spatial: Option<bool>,
+    #[serde(default)]
+    pub(in super::super) position: [f32; 3],
+    #[serde(default)]
+    pub(in super::super) occlusion_enabled: Option<bool>,
+    #[serde(default)]
+    pub(in super::super) occlusion_max_distance: Option<f32>,
+    #[serde(default)]
+    pub(in super::super) occlusion_ray_count: Option<u8>,
+    #[serde(default)]
+    pub(in super::super) occlusion_probe_radius: Option<f32>,
+    #[serde(default)]
+    pub(in super::super) obstruction_gain: Option<f32>,
+    #[serde(default)]
+    pub(in super::super) occlusion_gain: Option<f32>,
+    #[serde(default)]
+    pub(in super::super) occlusion_attack_seconds: Option<f32>,
+    #[serde(default)]
+    pub(in super::super) occlusion_release_seconds: Option<f32>,
+}
+
 #[derive(Debug, Deserialize)]
 pub(in super::super) struct RawDefinitionInstanceSpec {
     #[serde(default)]

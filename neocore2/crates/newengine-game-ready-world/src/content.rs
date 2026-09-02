@@ -8,4 +8,4 @@ mod profile;
 mod raw_payload;
 
 pub(super) use self::profile::*;
-pub(super) use self::raw_payload::load_game_ready_map_profile;
+pub(super) use self::raw_payload::load_authored_world_profile;

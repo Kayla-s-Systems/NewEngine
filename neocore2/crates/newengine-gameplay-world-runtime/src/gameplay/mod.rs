@@ -70,13 +70,15 @@ pub use components::{
     PlayerJointChannels, PlayerJointCopyRule, PlayerJointRotationWeight, PlayerLandingState,
     PlayerLocomotionAnimation, PlayerLocomotionState, PlayerLookContext, PlayerModelAssignment,
     PlayerModelBinding, PlayerMovementSpeeds, PlayerPaletteFollowRule, PlayerRenderPose,
-    PlayerSkinBinding, PlayerSkinPose, PlayerSkinSidecarDefinition, PlayerSkinVertex,
-    PlayerStanceKind, PlayerStanceState, PlayerViewState, PlayerViewVisibility,
-    PlayerViewVisibilityPolicy, PlayerVisualKind, PlayerVisualPart, PlayerWeaponArmIkRigDefinition,
-    PreparedRenderMesh, PrimitiveGpuEvictionQueue, ResidencyProgress, SceneAnchorFollow,
-    SceneEntityAnchor, SceneEntityRole, SkyCloudProfileRenderState, StaticMeshCollider,
-    TerrainMaterialLayers, WorldActivationPhase, WorldActivationState, WorldAssemblyProgress,
-    WorldClearColor,
+    PlayerSecondaryMotionBend, PlayerSecondaryMotionCapsule, PlayerSecondaryMotionColliderMode,
+    PlayerSecondaryMotionEdge, PlayerSecondaryMotionOrientedBox, PlayerSecondaryMotionParticle,
+    PlayerSecondaryMotionTuning, PlayerSkeletalSecondaryMotionRig, PlayerSkinBinding,
+    PlayerSkinPose, PlayerSkinSidecarDefinition, PlayerSkinVertex, PlayerStanceKind,
+    PlayerStanceState, PlayerViewState, PlayerViewVisibility, PlayerViewVisibilityPolicy,
+    PlayerVisualKind, PlayerVisualPart, PlayerWeaponArmIkRigDefinition, PreparedRenderMesh,
+    PrimitiveGpuEvictionQueue, ResidencyProgress, SceneAnchorFollow, SceneEntityAnchor,
+    SceneEntityRole, SkyCloudProfileRenderState, StaticMeshCollider, TerrainMaterialLayers,
+    WorldActivationPhase, WorldActivationState, WorldAssemblyProgress, WorldClearColor,
 };
 pub use content::{GameplayContentProvider, GameplayContentProviderRegistry};
 pub use damage::{

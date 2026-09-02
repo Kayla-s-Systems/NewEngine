@@ -1,0 +1,9 @@
+[package]
+name = "newengine-audio-xvag"
+version = "0.2.0"
+edition = "2021"
+description = "NorthStar XVAG parser, codec metadata/demux contracts and PS-ADPCM encode/decode support"
+license = "Proprietary"
+
+[dev-dependencies]
+hound = "3.5"

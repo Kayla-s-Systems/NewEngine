@@ -388,7 +388,7 @@ pub const LIST_FILE_CONTENT_KIND_NEUI: u32 = 32;
 /// NewEngine authored item/inventory definition package.
 pub const LIST_FILE_CONTENT_KIND_NEITEMS: u32 = 33;
 /// Y Sound Cue Dictionary: embedded encoded audio payloads + cue playback metadata.
-pub const LIST_FILE_CONTENT_KIND_YSCD: u32 = 34;
+pub const LIST_FILE_CONTENT_KIND_YSNCD: u32 = 34;
 /// Project-authored FX Dictionary: semantic VFX graphs and project texture references.
 pub const LIST_FILE_CONTENT_KIND_FXD: u32 = 35;
 
@@ -423,7 +423,7 @@ pub fn list_file_content_kind_label(content_kind: u32) -> &'static str {
         LIST_FILE_CONTENT_KIND_YFD => "yfd_font_dictionary",
         LIST_FILE_CONTENT_KIND_NEUI => "neui_ui_dictionary",
         LIST_FILE_CONTENT_KIND_NEITEMS => "neitems_item_dictionary",
-        LIST_FILE_CONTENT_KIND_YSCD => "yscd_sound_cue_dictionary",
+        LIST_FILE_CONTENT_KIND_YSNCD => "ysncd_sound_cue_dictionary",
         LIST_FILE_CONTENT_KIND_FXD => "fxd_effect_dictionary",
         _ => "unknown",
     }

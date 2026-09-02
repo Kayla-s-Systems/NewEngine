@@ -23,12 +23,14 @@ pub(super) fn prepare_shadow_setup(
     extent: Extent2D,
     trace_frame: bool,
 ) -> ShadowSetup {
+    let total_started = std::time::Instant::now();
     let camera_position = [
         snapshot.camera_position.x,
         snapshot.camera_position.y,
         snapshot.camera_position.z,
     ];
     let shadow_viewproj = world_frame.view_frame.unjittered_view_projection();
+    let directional_started = std::time::Instant::now();
     let shadow_plan = if !shadows_enabled {
         shadows::LightShadowPlan::disabled(lit.white_texture)
     } else {
@@ -60,7 +62,9 @@ pub(super) fn prepare_shadow_setup(
             }
         }
     };
+    let directional_plan_ms = directional_started.elapsed().as_secs_f32() * 1000.0;
 
+    let directional_admission_started = std::time::Instant::now();
     let render_shadow_map =
         controller.should_render_shadow_map_this_frame(shadow_plan, scene.world());
     controller.set_shadow_caster_cull(if render_shadow_map {
@@ -74,7 +78,9 @@ pub(super) fn prepare_shadow_setup(
         shadow_plan,
         render_shadow_map,
     );
+    let directional_admission_ms = directional_admission_started.elapsed().as_secs_f32() * 1000.0;
 
+    let local_plan_started = std::time::Instant::now();
     let local_shadow_plan = if !shadows_enabled {
         shadows::LocalShadowPlan::disabled(lit.white_texture)
     } else {
@@ -89,8 +95,14 @@ pub(super) fn prepare_shadow_setup(
             }
         }
     };
-    let render_local_shadow_map =
-        controller.should_render_local_shadow_map_this_frame(local_shadow_plan, scene.world());
+    let local_plan_ms = local_plan_started.elapsed().as_secs_f32() * 1000.0;
+    let local_admission_started = std::time::Instant::now();
+    let render_local_shadow_map = if local_shadow_plan.is_active() {
+        controller.should_render_local_shadow_map_this_frame(local_shadow_plan, scene.world())
+    } else {
+        controller.invalidate_local_shadow_cache();
+        false
+    };
     let local_shadow_frame = if local_shadow_plan.is_active()
         && !render_local_shadow_map
         && !controller.shadows.local_cache_valid
@@ -123,9 +135,28 @@ pub(super) fn prepare_shadow_setup(
     } else {
         shadow_plan.frame
     };
+    let local_admission_ms = local_admission_started.elapsed().as_secs_f32() * 1000.0;
+    let finalize_started = std::time::Instant::now();
     let world_lights = base_lights
         .with_shadow_frame(shadow_frame)
         .with_local_shadow_frame(local_shadow_frame);
+    let finalize_ms = finalize_started.elapsed().as_secs_f32() * 1000.0;
+    let total_ms = total_started.elapsed().as_secs_f32() * 1000.0;
+    if controller.frame.frame_index.is_multiple_of(120) {
+        newengine_ulog_api::ulog::info!(
+            "render.shadow_setup.profile: frame={} total_ms={:.3} directional_plan_ms={:.3} directional_admission_ms={:.3} local_plan_ms={:.3} local_admission_ms={:.3} finalize_ms={:.3} render_directional={} render_local={} local_views={}",
+            controller.frame.frame_index,
+            total_ms,
+            directional_plan_ms,
+            directional_admission_ms,
+            local_plan_ms,
+            local_admission_ms,
+            finalize_ms,
+            render_shadow_map,
+            render_local_shadow_map,
+            local_shadow_frame.view_count,
+        );
+    }
 
     ShadowSetup {
         shadow_plan,

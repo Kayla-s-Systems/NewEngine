@@ -5,8 +5,8 @@ use newengine_math::{Quat, Vec3};
 
 use crate::commands::{Command, CommandBuffer};
 use crate::{
-    AngularVelocity, CameraRigComp, CharacterMotor, FollowTargetCameraMotor, OrbitCameraMotor,
-    TransformCommandBufferExt, Velocity,
+    AngularVelocity, CameraRigComp, CharacterFacingTurnStepRequest, CharacterMotor,
+    FollowTargetCameraMotor, OrbitCameraMotor, TransformCommandBufferExt, Velocity,
 };
 
 /// Deterministic controller intent.
@@ -61,6 +61,11 @@ pub enum Intent {
         entity: EntityId,
         value: FollowTargetCameraMotor,
     },
+    /// Consumes one bounded presentation-authored turn-in-place step after the
+    /// controller has folded it into the current frame's facing intent.
+    ConsumeCharacterFacingTurnStepRequest {
+        entity: EntityId,
+    },
 }
 
 impl Intent {
@@ -107,6 +112,9 @@ impl Intent {
             }
             Intent::SetFollowTargetCameraMotor { entity, value } => {
                 cmd.insert(entity, value);
+            }
+            Intent::ConsumeCharacterFacingTurnStepRequest { entity } => {
+                cmd.remove::<CharacterFacingTurnStepRequest>(entity);
             }
         }
     }
@@ -168,6 +176,11 @@ impl ControllerIntentQueue {
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.intents.is_empty()
+    }
+
+    #[inline]
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = &Intent> {
+        self.intents.iter()
     }
 
     #[inline]

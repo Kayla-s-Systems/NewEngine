@@ -1,6 +1,6 @@
 [package]
 name = "newengine-audio-world-conformance"
-version = "0.8.0"
+version = "0.9.1"
 edition = "2021"
 readme = "README.md"
 description = "Cross-boundary conformance tests for North Star world-audio and physics integration"

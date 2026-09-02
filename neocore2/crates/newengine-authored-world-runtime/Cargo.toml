@@ -9,6 +9,7 @@ license = "Proprietary"
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+parking_lot = '0.12'
 newengine-assets-api = { path = "../newengine-assets-api" }
 newengine-core = { path = "../newengine-core" }
 newengine-definitions-runtime = { path = "../newengine-definitions-runtime" }
@@ -23,3 +24,4 @@ newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
 newengine-scene-runtime = { path = "../newengine-scene-runtime" }
 newengine-transform = { path = "../newengine-transform", features = ["ecs"], default-features = false }
 newengine-ulog-api = { path = "../newengine-ulog-api" }
+newengine-ui-api = { path = "../newengine-ui-api" }

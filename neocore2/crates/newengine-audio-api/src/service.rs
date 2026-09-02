@@ -170,7 +170,7 @@ impl AudioServiceInfo {
                 "stream-logical-virtualization".to_owned(),
                 "block-native-render-graph".to_owned(),
                 "sample-addressed-render-scheduling".to_owned(),
-                "yscd-sound-graph-v1".to_owned(),
+                "ysncd-sound-graph-v1".to_owned(),
                 "sound-graph-trigger-parameters".to_owned(),
                 "block-based-native-render-graph".to_owned(),
                 "single-master-output".to_owned(),

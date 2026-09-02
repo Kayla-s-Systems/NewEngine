@@ -1,108 +1,98 @@
-use super::*;
-use parking_lot::Mutex;
-use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-pub(super) type DefinitionCache = Arc<Mutex<BTreeMap<String, ResolvedMapDefinitionEntry>>>;
+use newengine_definitions_runtime::DefinitionEntryV1;
+use newengine_math::Vec3;
+use parking_lot::Mutex;
 
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(default)]
-struct ResolvedMapDefinitionRefs {
-    drawable_refs: Vec<String>,
-    material_refs: Vec<String>,
-    collision_refs: Vec<String>,
+pub const WORLD_STATIC_PROXY: &str = "world_static_ydd";
+pub const WORLD_DYNAMIC_PROXY: &str = "world_dynamic_ydd";
+pub const WORLD_COLLISION_PROXY: &str = "world_collision_ydd";
+pub const WORLD_COLLISION_BOX_PROXY: &str = "world_collision_box";
+
+#[derive(Clone, Debug)]
+pub struct AuthoredMapStreamingSpec {
+    pub map_ref: String,
+    pub index: newengine_assets_api::MapIndexV1,
+    pub initial_render_cells: Vec<newengine_assets_api::MapCellCoordV1>,
+    pub initial_simulation_cells: Vec<newengine_assets_api::MapCellCoordV1>,
+    pub initial_placement_ids: BTreeMap<newengine_assets_api::MapCellCoordV1, Vec<String>>,
+    pub render_radius: i32,
+    pub simulation_radius: i32,
+    pub render_unload_radius: i32,
+    pub simulation_unload_radius: i32,
+    pub max_cells_per_tick: usize,
 }
 
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(default)]
-struct ResolvedMapDefinitionModelExplanation {
-    collision_policy: String,
+#[derive(Clone, Debug)]
+pub struct AuthoredWorldPlacementSpec {
+    pub id: String,
+    pub authored_map_ref: String,
+    pub authored_placement_id: String,
+    pub authored_cell: Option<newengine_assets_api::MapCellCoordV1>,
+    pub authored_discrete_placement: bool,
+    pub authored_primary: bool,
+    pub source: String,
+    pub proxy: String,
+    pub material: String,
+    pub surface_id: String,
+    pub surface_events: BTreeMap<String, String>,
+    pub ballistic_material: Option<newengine_engine_runtime::gameplay::BallisticMaterialResponse>,
+    pub ground_placement_surface: bool,
+    pub enabled: bool,
+    pub position: Vec3,
+    pub rotation_ypr: Vec3,
+    pub scale: Vec3,
 }
 
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(default)]
-pub(super) struct ResolvedMapDefinitionEntry {
-    refs: ResolvedMapDefinitionRefs,
-    semantic_tags: Vec<String>,
-    model_explanation: ResolvedMapDefinitionModelExplanation,
-    arbitrary_metadata: std::collections::BTreeMap<String, serde_json::Value>,
+#[derive(Clone, Debug)]
+pub struct PreparedAuthoredMapCell {
+    pub render_placements: Vec<AuthoredWorldPlacementSpec>,
+    pub simulation_placements: Vec<AuthoredWorldPlacementSpec>,
+    pub placement_ids: Vec<String>,
+    pub authored_placement_count: usize,
+    pub metadata_only_count: usize,
 }
 
-fn load_cell(
-    map_ref: &str,
-    coord: newengine_assets_api::MapCellCoordV1,
-) -> Result<newengine_assets_api::MapResolvedCellV2, String> {
-    let request = serde_json::to_vec(&newengine_assets_api::MapCellRequestV1 {
-        map_ref: map_ref.to_owned(),
-        coord,
-    })
-    .map_err(|error| format!("map cell request encode failed: {error}"))?;
-    let bytes = newengine_core::call_service_v1_optional(
-        newengine_assets_api::ENGINE_ASSETS_MAPS_SERVICE_ID,
-        newengine_assets_api::maps_method::CELL_V2,
-        &request,
-    )
-    .map_err(|error| {
-        format!(
-            "map cell request failed map='{map_ref}' cell={},{} err='{error}'",
-            coord.x, coord.z
-        )
-    })?
-    .ok_or_else(|| {
-        format!(
-            "engine.assets.maps unavailable map='{map_ref}' cell={},{}",
-            coord.x, coord.z
-        )
-    })?;
-    serde_json::from_slice(&bytes).map_err(|error| {
-        format!(
-            "invalid MapResolvedCellV2 map='{map_ref}' cell={},{} err='{error}'",
-            coord.x, coord.z
-        )
-    })
+#[derive(Clone, Default)]
+pub struct AuthoredMapDefinitionCache {
+    entries: Arc<Mutex<BTreeMap<String, DefinitionEntryV1>>>,
+}
+
+impl AuthoredMapDefinitionCache {
+    #[inline]
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct AuthoredDefinitionSurfaceBinding {
+    pub id: String,
+    pub events: BTreeMap<String, String>,
+    pub ballistic_material: Option<newengine_engine_runtime::gameplay::BallisticMaterialResponse>,
+    pub ground_placement_surface: bool,
 }
 
 fn resolve_definition(
-    cache: &DefinitionCache,
+    cache: &AuthoredMapDefinitionCache,
     definition_ref: &str,
-) -> Result<ResolvedMapDefinitionEntry, String> {
-    if let Some(existing) = cache.lock().get(definition_ref).cloned() {
+) -> Result<DefinitionEntryV1, String> {
+    if let Some(existing) = cache.entries.lock().get(definition_ref).cloned() {
         return Ok(existing);
     }
-    let payload = serde_json::to_vec(&serde_json::json!({ "definition_ref": definition_ref }))
-        .map_err(|error| format!("definition request encode failed: {error}"))?;
-    let bytes = newengine_core::call_service_v1_optional(
-        newengine_assets_api::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID,
-        newengine_assets_api::definitions_method::ENTRY_JSON_V1,
-        &payload,
-    )
-    .map_err(|error| {
-        format!("definition request failed definition_ref='{definition_ref}' err='{error}'")
-    })?
-    .ok_or_else(|| {
-        format!("engine.assets.definitions unavailable definition_ref='{definition_ref}'")
-    })?;
-    let parsed: ResolvedMapDefinitionEntry = serde_json::from_slice(&bytes).map_err(|error| {
-        format!("invalid definition DTO definition_ref='{definition_ref}' err='{error}'")
-    })?;
-    let mut locked = cache.lock();
+    let parsed = crate::load_authored_definition_entry(definition_ref)?;
+    let mut locked = cache.entries.lock();
     Ok(locked
         .entry(definition_ref.to_owned())
         .or_insert_with(|| parsed.clone())
         .clone())
 }
 
-#[derive(Clone, Debug, Default)]
-struct DefinitionSurfaceBinding {
-    id: String,
-    events: std::collections::BTreeMap<String, String>,
-    ballistic_material: Option<newengine_engine_runtime::gameplay::BallisticMaterialResponse>,
-    ground_placement_surface: bool,
-}
-
-fn definition_surface_binding(definition: &ResolvedMapDefinitionEntry) -> DefinitionSurfaceBinding {
-    fn parse(value: &serde_json::Value) -> Option<DefinitionSurfaceBinding> {
+pub fn project_authored_definition_surface(
+    definition: &DefinitionEntryV1,
+) -> AuthoredDefinitionSurfaceBinding {
+    fn parse(value: &serde_json::Value) -> Option<AuthoredDefinitionSurfaceBinding> {
         let object = value.as_object()?;
         let id = object
             .get("id")
@@ -131,7 +121,7 @@ fn definition_surface_binding(definition: &ResolvedMapDefinitionEntry) -> Defini
                         .and_then(|value| {
                             value
                                 .as_f64()
-                                .map(|v| v as f32)
+                                .map(|value| value as f32)
                                 .or_else(|| value.as_str()?.parse::<f32>().ok())
                         })
                         .unwrap_or(default)
@@ -168,7 +158,7 @@ fn definition_surface_binding(definition: &ResolvedMapDefinitionEntry) -> Defini
             .get("ground_placement_surface")
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(false);
-        Some(DefinitionSurfaceBinding {
+        Some(AuthoredDefinitionSurfaceBinding {
             id,
             events,
             ballistic_material,
@@ -188,7 +178,7 @@ fn definition_surface_binding(definition: &ResolvedMapDefinitionEntry) -> Defini
             return binding;
         }
     }
-    DefinitionSurfaceBinding::default()
+    AuthoredDefinitionSurfaceBinding::default()
 }
 
 fn placement_is_spawn(placement: &newengine_assets_api::MapPlacementV1) -> bool {
@@ -203,23 +193,24 @@ fn placement_is_spawn(placement: &newengine_assets_api::MapPlacementV1) -> bool 
     )
 }
 
-fn cell_prefabs(
+fn project_cell_placements(
     logical_map_ref: &str,
     resolved: &newengine_assets_api::MapResolvedCellV2,
-    definition_cache: &DefinitionCache,
+    definition_cache: &AuthoredMapDefinitionCache,
 ) -> Result<
     (
-        Vec<GameReadyPrefabSpec>,
-        Vec<GameReadyPrefabSpec>,
+        Vec<AuthoredWorldPlacementSpec>,
+        Vec<AuthoredWorldPlacementSpec>,
         Vec<String>,
         usize,
     ),
     String,
 > {
-    let mut render_prefabs = Vec::new();
-    let mut simulation_prefabs = Vec::new();
+    let mut render_placements = Vec::new();
+    let mut simulation_placements = Vec::new();
     let mut placement_ids = Vec::new();
     let mut metadata_only_count = 0usize;
+
     for placement in resolved
         .cell
         .placements
@@ -235,11 +226,10 @@ fn cell_prefabs(
             .trim()
             .eq_ignore_ascii_case("metadata_only")
         {
-            // Root map metadata is the correct home for global domain configuration. A streamed
-            // metadata-only placement cannot safely mutate already-running domain state here.
             metadata_only_count = metadata_only_count.saturating_add(1);
             continue;
         }
+
         let definition = resolve_definition(definition_cache, &placement.definition_ref)?;
         let drawable_ref = definition
             .refs
@@ -258,7 +248,7 @@ fn cell_prefabs(
             .first()
             .cloned()
             .unwrap_or_default();
-        let surface_binding = definition_surface_binding(&definition);
+        let surface_binding = project_authored_definition_surface(&definition);
         let position = Vec3::new(
             placement.transform.position[0],
             placement.transform.position[1],
@@ -288,7 +278,7 @@ fn cell_prefabs(
                 .any(|tag| tag.eq_ignore_ascii_case("collision_only"));
 
         if !collision_only {
-            let prefab = GameReadyPrefabSpec {
+            let authored = AuthoredWorldPlacementSpec {
                 id: placement.id.clone(),
                 authored_map_ref: logical_map_ref.to_owned(),
                 authored_placement_id: placement.id.clone(),
@@ -297,9 +287,9 @@ fn cell_prefabs(
                 authored_primary: true,
                 source: drawable_ref.clone(),
                 proxy: if dynamic_physics {
-                    DYNAMIC_WORLD_PROXY.to_owned()
+                    WORLD_DYNAMIC_PROXY.to_owned()
                 } else {
-                    STATIC_WORLD_PROXY.to_owned()
+                    WORLD_STATIC_PROXY.to_owned()
                 },
                 material: material_ref,
                 surface_id: surface_binding.id.clone(),
@@ -312,9 +302,9 @@ fn cell_prefabs(
                 scale,
             };
             if dynamic_physics {
-                simulation_prefabs.push(prefab);
+                simulation_placements.push(authored);
             } else {
-                render_prefabs.push(prefab);
+                render_placements.push(authored);
             }
         }
 
@@ -335,7 +325,7 @@ fn cell_prefabs(
                 .first()
                 .cloned()
                 .unwrap_or(drawable_ref);
-            simulation_prefabs.push(GameReadyPrefabSpec {
+            simulation_placements.push(AuthoredWorldPlacementSpec {
                 id: if collision_only {
                     placement.id.clone()
                 } else {
@@ -348,9 +338,9 @@ fn cell_prefabs(
                 authored_primary: false,
                 source: collision_source,
                 proxy: if collision_policy.eq_ignore_ascii_case("box") {
-                    BOX_COLLISION_WORLD_PROXY.to_owned()
+                    WORLD_COLLISION_BOX_PROXY.to_owned()
                 } else {
-                    COLLISION_WORLD_PROXY.to_owned()
+                    WORLD_COLLISION_PROXY.to_owned()
                 },
                 material: String::new(),
                 surface_id: surface_binding.id.clone(),
@@ -369,27 +359,28 @@ fn cell_prefabs(
             ));
         }
     }
+
     Ok((
-        render_prefabs,
-        simulation_prefabs,
+        render_placements,
+        simulation_placements,
         placement_ids,
         metadata_only_count,
     ))
 }
 
-pub(super) fn prepare_cell(
+pub fn prepare_authored_map_cell(
     map_ref: &str,
     logical_map_ref: &str,
     coord: newengine_assets_api::MapCellCoordV1,
-    definition_cache: &DefinitionCache,
-) -> Result<PreparedMapCell, String> {
-    let resolved = load_cell(map_ref, coord)?;
+    definition_cache: &AuthoredMapDefinitionCache,
+) -> Result<PreparedAuthoredMapCell, String> {
+    let resolved = crate::load_authored_map_cell(map_ref, coord)?;
     let authored_placement_count = resolved.cell.placements.len();
-    let (render_prefabs, simulation_prefabs, placement_ids, metadata_only_count) =
-        cell_prefabs(logical_map_ref, &resolved, definition_cache)?;
-    Ok(PreparedMapCell {
-        render_prefabs,
-        simulation_prefabs,
+    let (render_placements, simulation_placements, placement_ids, metadata_only_count) =
+        project_cell_placements(logical_map_ref, &resolved, definition_cache)?;
+    Ok(PreparedAuthoredMapCell {
+        render_placements,
+        simulation_placements,
         placement_ids,
         authored_placement_count,
         metadata_only_count,
@@ -397,12 +388,12 @@ pub(super) fn prepare_cell(
 }
 
 #[cfg(test)]
-mod project_surface_metadata_tests {
+mod tests {
     use super::*;
 
     #[test]
     fn project_surface_metadata_is_explicit_and_generic() {
-        let mut entry = ResolvedMapDefinitionEntry::default();
+        let mut entry = DefinitionEntryV1::default();
         entry.arbitrary_metadata.insert(
             "metadata".to_owned(),
             serde_json::json!({
@@ -417,7 +408,7 @@ mod project_surface_metadata_tests {
                 }
             }),
         );
-        let binding = definition_surface_binding(&entry);
+        let binding = project_authored_definition_surface(&entry);
         assert_eq!(binding.id, "project.deck.grating");
         assert_eq!(
             binding.events.get("contact").map(String::as_str),
@@ -435,7 +426,7 @@ mod project_surface_metadata_tests {
 
     #[test]
     fn absent_surface_metadata_stays_neutral() {
-        let binding = definition_surface_binding(&ResolvedMapDefinitionEntry::default());
+        let binding = project_authored_definition_surface(&DefinitionEntryV1::default());
         assert!(binding.id.is_empty());
         assert!(binding.events.is_empty());
         assert!(!binding.ground_placement_surface);

@@ -17,7 +17,7 @@ impl AudioRuntimeState {
     fn evaluate_sound_graph(
         &mut self,
         canonical: &str,
-        graph: &newengine_asset_format_nef8::YscdSoundGraph,
+        graph: &newengine_asset_format_nef8::YsncdSoundGraph,
         parameters: &AudioParameterSet,
         seed: u64,
         scope_id: Option<u64>,
@@ -44,13 +44,13 @@ impl AudioRuntimeState {
         )?;
         if plans.is_empty() {
             return Err(format!(
-                "YSCD SoundGraph '{}' evaluated to no logical voices",
+                "YSNCD SoundGraph '{}' evaluated to no logical voices",
                 canonical
             ));
         }
         if plans.len() > 64 {
             return Err(format!(
-                "YSCD SoundGraph '{}' emitted {} voices; max is 64",
+                "YSNCD SoundGraph '{}' emitted {} voices; max is 64",
                 canonical,
                 plans.len()
             ));
@@ -68,34 +68,34 @@ impl AudioRuntimeState {
     fn eval_sound_graph_voice_node<'a>(
         &mut self,
         node_id: &str,
-        nodes: &HashMap<String, &'a newengine_asset_format_nef8::YscdSoundGraphNode>,
+        nodes: &HashMap<String, &'a newengine_asset_format_nef8::YsncdSoundGraphNode>,
         ctx: &SoundGraphEvalContext<'_>,
         stack: &mut Vec<String>,
         staged_sequences: &mut HashMap<String, u64>,
     ) -> Result<Vec<SoundGraphVoicePlan>, String> {
         let key = node_id.trim().to_ascii_lowercase();
         if stack.len() >= 64 {
-            return Err("YSCD SoundGraph runtime traversal exceeded depth 64".to_owned());
+            return Err("YSNCD SoundGraph runtime traversal exceeded depth 64".to_owned());
         }
         if stack.iter().any(|entry| entry == &key) {
             return Err(format!(
-                "YSCD SoundGraph runtime cycle detected at node '{}'",
+                "YSNCD SoundGraph runtime cycle detected at node '{}'",
                 node_id
             ));
         }
         let node = nodes
             .get(&key)
             .copied()
-            .ok_or_else(|| format!("YSCD SoundGraph node '{}' does not resolve", node_id))?;
-        if node.output_kind() != newengine_asset_format_nef8::YscdSoundGraphValueKind::Voices {
+            .ok_or_else(|| format!("YSNCD SoundGraph node '{}' does not resolve", node_id))?;
+        if node.output_kind() != newengine_asset_format_nef8::YsncdSoundGraphValueKind::Voices {
             return Err(format!(
-                "YSCD SoundGraph node '{}' was evaluated as voices but produces scalar",
+                "YSNCD SoundGraph node '{}' was evaluated as voices but produces scalar",
                 node_id
             ));
         }
         stack.push(key.clone());
         let result = match node {
-            newengine_asset_format_nef8::YscdSoundGraphNode::Clip {
+            newengine_asset_format_nef8::YsncdSoundGraphNode::Clip {
                 id,
                 clip,
                 gain,
@@ -106,11 +106,11 @@ impl AudioRuntimeState {
                 pitch: *pitch,
                 label: id.clone(),
             }]),
-            newengine_asset_format_nef8::YscdSoundGraphNode::Random { id, children } => {
+            newengine_asset_format_nef8::YsncdSoundGraphNode::Random { id, children } => {
                 let total = children.iter().map(|child| child.weight).sum::<f32>();
                 if !total.is_finite() || total <= 0.0 {
                     return Err(format!(
-                        "YSCD SoundGraph Random node '{}' has invalid weight total",
+                        "YSNCD SoundGraph Random node '{}' has invalid weight total",
                         id
                     ));
                 }
@@ -126,7 +126,7 @@ impl AudioRuntimeState {
                 }
                 self.eval_sound_graph_voice_node(&selected.node, nodes, ctx, stack, staged_sequences)
             }
-            newengine_asset_format_nef8::YscdSoundGraphNode::Sequence { id, children } => {
+            newengine_asset_format_nef8::YsncdSoundGraphNode::Sequence { id, children } => {
                 let state_key = match ctx.scope_id {
                     Some(scope_id) => format!(
                         "{}#{}#object:{}",
@@ -149,7 +149,7 @@ impl AudioRuntimeState {
                 staged_sequences.insert(state_key, cursor.wrapping_add(1));
                 self.eval_sound_graph_voice_node(&selected, nodes, ctx, stack, staged_sequences)
             }
-            newengine_asset_format_nef8::YscdSoundGraphNode::Switch {
+            newengine_asset_format_nef8::YsncdSoundGraphNode::Switch {
                 id,
                 switch,
                 cases,
@@ -168,13 +168,13 @@ impl AudioRuntimeState {
                     .or(default.as_ref())
                     .ok_or_else(|| {
                         format!(
-                            "YSCD SoundGraph Switch node '{}' has no case for switch '{}' value '{}' and no default",
+                            "YSNCD SoundGraph Switch node '{}' has no case for switch '{}' value '{}' and no default",
                             id, switch, value
                         )
                     })?;
                 self.eval_sound_graph_voice_node(selected, nodes, ctx, stack, staged_sequences)
             }
-            newengine_asset_format_nef8::YscdSoundGraphNode::Blend1d { id, input, points } => {
+            newengine_asset_format_nef8::YsncdSoundGraphNode::Blend1d { id, input, points } => {
                 let value = self.eval_sound_graph_scalar_node(input, nodes, ctx, stack)?;
                 if points.len() == 1 || value <= points[0].value {
                     self.eval_sound_graph_voice_node(&points[0].node, nodes, ctx, stack, staged_sequences)
@@ -184,14 +184,14 @@ impl AudioRuntimeState {
                     let upper = points
                         .iter()
                         .position(|point| point.value >= value)
-                        .ok_or_else(|| format!("YSCD SoundGraph Blend1D node '{}' bracket failed", id))?;
+                        .ok_or_else(|| format!("YSNCD SoundGraph Blend1D node '{}' bracket failed", id))?;
                     let lower = upper.saturating_sub(1);
                     let a = &points[lower];
                     let b = &points[upper];
                     let span = b.value - a.value;
                     if !span.is_finite() || span <= 0.0 {
                         return Err(format!(
-                            "YSCD SoundGraph Blend1D node '{}' has invalid point span",
+                            "YSNCD SoundGraph Blend1D node '{}' has invalid point span",
                             id
                         ));
                     }
@@ -216,7 +216,7 @@ impl AudioRuntimeState {
                     }
                 }
             }
-            newengine_asset_format_nef8::YscdSoundGraphNode::Layer { id, children } => {
+            newengine_asset_format_nef8::YsncdSoundGraphNode::Layer { id, children } => {
                 let mut output = Vec::new();
                 for child in children {
                     let mut child_output =
@@ -229,15 +229,15 @@ impl AudioRuntimeState {
                     output.extend(child_output);
                     if output.len() > 64 {
                         return Err(format!(
-                            "YSCD SoundGraph Layer node '{}' exceeds 64 emitted voices",
+                            "YSNCD SoundGraph Layer node '{}' exceeds 64 emitted voices",
                             id
                         ));
                     }
                 }
                 Ok(output)
             }
-            newengine_asset_format_nef8::YscdSoundGraphNode::Parameter { .. }
-            | newengine_asset_format_nef8::YscdSoundGraphNode::Envelope { .. } => unreachable!(
+            newengine_asset_format_nef8::YsncdSoundGraphNode::Parameter { .. }
+            | newengine_asset_format_nef8::YsncdSoundGraphNode::Envelope { .. } => unreachable!(
                 "typed graph validation prevents scalar node on voice path"
             ),
         };
@@ -248,33 +248,33 @@ impl AudioRuntimeState {
     fn eval_sound_graph_scalar_node<'a>(
         &mut self,
         node_id: &str,
-        nodes: &HashMap<String, &'a newengine_asset_format_nef8::YscdSoundGraphNode>,
+        nodes: &HashMap<String, &'a newengine_asset_format_nef8::YsncdSoundGraphNode>,
         ctx: &SoundGraphEvalContext<'_>,
         stack: &mut Vec<String>,
     ) -> Result<f32, String> {
         let key = node_id.trim().to_ascii_lowercase();
         if stack.len() >= 64 {
-            return Err("YSCD SoundGraph scalar traversal exceeded depth 64".to_owned());
+            return Err("YSNCD SoundGraph scalar traversal exceeded depth 64".to_owned());
         }
         if stack.iter().any(|entry| entry == &key) {
             return Err(format!(
-                "YSCD SoundGraph runtime cycle detected at scalar node '{}'",
+                "YSNCD SoundGraph runtime cycle detected at scalar node '{}'",
                 node_id
             ));
         }
         let node = nodes
             .get(&key)
             .copied()
-            .ok_or_else(|| format!("YSCD SoundGraph scalar node '{}' does not resolve", node_id))?;
-        if node.output_kind() != newengine_asset_format_nef8::YscdSoundGraphValueKind::Scalar {
+            .ok_or_else(|| format!("YSNCD SoundGraph scalar node '{}' does not resolve", node_id))?;
+        if node.output_kind() != newengine_asset_format_nef8::YsncdSoundGraphValueKind::Scalar {
             return Err(format!(
-                "YSCD SoundGraph node '{}' was evaluated as scalar but produces voices",
+                "YSNCD SoundGraph node '{}' was evaluated as scalar but produces voices",
                 node_id
             ));
         }
         stack.push(key);
         let result = match node {
-            newengine_asset_format_nef8::YscdSoundGraphNode::Parameter {
+            newengine_asset_format_nef8::YsncdSoundGraphNode::Parameter {
                 parameter,
                 default,
                 min,
@@ -287,7 +287,7 @@ impl AudioRuntimeState {
                 .copied()
                 .unwrap_or(*default)
                 .clamp(*min, *max)),
-            newengine_asset_format_nef8::YscdSoundGraphNode::Envelope { id, input, points } => {
+            newengine_asset_format_nef8::YsncdSoundGraphNode::Envelope { id, input, points } => {
                 let value = self.eval_sound_graph_scalar_node(input, nodes, ctx, stack)?;
                 if points.len() == 1 || value <= points[0][0] {
                     Ok(points[0][1])
@@ -297,14 +297,14 @@ impl AudioRuntimeState {
                     let upper = points
                         .iter()
                         .position(|point| point[0] >= value)
-                        .ok_or_else(|| format!("YSCD SoundGraph Envelope node '{}' bracket failed", id))?;
+                        .ok_or_else(|| format!("YSNCD SoundGraph Envelope node '{}' bracket failed", id))?;
                     let lower = upper.saturating_sub(1);
                     let [x0, y0] = points[lower];
                     let [x1, y1] = points[upper];
                     let span = x1 - x0;
                     if !span.is_finite() || span <= 0.0 {
                         return Err(format!(
-                            "YSCD SoundGraph Envelope node '{}' has invalid point span",
+                            "YSNCD SoundGraph Envelope node '{}' has invalid point span",
                             id
                         ));
                     }
@@ -323,17 +323,37 @@ impl AudioRuntimeState {
 mod sound_graph_runtime_tests {
     use super::*;
     use newengine_asset_format_nef8::{
-        YscdBlendPoint, YscdLayerNodeRef, YscdSoundGraph, YscdSoundGraphNode,
-        YscdWeightedNodeRef,
+        YsncdBlendPoint, YsncdLayerNodeRef, YsncdSoundGraph, YsncdSoundGraphNode,
+        YsncdWeightedNodeRef,
     };
 
     fn runtime_without_device() -> AudioRuntimeState {
-        let assets = AssetServiceClient::new(newengine_plugin_host::default_host_api());
+        let host = newengine_plugin_host::default_host_api();
+        // Production owns this gateway in host bootstrap. Unit tests run without the host runtime,
+        // so install the same generic registry contract instead of letting cached cues bypass
+        // semantic asset ownership. Re-registration is intentionally best-effort because the host
+        // service registry is process-global across tests.
+        let _ = newengine_assets::register_asset_types_gateway_best_effort();
+        let mut ysncd = newengine_assets_api::AssetFileTypeDescriptor {
+            module_id: "test.audio.ysncd-format".to_owned(),
+            family: "audio".to_owned(),
+            extension: "ysncd".to_owned(),
+            asset_kind: "sound_cue_dictionary".to_owned(),
+            semantic_gateway: "engine.audio".to_owned(),
+            gateway: "engine.audio".to_owned(),
+            handler_service: "test.audio.ysncd-format".to_owned(),
+            runtime_ready: true,
+            requires_magic: false,
+            ..newengine_assets_api::AssetFileTypeDescriptor::default()
+        };
+        ysncd.normalize_layer_contract();
+        let _ = newengine_assets::register_asset_type_descriptor_best_effort(&host, ysncd);
+        let assets = AssetServiceClient::new(host);
         AudioRuntimeState::open_default(assets).expect("runtime")
     }
 
-    fn clip(id: &str, clip: &str) -> YscdSoundGraphNode {
-        YscdSoundGraphNode::Clip {
+    fn clip(id: &str, clip: &str) -> YsncdSoundGraphNode {
+        YsncdSoundGraphNode::Clip {
             id: id.to_owned(),
             clip: clip.to_owned(),
             gain: 1.0,
@@ -343,36 +363,36 @@ mod sound_graph_runtime_tests {
 
     #[test]
     fn random_is_deterministic_for_seed_and_sequence_advances_per_trigger() {
-        let graph = YscdSoundGraph {
+        let graph = YsncdSoundGraph {
             root: "layer".to_owned(),
             nodes: vec![
                 clip("a", "a"),
                 clip("b", "b"),
-                YscdSoundGraphNode::Random {
+                YsncdSoundGraphNode::Random {
                     id: "random".to_owned(),
                     children: vec![
-                        YscdWeightedNodeRef {
+                        YsncdWeightedNodeRef {
                             node: "a".to_owned(),
                             weight: 1.0,
                         },
-                        YscdWeightedNodeRef {
+                        YsncdWeightedNodeRef {
                             node: "b".to_owned(),
                             weight: 1.0,
                         },
                     ],
                 },
-                YscdSoundGraphNode::Sequence {
+                YsncdSoundGraphNode::Sequence {
                     id: "sequence".to_owned(),
                     children: vec!["a".to_owned(), "b".to_owned()],
                 },
-                YscdSoundGraphNode::Layer {
+                YsncdSoundGraphNode::Layer {
                     id: "layer".to_owned(),
                     children: vec![
-                        YscdLayerNodeRef {
+                        YsncdLayerNodeRef {
                             node: "random".to_owned(),
                             ..Default::default()
                         },
-                        YscdLayerNodeRef {
+                        YsncdLayerNodeRef {
                             node: "sequence".to_owned(),
                             ..Default::default()
                         },
@@ -395,46 +415,46 @@ mod sound_graph_runtime_tests {
 
     #[test]
     fn switch_blend_parameter_envelope_and_layer_compose_without_engine_known_names() {
-        let graph = YscdSoundGraph {
+        let graph = YsncdSoundGraph {
             root: "switch".to_owned(),
             nodes: vec![
                 clip("slow", "slow"),
                 clip("fast", "fast"),
-                YscdSoundGraphNode::Parameter {
+                YsncdSoundGraphNode::Parameter {
                     id: "p".to_owned(),
                     parameter: "project.machine.rpm".to_owned(),
                     default: 0.0,
                     min: 0.0,
                     max: 10_000.0,
                 },
-                YscdSoundGraphNode::Envelope {
+                YsncdSoundGraphNode::Envelope {
                     id: "curve".to_owned(),
                     input: "p".to_owned(),
                     points: vec![[0.0, 0.0], [10_000.0, 1.0]],
                 },
-                YscdSoundGraphNode::Blend1d {
+                YsncdSoundGraphNode::Blend1d {
                     id: "blend".to_owned(),
                     input: "curve".to_owned(),
                     points: vec![
-                        YscdBlendPoint {
+                        YsncdBlendPoint {
                             value: 0.0,
                             node: "slow".to_owned(),
                         },
-                        YscdBlendPoint {
+                        YsncdBlendPoint {
                             value: 1.0,
                             node: "fast".to_owned(),
                         },
                     ],
                 },
-                YscdSoundGraphNode::Layer {
+                YsncdSoundGraphNode::Layer {
                     id: "fallback".to_owned(),
-                    children: vec![YscdLayerNodeRef {
+                    children: vec![YsncdLayerNodeRef {
                         node: "slow".to_owned(),
                         gain: 0.25,
                         pitch: 0.8,
                     }],
                 },
-                YscdSoundGraphNode::Switch {
+                YsncdSoundGraphNode::Switch {
                     id: "switch".to_owned(),
                     switch: "project.machine.mode".to_owned(),
                     cases: [("active".to_owned(), "blend".to_owned())]
@@ -464,29 +484,29 @@ mod sound_graph_runtime_tests {
     }
     #[test]
     fn failed_graph_evaluation_does_not_advance_sequence_state() {
-        let graph = YscdSoundGraph {
+        let graph = YsncdSoundGraph {
             root: "root".to_owned(),
             nodes: vec![
                 clip("a", "a"),
                 clip("b", "b"),
-                YscdSoundGraphNode::Sequence {
+                YsncdSoundGraphNode::Sequence {
                     id: "seq".to_owned(),
                     children: vec!["a".to_owned(), "b".to_owned()],
                 },
-                YscdSoundGraphNode::Switch {
+                YsncdSoundGraphNode::Switch {
                     id: "required_switch".to_owned(),
                     switch: "project.required".to_owned(),
                     cases: [("go".to_owned(), "a".to_owned())].into_iter().collect(),
                     default: None,
                 },
-                YscdSoundGraphNode::Layer {
+                YsncdSoundGraphNode::Layer {
                     id: "root".to_owned(),
                     children: vec![
-                        YscdLayerNodeRef {
+                        YsncdLayerNodeRef {
                             node: "seq".to_owned(),
                             ..Default::default()
                         },
-                        YscdLayerNodeRef {
+                        YsncdLayerNodeRef {
                             node: "required_switch".to_owned(),
                             ..Default::default()
                         },
@@ -513,26 +533,26 @@ mod sound_graph_runtime_tests {
 
     #[test]
     fn blend_exact_point_does_not_emit_zero_gain_ghost_voice() {
-        let graph = YscdSoundGraph {
+        let graph = YsncdSoundGraph {
             root: "blend".to_owned(),
             nodes: vec![
                 clip("a", "a"),
                 clip("b", "b"),
                 clip("c", "c"),
-                YscdSoundGraphNode::Parameter {
+                YsncdSoundGraphNode::Parameter {
                     id: "p".to_owned(),
                     parameter: "project.value".to_owned(),
                     default: 1.0,
                     min: 0.0,
                     max: 2.0,
                 },
-                YscdSoundGraphNode::Blend1d {
+                YsncdSoundGraphNode::Blend1d {
                     id: "blend".to_owned(),
                     input: "p".to_owned(),
                     points: vec![
-                        YscdBlendPoint { value: 0.0, node: "a".to_owned() },
-                        YscdBlendPoint { value: 1.0, node: "b".to_owned() },
-                        YscdBlendPoint { value: 2.0, node: "c".to_owned() },
+                        YsncdBlendPoint { value: 0.0, node: "a".to_owned() },
+                        YsncdBlendPoint { value: 1.0, node: "b".to_owned() },
+                        YsncdBlendPoint { value: 2.0, node: "c".to_owned() },
                     ],
                 },
             ],
@@ -570,24 +590,24 @@ mod sound_graph_runtime_tests {
 
     #[test]
     fn sound_graph_playback_emits_logical_voices_under_one_policy_instance() {
-        let graph = YscdSoundGraph {
+        let graph = YsncdSoundGraph {
             root: "blend".to_owned(),
             nodes: vec![
                 clip("a", "a"),
                 clip("b", "b"),
-                YscdSoundGraphNode::Parameter {
+                YsncdSoundGraphNode::Parameter {
                     id: "p".to_owned(),
                     parameter: "project.test.mix".to_owned(),
                     default: 0.5,
                     min: 0.0,
                     max: 1.0,
                 },
-                YscdSoundGraphNode::Blend1d {
+                YsncdSoundGraphNode::Blend1d {
                     id: "blend".to_owned(),
                     input: "p".to_owned(),
                     points: vec![
-                        YscdBlendPoint { value: 0.0, node: "a".to_owned() },
-                        YscdBlendPoint { value: 1.0, node: "b".to_owned() },
+                        YsncdBlendPoint { value: 0.0, node: "a".to_owned() },
+                        YsncdBlendPoint { value: 1.0, node: "b".to_owned() },
                     ],
                 },
             ],
@@ -617,7 +637,7 @@ mod sound_graph_runtime_tests {
             gain: 1.0,
             pitch: 1.0,
         };
-        let canonical = "shared/audio/test_graph.yscd@test".to_owned();
+        let canonical = "shared/audio/test_graph.ysncd@test".to_owned();
         runtime.cues.insert(
             canonical.clone(),
             SoundCue {
@@ -662,12 +682,12 @@ mod sound_graph_runtime_tests {
 
     #[test]
     fn sequence_cursor_is_isolated_by_audio_object_scope() {
-        let graph = YscdSoundGraph {
+        let graph = YsncdSoundGraph {
             root: "seq".to_owned(),
             nodes: vec![
                 clip("a", "a"),
                 clip("b", "b"),
-                YscdSoundGraphNode::Sequence {
+                YsncdSoundGraphNode::Sequence {
                     id: "seq".to_owned(),
                     children: vec!["a".to_owned(), "b".to_owned()],
                 },

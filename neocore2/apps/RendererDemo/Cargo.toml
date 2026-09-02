@@ -10,11 +10,11 @@ license = "Proprietary"
 icon = "assets/editor.ico"
 
 [dependencies]
-newengine-core = { path = "../../crates/newengine-core" }
-newengine-game-ready-profile = { path = "../../crates/newengine-game-ready-profile" }
-newengine-runtime-host = { path = "../../crates/newengine-runtime-host", default-features = false, features = ["full-runtime"] }
-newengine-windowed-host-runtime = { path = "../../crates/newengine-windowed-host-runtime", default-features = false, features = ["prestart-window-egui", "window-icon"] }
-newengine-ui = { path = "../../crates/newengine-ui", default-features = false }
+newengine-core = { workspace = true }
+newengine-game-ready-profile = { workspace = true }
+newengine-runtime-host = { workspace = true, default-features = false, features = ["full-runtime"] }
+newengine-windowed-host-runtime = { workspace = true, default-features = false, features = ["prestart-window-egui", "window-icon"] }
+newengine-ui = { workspace = true, default-features = false }
 
 [build-dependencies]
 embed-resource = "2"

@@ -1,4 +1,3 @@
-
 use super::*;
 use newengine_audio_api::{AcousticMaterialProfile, AcousticSurface, AudioListenerState};
 
@@ -32,7 +31,7 @@ fn reflection_world() -> (World, EntityId) {
     );
     let _ = world.insert(
         emitter,
-        AudioEmitter::new("shared/audio/test.yscd@reflection"),
+        AudioEmitter::new("shared/audio/test.ysncd@reflection"),
     );
     (world, emitter)
 }
@@ -62,6 +61,26 @@ fn provider_emits_two_visibility_legs_for_each_first_order_room_face() {
     assert!(queries
         .iter()
         .all(|query| { query.seq & 0xfff0_0000_0000_0000 == AUDIO_REFLECTION_QUERY_NAMESPACE }));
+}
+
+#[test]
+fn reflection_queries_sample_at_secondary_acoustic_cadence() {
+    let (world, _) = reflection_world();
+    let provider = AudioReflectionPhysicsQueryProvider::new();
+    assert!(
+        !provider.collect_queries(&world).is_empty(),
+        "first acoustic sample is due"
+    );
+    for skipped in 1..REFLECTION_QUERY_INTERVAL_TICKS {
+        assert!(
+            provider.collect_queries(&world).is_empty(),
+            "reflection query batch must be skipped at cadence offset {skipped}"
+        );
+    }
+    assert!(
+        !provider.collect_queries(&world).is_empty(),
+        "reflection query batch must resume at the next cadence boundary"
+    );
 }
 
 #[test]

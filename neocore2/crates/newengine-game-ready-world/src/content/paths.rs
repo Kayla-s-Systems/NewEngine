@@ -3,7 +3,7 @@ const PROFILE_ENV_KEYS: [&str; 2] = [
     newengine_project_api::PROJECT_STARTUP_SCENE_ENV,
     SCENE_PROFILE_ENV,
 ];
-/// Logical AssetManager candidates for the game-ready authored map.
+/// Logical AssetManager candidates for the authored-world authored map.
 ///
 /// Environment overrides are treated as logical VFS paths. Absolute filesystem
 /// paths are intentionally ignored here: authored map data must go through

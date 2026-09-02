@@ -17,7 +17,7 @@ fn fps_motion_response_from_game_data(
 pub(super) fn to_fps_demo_rules(
     spec: &GameReadyGameplaySpec,
     game_data: &GameData,
-) -> FpsDemoRules {
+) -> FpsRuntimeRules {
     let tuning = game_data.player.tuning;
     let default_player = FpsPlayerTuning {
         motion_response: fps_motion_response_from_game_data(tuning.motion_response),
@@ -67,7 +67,7 @@ pub(super) fn to_fps_demo_rules(
     .sanitized();
     let player = base;
 
-    FpsDemoRules {
+    FpsRuntimeRules {
         default_status: spec.default_status.clone(),
         pickup_status: spec.pickup_status.clone(),
         target_status: spec.target_status.clone(),

@@ -4,7 +4,7 @@ mod tests {
 
     #[test]
     fn emitter_defaults_to_enabled_spatial_autoplay() {
-        let emitter = AudioEmitter::new("shared/audio/ambience/ambience.yscd@wind");
+        let emitter = AudioEmitter::new("shared/audio/ambience/ambience.ysncd@wind");
         assert!(emitter.enabled);
         assert!(emitter.autoplay);
         assert!(emitter.spatial);

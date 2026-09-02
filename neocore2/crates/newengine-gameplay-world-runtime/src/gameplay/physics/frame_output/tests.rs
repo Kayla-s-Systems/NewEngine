@@ -180,9 +180,9 @@ mod tests {
             ..FpsPlayerTuning::default()
         }
         .sanitized();
-        world.insert_resource(FpsDemoRules {
+        world.insert_resource(FpsRuntimeRules {
             player: tuning,
-            ..FpsDemoRules::default()
+            ..FpsRuntimeRules::default()
         });
         let player = spawn_default_player(&mut world, None, "surface-player", Vec3::ZERO);
         let ground = world.spawn();

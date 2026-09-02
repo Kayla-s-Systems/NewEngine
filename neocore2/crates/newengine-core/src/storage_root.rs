@@ -178,7 +178,11 @@ mod tests {
             .unwrap()
             .join("apps")
             .join("AssetInspector");
-        let normalized = normalize_path(PathBuf::from("../../cache/asset-inspector"), Some(&base));
+        let raw = PathBuf::from("cache")
+            .join("stage")
+            .join(Component::ParentDir.as_os_str())
+            .join("asset-inspector");
+        let normalized = normalize_path(raw, Some(&base));
         assert!(normalized.is_absolute());
         assert!(!normalized
             .components()

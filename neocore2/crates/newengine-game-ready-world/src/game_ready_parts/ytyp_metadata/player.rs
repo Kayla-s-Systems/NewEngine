@@ -1,3 +1,5 @@
+include!("player/secondary_motion.rs");
+
 use super::*;
 
 /// Maps an authored character attribute such as `equipment.knife.ready`'s XML projection
@@ -322,7 +324,7 @@ pub(super) fn player_joint_rotation_weights(
 }
 
 pub(super) fn apply_player_model_from_ytyp(
-    profile: &mut GameReadyMapProfile,
+    profile: &mut AuthoredWorldProfile,
     metadata: &serde_json::Value,
     definition_ref: &str,
 ) -> usize {
@@ -472,6 +474,19 @@ pub(super) fn apply_player_model_from_ytyp(
         applied += 1;
     }
 
+    match parse_skeletal_secondary_motion(model) {
+        Ok(Some(rig)) => {
+            profile.player.model.skeletal_secondary_motion = Some(rig);
+            applied += 1;
+        }
+        Ok(None) => {}
+        Err(error) => newengine_ulog_api::ulog::warn!(
+            "game-ready ytyp metadata: invalid project-authored skeletal_secondary_motion definition_ref='{}' err='{}'",
+            definition_ref,
+            error
+        ),
+    }
+
     let braid_chain_joints = value_path(model, &["braid_secondary_motion_chain_joints"])
         .and_then(value_string)
         .map(|raw| {
@@ -493,15 +508,7 @@ pub(super) fn apply_player_model_from_ytyp(
     .map(|key| value_path(model, &[key]).and_then(value_string));
     if let (
         Some(chain_joints),
-        [
-            Some(head_joint),
-            Some(head_base_joint),
-            Some(upper_back_joint),
-            Some(middle_back_joint),
-            Some(lower_back_joint),
-            Some(left_shoulder_joint),
-            Some(right_shoulder_joint),
-        ],
+        [Some(head_joint), Some(head_base_joint), Some(upper_back_joint), Some(middle_back_joint), Some(lower_back_joint), Some(left_shoulder_joint), Some(right_shoulder_joint)],
     ) = (braid_chain_joints, braid_collision_joints)
     {
         profile.player.model.braid_secondary_motion = Some(
@@ -772,17 +779,8 @@ pub(super) fn apply_player_model_from_ytyp(
         "equipment_arm_ik_left_palm",
     ]
     .map(|key| value_path(model, &[key]).and_then(value_string));
-    if let [
-        Some(chest),
-        Some(right_shoulder),
-        Some(right_elbow),
-        Some(right_wrist),
-        Some(right_palm),
-        Some(left_shoulder),
-        Some(left_elbow),
-        Some(left_wrist),
-        Some(left_palm),
-    ] = ik_required
+    if let [Some(chest), Some(right_shoulder), Some(right_elbow), Some(right_wrist), Some(right_palm), Some(left_shoulder), Some(left_elbow), Some(left_wrist), Some(left_palm)] =
+        ik_required
     {
         profile.player.model.equipment_arm_ik_rig = Some(
             newengine_engine_runtime::gameplay::PlayerWeaponArmIkRigDefinition {

@@ -377,7 +377,7 @@ mod tests {
         let mut world = World::new();
         let request = GameplayCapabilityRequest::new(
             GAMEPLAY_CAPABILITY_AUDIO_PLAY_V1,
-            serde_json::json!({"cue": "shared/audio/test.yscd@cue"}),
+            serde_json::json!({"cue": "shared/audio/test.ysncd@cue"}),
         );
         let error = AudioPlayCapability
             .invoke(&mut world, &request)

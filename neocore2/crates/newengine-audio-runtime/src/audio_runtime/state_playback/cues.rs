@@ -14,7 +14,7 @@ impl AudioRuntimeState {
         }
 
         let dictionary =
-            if let Some(dictionary) = self.yscd_dictionaries.get(&reference.logical_path) {
+            if let Some(dictionary) = self.ysncd_dictionaries.get(&reference.logical_path) {
                 Arc::clone(dictionary)
             } else {
                 let source =
@@ -22,7 +22,7 @@ impl AudioRuntimeState {
                         .raw_bytes_v1(&reference.logical_path)
                         .map_err(|error| {
                             format!(
-                                "YSCD VFS read failed logical_path='{}': {error}",
+                                "YSNCD VFS read failed logical_path='{}': {error}",
                                 reference.logical_path
                             )
                         })?;
@@ -41,7 +41,7 @@ impl AudioRuntimeState {
                         )
                     })?;
                 let decoded = Arc::new(
-                    newengine_asset_format_nef8::yscd_binary::decode_yscd_binary_body(&body)
+                    newengine_asset_format_nef8::ysncd_binary::decode_ysncd_binary_body(&body)
                         .map_err(|error| {
                             format!(
                                 "audio cue body decode failed logical_path='{}': {error}",
@@ -50,19 +50,19 @@ impl AudioRuntimeState {
                         })?,
                 );
                 newengine_ulog_api::ulog::info!(
-                    "YSCD dictionary cache miss path='{}' cues={} bytes={} policy='decode-once'",
+                    "YSNCD dictionary cache miss path='{}' cues={} bytes={} policy='decode-once'",
                     reference.logical_path,
                     decoded.cues.len(),
                     source.len(),
                 );
-                self.yscd_dictionaries
+                self.ysncd_dictionaries
                     .insert(reference.logical_path.clone(), Arc::clone(&decoded));
                 decoded
             };
         let cue_name = reference.entry.as_deref().expect("entry required above");
         let authored = dictionary.cue(cue_name).ok_or_else(|| {
             format!(
-                "YSCD cue '{}' not found in '{}'",
+                "YSNCD cue '{}' not found in '{}'",
                 cue_name, reference.logical_path
             )
         })?;
@@ -70,10 +70,10 @@ impl AudioRuntimeState {
         let mut clips = Vec::with_capacity(authored.clips.len());
         let mut clips_by_name = HashMap::<String, SoundCueClip>::new();
         for (clip_index, clip) in authored.clips.iter().enumerate() {
-            let key = embedded_yscd_clip_key(&canonical, clip_index, &clip.codec);
-            self.embedded_yscd_clips.insert(
+            let key = embedded_ysncd_clip_key(&canonical, clip_index, &clip.codec);
+            self.embedded_ysncd_clips.insert(
                 key.clone(),
-                EmbeddedYscdClipLocator {
+                EmbeddedYsncdClipLocator {
                     dictionary_path: reference.logical_path.clone(),
                     cue_name: authored.name.clone(),
                     clip_index,
@@ -99,7 +99,7 @@ impl AudioRuntimeState {
                 let key = clip_name.trim().to_ascii_lowercase();
                 let clip = clips_by_name.get(&key).cloned().ok_or_else(|| {
                     format!(
-                        "YSCD cue '{}' layer '{}' references unknown clip '{}'",
+                        "YSNCD cue '{}' layer '{}' references unknown clip '{}'",
                         authored.name, layer.name, clip_name
                     )
                 })?;
@@ -107,11 +107,11 @@ impl AudioRuntimeState {
             }
             if layer_clips.is_empty() {
                 return Err(format!(
-                    "YSCD cue '{}' layer '{}' resolved no clips",
+                    "YSNCD cue '{}' layer '{}' resolved no clips",
                     authored.name, layer.name
                 ));
             }
-            runtime_layers.push(YscdRuntimeLayer {
+            runtime_layers.push(YsncdRuntimeLayer {
                 name: layer.name.trim().to_owned(),
                 role: layer.role.trim().to_ascii_lowercase(),
                 clips: layer_clips,
@@ -120,7 +120,7 @@ impl AudioRuntimeState {
                 attenuation: layer
                     .attenuation
                     .as_ref()
-                    .map(audio_attenuation_from_yscd)
+                    .map(audio_attenuation_from_ysncd)
                     .transpose()?,
             });
         }
@@ -131,7 +131,7 @@ impl AudioRuntimeState {
             .map(|clip| clip.bytes.len())
             .sum::<usize>();
         newengine_ulog_api::ulog::info!(
-            "YSCD resolve dictionary='{}' cue='{}' embedded_clip_bytes={} clips={} layers={} sound_graph_nodes={} source='engine.assets.raw_bytes_v1' body='NEF8/YSCD-v1'",
+            "YSNCD resolve dictionary='{}' cue='{}' embedded_clip_bytes={} clips={} layers={} sound_graph_nodes={} source='engine.assets.raw_bytes_v1' body='NEF8/YSNCD-v1'",
             reference.logical_path,
             authored.name,
             embedded_bytes,
@@ -149,25 +149,25 @@ impl AudioRuntimeState {
             clips,
             gain_range: authored.descriptor.gain_range,
             pitch_range: authored.descriptor.pitch_range,
-            route: audio_route_from_yscd(&authored.descriptor.route)?,
+            route: audio_route_from_ysncd(&authored.descriptor.route)?,
             looping: authored.descriptor.looping,
             concurrency_group: authored.descriptor.concurrency_group.clone(),
             concurrency_limit: authored.descriptor.concurrency_limit,
-            concurrency_scope: concurrency_scope_from_yscd(
+            concurrency_scope: concurrency_scope_from_ysncd(
                 &authored.descriptor.concurrency_scope,
             )?,
-            steal_rule: voice_steal_rule_from_yscd(&authored.descriptor.steal_rule)?,
+            steal_rule: voice_steal_rule_from_ysncd(&authored.descriptor.steal_rule)?,
             voice_budget: authored.descriptor.voice_budget.clone(),
             priority: authored.descriptor.priority,
             repeat_avoidance: authored.descriptor.repeat_avoidance,
-            spatial_policy: sound_cue_spatial_policy_from_yscd(
+            spatial_policy: sound_cue_spatial_policy_from_ysncd(
                 &authored.descriptor.spatial_policy,
             )?,
             attenuation: authored
                 .descriptor
                 .attenuation
                 .as_ref()
-                .map(audio_attenuation_from_yscd)
+                .map(audio_attenuation_from_ysncd)
                 .transpose()?,
         }
         .sanitized()?;
@@ -182,7 +182,7 @@ impl AudioRuntimeState {
         }
         self.cue_meta.insert(
             canonical.clone(),
-            YscdRuntimeMeta {
+            YsncdRuntimeMeta {
                 dictionary_path: reference.logical_path.clone(),
                 cue_name: authored.name.clone(),
                 embedded_bytes,
@@ -227,7 +227,7 @@ impl AudioRuntimeState {
             .get(&canonical)
             .map(|meta| {
                 vec![format!(
-                    "YSCD resolve dictionary='{}' cue='{}' embedded_clip_bytes={} clips={} layers={} sound_graph_nodes={}",
+                    "YSNCD resolve dictionary='{}' cue='{}' embedded_clip_bytes={} clips={} layers={} sound_graph_nodes={}",
                     meta.dictionary_path,
                     meta.cue_name,
                     meta.embedded_bytes,
@@ -347,7 +347,7 @@ impl AudioRuntimeState {
                 .cue_clips_by_name
                 .get(&canonical)
                 .cloned()
-                .ok_or_else(|| format!("YSCD SoundGraph '{}' clip map is unavailable", canonical))?;
+                .ok_or_else(|| format!("YSNCD SoundGraph '{}' clip map is unavailable", canonical))?;
             let mut primary: Option<AudioPlayAck> = None;
             let mut accepted_voice_ids = Vec::<u64>::new();
             let mut diagnostics = Vec::<String>::new();
@@ -355,7 +355,7 @@ impl AudioRuntimeState {
             for (index, plan) in plans.iter().enumerate() {
                 let selected = clips_by_name.get(&plan.clip_name).cloned().ok_or_else(|| {
                     format!(
-                        "YSCD SoundGraph '{}' resolved unknown runtime clip '{}'",
+                        "YSNCD SoundGraph '{}' resolved unknown runtime clip '{}'",
                         canonical, plan.clip_name
                     )
                 })?;
@@ -395,7 +395,7 @@ impl AudioRuntimeState {
                     transport_initial_position,
                 )?;
                 if let Some(diagnostic) =
-                    self.yscd_play_diagnostic(&canonical, &format!("graph:{}", plan.label), &selected, &ack)
+                    self.ysncd_play_diagnostic(&canonical, &format!("graph:{}", plan.label), &selected, &ack)
                 {
                     diagnostics.push(diagnostic);
                 }
@@ -413,7 +413,7 @@ impl AudioRuntimeState {
                 accepted_voice_ids.dedup();
                 ack.voice_ids = accepted_voice_ids;
                 ack.message = format!(
-                    "YSCD SoundGraph accepted logical_voices={}",
+                    "YSNCD SoundGraph accepted logical_voices={}",
                     ack.voice_ids.len()
                 );
                 ack.diagnostics = diagnostics;
@@ -425,7 +425,7 @@ impl AudioRuntimeState {
                 voice_id: None,
                 voice_ids: Vec::new(),
                 message: rejection_reason.unwrap_or_else(|| {
-                    "YSCD SoundGraph produced no accepted logical voices".to_owned()
+                    "YSNCD SoundGraph produced no accepted logical voices".to_owned()
                 }),
                 virtualized: false,
                 diagnostics,
@@ -473,7 +473,7 @@ impl AudioRuntimeState {
             if ack.accepted {
                 self.remember_cue_selection(&canonical, &selected.clip.uri, cue.repeat_avoidance);
             }
-            if let Some(diagnostic) = self.yscd_play_diagnostic(&canonical, "body", &selected, &ack)
+            if let Some(diagnostic) = self.ysncd_play_diagnostic(&canonical, "body", &selected, &ack)
             {
                 ack.diagnostics.push(diagnostic);
             }
@@ -501,7 +501,7 @@ impl AudioRuntimeState {
                     .cloned()
                     .ok_or_else(|| {
                         format!(
-                            "YSCD layer '{}' weighted selection produced no clip",
+                            "YSNCD layer '{}' weighted selection produced no clip",
                             layer.name
                         )
                     })?;
@@ -540,7 +540,7 @@ impl AudioRuntimeState {
                 transport_initial_position,
             )?;
             if let Some(diagnostic) =
-                self.yscd_play_diagnostic(&canonical, &layer.name, &selected, &ack)
+                self.ysncd_play_diagnostic(&canonical, &layer.name, &selected, &ack)
             {
                 diagnostics.push(diagnostic);
             }
@@ -562,7 +562,7 @@ impl AudioRuntimeState {
             accepted_voice_ids.sort_unstable();
             accepted_voice_ids.dedup();
             ack.voice_ids = accepted_voice_ids;
-            ack.message = format!("YSCD layered cue accepted layers={accepted_layers}");
+            ack.message = format!("YSNCD layered cue accepted layers={accepted_layers}");
             ack.diagnostics = diagnostics;
             return Ok(ack);
         }
@@ -572,7 +572,7 @@ impl AudioRuntimeState {
             voice_id: None,
             voice_ids: Vec::new(),
             message: rejection_reason
-                .unwrap_or_else(|| "YSCD layered cue produced no accepted voices".to_owned()),
+                .unwrap_or_else(|| "YSNCD layered cue produced no accepted voices".to_owned()),
             virtualized: false,
             diagnostics,
         })
@@ -590,7 +590,7 @@ impl AudioRuntimeState {
         }
     }
 
-    fn yscd_play_diagnostic(
+    fn ysncd_play_diagnostic(
         &self,
         canonical: &str,
         layer: &str,
@@ -646,7 +646,7 @@ impl AudioRuntimeState {
             .map(String::as_str)
             .unwrap_or("");
         Some(format!(
-            "YSCD play dictionary='{}' cue='{}' layer='{}' embedded_clip_bytes={} dictionary_embedded_bytes={} physical_voice={} virtualized={} voice_id={:?} output_state='{}' arbiter_selected={} audibility={:.6} distance={:.3} attenuation_gain={:.6} route='{}' route_gain={:.3} transmission_gain={:.3} doppler={:.4} air_hf_gain={:.3} air_low_pass_hz={:.0} max_physical_voices={} output_error='{}' materialize_error='{}'",
+            "YSNCD play dictionary='{}' cue='{}' layer='{}' embedded_clip_bytes={} dictionary_embedded_bytes={} physical_voice={} virtualized={} voice_id={:?} output_state='{}' arbiter_selected={} audibility={:.6} distance={:.3} attenuation_gain={:.6} route='{}' route_gain={:.3} transmission_gain={:.3} doppler={:.4} air_hf_gain={:.3} air_low_pass_hz={:.0} max_physical_voices={} output_error='{}' materialize_error='{}'",
             meta.dictionary_path,
             meta.cue_name,
             layer,

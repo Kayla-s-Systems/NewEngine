@@ -14,8 +14,8 @@ use newengine_engine_runtime::gameplay::{
     first_player, DisplayMode, DisplayVisibility, Health, PhysicsBodyDesc,
 };
 use newengine_gameplay_fps_api::{
-    FpsDemoGoal, FpsDemoHazard, FpsDemoPickup, FpsDemoState, FpsDemoTarget,
-    FpsGameplayPolicyProvider, FpsGameplayPolicySnapshot, FpsPolicyDecision, FpsPolicyEvent,
+    FpsGameplayPolicyProvider, FpsGameplayPolicySnapshot, FpsObjectiveGoal, FpsObjectiveHazard,
+    FpsObjectivePickup, FpsObjectiveState, FpsObjectiveTarget, FpsPolicyDecision, FpsPolicyEvent,
 };
 use newengine_gameplay_script_runtime::GameplayCommandExecutor;
 
@@ -33,7 +33,7 @@ pub fn step_fps_objective_events(
     policy_provider: &dyn FpsGameplayPolicyProvider,
     command_executor: &GameplayCommandExecutor,
 ) {
-    if world.resource::<FpsDemoState>().is_none() {
+    if world.resource::<FpsObjectiveState>().is_none() {
         return;
     }
     let Some(policy) = world.resource::<FpsGameplayPolicySnapshot>().cloned() else {
@@ -42,12 +42,12 @@ pub fn step_fps_objective_events(
     };
 
     let terminal = world
-        .resource::<FpsDemoState>()
+        .resource::<FpsObjectiveState>()
         .map(|s| s.completed || s.failed)
         .unwrap_or(false);
 
     if !terminal {
-        if let Some(state) = world.resource_mut::<FpsDemoState>() {
+        if let Some(state) = world.resource_mut::<FpsObjectiveState>() {
             if dt.is_finite() && dt > 0.0 {
                 state.elapsed_sec += dt.min(0.1);
             }
@@ -66,7 +66,7 @@ pub fn step_fps_objective_events(
     }
 
     let mut picked: Vec<EntityId> = Vec::new();
-    for (entity, pickup) in world.query::<FpsDemoPickup>() {
+    for (entity, pickup) in world.query::<FpsObjectivePickup>() {
         let Some(t) = world.get::<Transform>(entity) else {
             continue;
         };
@@ -78,7 +78,7 @@ pub fn step_fps_objective_events(
     picked.sort_by_key(|id| id.stable_u64());
 
     for entity in &picked {
-        let _ = world.remove::<FpsDemoPickup>(*entity);
+        let _ = world.remove::<FpsObjectivePickup>(*entity);
         let _ = world.insert(
             *entity,
             DisplayVisibility {
@@ -88,7 +88,7 @@ pub fn step_fps_objective_events(
     }
 
     let mut destroyed_targets: Vec<EntityId> = Vec::new();
-    for (entity, _) in world.query::<FpsDemoTarget>() {
+    for (entity, _) in world.query::<FpsObjectiveTarget>() {
         if world
             .get::<Health>(entity)
             .is_some_and(|health| !health.alive())
@@ -98,7 +98,7 @@ pub fn step_fps_objective_events(
     }
     destroyed_targets.sort_by_key(|id| id.stable_u64());
     for entity in &destroyed_targets {
-        let _ = world.remove::<FpsDemoTarget>(*entity);
+        let _ = world.remove::<FpsObjectiveTarget>(*entity);
         let _ = world.remove::<PhysicsBodyDesc>(*entity);
         let _ = world.insert(
             *entity,
@@ -108,14 +108,14 @@ pub fn step_fps_objective_events(
         );
     }
 
-    let hit_hazard = world.query::<FpsDemoHazard>().any(|(entity, hazard)| {
+    let hit_hazard = world.query::<FpsObjectiveHazard>().any(|(entity, hazard)| {
         world.get::<Transform>(entity).is_some_and(|t| {
             let r = hazard.radius.max(0.1);
             distance_sq(player_pos, t.position) <= r * r
         })
     });
 
-    let reached_goal = world.query::<FpsDemoGoal>().any(|(entity, goal)| {
+    let reached_goal = world.query::<FpsObjectiveGoal>().any(|(entity, goal)| {
         world.get::<Transform>(entity).is_some_and(|t| {
             let r = goal.radius.max(0.1);
             distance_sq(player_pos, t.position) <= r * r
@@ -125,7 +125,7 @@ pub fn step_fps_objective_events(
     let collected_delta = picked.len() as u32;
     let destroyed_delta = destroyed_targets.len() as u32;
 
-    let event = if let Some(state) = world.resource_mut::<FpsDemoState>() {
+    let event = if let Some(state) = world.resource_mut::<FpsObjectiveState>() {
         state.pickups_collected = state
             .pickups_collected
             .saturating_add(collected_delta)
@@ -178,7 +178,7 @@ pub fn step_fps_objective_events(
         decision.status = Some(format!("Gameplay command transaction failed: {error}"));
     }
 
-    if let Some(state) = world.resource_mut::<FpsDemoState>() {
+    if let Some(state) = world.resource_mut::<FpsObjectiveState>() {
         if let Some(completed) = decision.completed {
             state.completed = completed;
         }

@@ -13,5 +13,9 @@ newengine-contract-api = { path = "../newengine-contract-api" }
 newengine-assets-api = { path = "../newengine-assets-api" }
 newengine-vfx-api = { path = "../newengine-vfx-api" }
 
+[dev-dependencies]
+hound = "3.5"
+newengine-audio-xvag = { path = "../newengine-audio-xvag" }
+
 [features]
 default = []

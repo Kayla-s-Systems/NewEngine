@@ -19,7 +19,7 @@ use newengine_engine_runtime::gameplay::{
 #[cfg(test)]
 use newengine_gameplay_fps_api::action as fps_action;
 use newengine_gameplay_fps_api::{
-    FpsActionFrame, FpsCharacterMenuPolicySnapshot, FpsDemoState, FpsPlayableCharacterPolicy,
+    FpsActionFrame, FpsCharacterMenuPolicySnapshot, FpsObjectiveState, FpsPlayableCharacterPolicy,
 };
 use newengine_ui_api::{UiEventDispatchFrame, UiNodeEventTrigger, UiStatePatch};
 

@@ -274,7 +274,7 @@ fn first_person_full_body_hip_consumes_authored_anatomical_handle_offset() {
 }
 
 #[test]
-fn first_person_full_body_hip_keeps_bilateral_abby_rifle_contacts_reachable() {
+fn first_person_full_body_hip_keeps_bilateral_rifle_contacts_reachable() {
     let p = fixture();
     let eye = Vec3::new(0.0, 1.62, 0.0);
     let view = Quat::IDENTITY;
@@ -287,7 +287,7 @@ fn first_person_full_body_hip_keeps_bilateral_abby_rifle_contacts_reachable() {
             .expect("full-body FPP hip contract");
     let right_target = weapon_ready_right_palm_position(&p, contract.root);
     let left_target = weapon_ready_left_palm_position(&p, contract.root);
-    // Abby's authored upper+lower arm reaches about 0.520 m to the wrist. Allow the ~1 cm
+    // The authored upper+lower arm reaches about 0.520 m to the wrist. Allow the ~1 cm
     // wrist->palm segment, but retain the solver's 6 mm safety margin. This regression guards
     // against reusing a distant viewmodel offset for anatomical full-body hands.
     let max_palm_reach = 0.519_775_4 + 0.010_1 - 0.006;

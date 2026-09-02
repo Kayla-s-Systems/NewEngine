@@ -524,6 +524,50 @@ impl BlockSourceAdapter {
     }
 }
 
+const MASTER_OUTPUT_PEAK: f32 = 1.0;
+const MASTER_LIMITER_RELEASE_SECONDS: f32 = 0.080;
+
+#[derive(Clone, Copy, Debug)]
+struct OutputPeakLimiter {
+    gain: f32,
+    release_alpha: f32,
+}
+
+impl OutputPeakLimiter {
+    fn new(sample_rate: SampleRate) -> Self {
+        let frames = (sample_rate.get() as f32 * MASTER_LIMITER_RELEASE_SECONDS).max(1.0);
+        Self {
+            gain: 1.0,
+            release_alpha: 1.0 - (-1.0 / frames).exp(),
+        }
+    }
+
+    #[inline]
+    fn process_frame(&mut self, frame: &mut [Sample]) {
+        let peak = frame
+            .iter()
+            .copied()
+            .filter(|sample| sample.is_finite())
+            .map(f32::abs)
+            .fold(0.0_f32, f32::max);
+        let target = if peak > MASTER_OUTPUT_PEAK {
+            (MASTER_OUTPUT_PEAK / peak).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        if target < self.gain {
+            // Instant attack prevents the overloaded frame from ever reaching the device.
+            self.gain = target;
+        } else {
+            self.gain += (1.0 - self.gain) * self.release_alpha;
+        }
+        for sample in frame {
+            let finite = if sample.is_finite() { *sample } else { 0.0 };
+            *sample = (finite * self.gain).clamp(-MASTER_OUTPUT_PEAK, MASTER_OUTPUT_PEAK);
+        }
+    }
+}
+
 pub(crate) struct NativeBlockRenderSource {
     channels: ChannelCount,
     sample_rate: SampleRate,
@@ -534,6 +578,7 @@ pub(crate) struct NativeBlockRenderSource {
     block: Vec<Sample>,
     block_cursor: usize,
     output_sample: u64,
+    output_limiter: OutputPeakLimiter,
 }
 
 impl NativeBlockRenderSource {
@@ -556,6 +601,7 @@ impl NativeBlockRenderSource {
             block: vec![0.0; NATIVE_BLOCK_FRAMES * usize::from(channels.get())],
             block_cursor: NATIVE_BLOCK_FRAMES * usize::from(channels.get()),
             output_sample: 0,
+            output_limiter: OutputPeakLimiter::new(sample_rate),
         }
     }
 
@@ -730,6 +776,9 @@ impl NativeBlockRenderSource {
                     node.state.finished.store(true, Ordering::Release);
                 }
             }
+            // Device safety is owned once, after the complete voice/room mix. Normal material below
+            // unity is unaffected; only overloaded frames receive stereo-linked gain reduction.
+            self.output_limiter.process_frame(output);
         }
     }
 }

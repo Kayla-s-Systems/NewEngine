@@ -5,7 +5,7 @@ use newengine_materials::api::MaterialRegistryApi;
 /// never a GameReady material fallback.
 pub(super) fn register_authored_prefab_material(
     mats: &MaterialRegistry,
-    prefab: &GameReadyPrefabSpec,
+    prefab: &AuthoredWorldPlacementSpec,
 ) -> Result<Option<MaterialId>, String> {
     let raw_asset = prefab.material.trim();
     if raw_asset.is_empty() {

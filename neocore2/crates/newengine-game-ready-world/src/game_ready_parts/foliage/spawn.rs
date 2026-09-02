@@ -3,7 +3,7 @@ use super::*;
 pub(super) fn ensure_runtime_prefab_parts(
     prims: &mut PrimitiveRegistry,
     mats: &MaterialRegistry,
-    prefab: &GameReadyPrefabSpec,
+    prefab: &AuthoredWorldPlacementSpec,
     materials: DemoMaterials,
     material_specs: &GameReadyMaterialSetSpec,
     palette: &GameReadyPaletteSpec,
@@ -210,7 +210,7 @@ fn spawn_runtime_ydd_prefab_batch(
     prims: &mut PrimitiveRegistry,
     mats: &MaterialRegistry,
     root: EntityId,
-    prefab: &GameReadyPrefabSpec,
+    prefab: &AuthoredWorldPlacementSpec,
     parts: &[RuntimePrefabMeshPart],
     placements: &[TreePlacement],
     render_options: &newengine_model_domain_api::MeshRenderOptions,
@@ -269,7 +269,7 @@ pub(crate) fn defer_foliage_prefabs(
     material_specs: &GameReadyMaterialSetSpec,
     palette: &GameReadyPaletteSpec,
     foliage: &GameReadyFoliageSpec,
-    prefabs: &[GameReadyPrefabSpec],
+    prefabs: &[AuthoredWorldPlacementSpec],
     player_start: Vec3,
 ) {
     world.insert_resource(DeferredFoliageSpawn {
@@ -331,7 +331,7 @@ pub(crate) fn spawn_foliage_prefabs(
     material_specs: &GameReadyMaterialSetSpec,
     palette: &GameReadyPaletteSpec,
     foliage: &GameReadyFoliageSpec,
-    prefabs: &[GameReadyPrefabSpec],
+    prefabs: &[AuthoredWorldPlacementSpec],
     player_start: Vec3,
 ) {
     let Some(prefab) = choose_foliage_prefab(prefabs, &foliage.prefab) else {

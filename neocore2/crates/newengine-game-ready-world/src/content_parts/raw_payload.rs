@@ -10,14 +10,14 @@ mod sanitize_defaults;
 #[path = "ymap_read_diagnostics.rs"]
 mod ymap_read_diagnostics;
 
-pub(crate) use self::profile_parse::load_game_ready_map_profile;
+pub(crate) use self::profile_parse::load_authored_world_profile;
 
 use self::profile_parse::*;
 use self::sanitize_defaults::*;
 use super::profile::*;
 
 #[derive(Debug, Deserialize)]
-struct RawGameReadyPayload {
+struct RawAuthoredWorldPayload {
     #[serde(default = "default_title")]
     pub(super) title: String,
     #[serde(default = "default_objective")]
@@ -38,6 +38,8 @@ struct RawGameReadyPayload {
     pub(super) prefabs: Vec<RawPrefabSpec>,
     #[serde(default)]
     pub(super) definitions: Vec<RawDefinitionInstanceSpec>,
+    #[serde(default)]
+    pub(super) audio: RawAudioSpec,
     #[serde(default)]
     pub(super) gameplay: RawGameplaySpec,
     #[serde(default)]

@@ -2,7 +2,7 @@ use super::foliage::{
     defer_foliage_prefabs, spawn_foliage_prefabs, terrain_height, SKYDOME_PRIMITIVE_ID,
 };
 use super::materials_terrain::register_demo_materials;
-use super::mission::spawn_game_ready_mission;
+use super::mission::instantiate_authored_mission;
 use super::player_model::spawn_game_ready_player_model;
 use super::sky::configure_game_ready_lighting;
 use super::terrain_streaming::spawn_procedural_terrain;
@@ -18,6 +18,8 @@ use self::mesh_assets::ensure_skydome_primitive;
 
 mod mesh_assets;
 
+#[path = "assets_bootstrap_audio.rs"]
+mod audio;
 #[path = "assets_bootstrap_definitions.rs"]
 mod definitions;
 #[path = "assets_bootstrap_layout.rs"]
@@ -27,6 +29,7 @@ mod rules;
 #[path = "assets_bootstrap_sky.rs"]
 mod sky_visual;
 
+use audio::spawn_game_ready_audio_emitters;
 use definitions::instantiate_game_ready_definitions;
 use layout::{spawn_authored_terrain_reference, spawn_game_ready_scene_entity_layout};
 use rules::to_fps_demo_rules;
@@ -123,7 +126,7 @@ fn game_data_sky_spec(data: &GameData, fallback: &GameReadySkySpec) -> GameReady
     }
 }
 
-fn install_game_data_sky_definition(map: &mut GameReadyMapProfile, data: &GameData) {
+fn install_game_data_sky_definition(map: &mut AuthoredWorldProfile, data: &GameData) {
     let previous_sky_ref = map.sky.definition_ref.trim().replace('\\', "/");
     map.sky = game_data_sky_spec(data, &map.sky);
     let definition_ref = map.sky.definition_ref.trim();
@@ -151,7 +154,7 @@ fn install_game_data_sky_definition(map: &mut GameReadyMapProfile, data: &GameDa
     }
 }
 
-fn install_game_data_player_definition(map: &mut GameReadyMapProfile, data: &GameData) {
+fn install_game_data_player_definition(map: &mut AuthoredWorldProfile, data: &GameData) {
     let map_owns_avatar = map.player.model.enabled && !map.player.model.source.trim().is_empty();
     if map_owns_avatar {
         return;
@@ -180,7 +183,7 @@ fn install_game_data_player_definition(map: &mut GameReadyMapProfile, data: &Gam
     );
 }
 
-fn install_game_data_player_input_policy(profile: &mut GameReadyMapProfile, data: &GameData) {
+fn install_game_data_player_input_policy(profile: &mut AuthoredWorldProfile, data: &GameData) {
     // GameData V2 owns only project-level player input policy here. Character model, body,
     // movement speeds and locomotion tuning are definition-owned and are hydrated from the
     // selected character YTYP below. Never clamp the V2 runtime-resolved sentinel fields into
@@ -245,7 +248,7 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
     bootstrap_runtime_scene_foundation(scene);
 
     let root = ensure_root(scene);
-    let mut map = match load_game_ready_map_profile() {
+    let mut map = match load_authored_world_profile() {
         Ok(map) => map,
         Err(errors) => {
             newengine_ulog_api::ulog::error!(
@@ -360,7 +363,26 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
         camera
     };
 
-    configure_game_ready_lighting(world, layout.environment, &map.lighting, &map.sky);
+    let world_instance_id = map
+        .authored_map_streaming
+        .as_ref()
+        .map(|streaming| streaming.map_ref.trim())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| map.title.trim());
+    if world_instance_id.is_empty() {
+        newengine_ulog_api::ulog::error!(
+            "world bootstrap rejected project content: authored world identity is empty; provide a map_ref or non-empty world title"
+        );
+        return None;
+    }
+    configure_game_ready_lighting(
+        world,
+        layout.environment,
+        world_instance_id,
+        &map.lighting,
+        &map.sky,
+    );
+    spawn_game_ready_audio_emitters(world, layout.environment, &map.audio_emitters);
 
     let initial_terrain_center = newengine_scene::SceneCellCoord::from_world_pos(
         map.player.start,
@@ -559,7 +581,7 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
         t.rotation = Quat::from_euler(EulerRot::YXZ, map.player.yaw, 0.0, 0.0);
     }
 
-    let mission = match spawn_game_ready_mission(
+    let mission = match instantiate_authored_mission(
         world,
         prims,
         mats,
@@ -585,7 +607,7 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
     let mission_character_assignments = world
         .query::<newengine_engine_runtime::gameplay::PlayerModelAssignment>()
         .filter_map(|(entity, assignment)| {
-            (world.get::<FpsDemoTarget>(entity).is_some()
+            (world.get::<FpsObjectiveTarget>(entity).is_some()
                 && assignment.enabled
                 && !assignment.source.trim().is_empty())
             .then_some((entity, assignment.clone()))
@@ -639,7 +661,7 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
         }
     }
 
-    world.insert_resource(FpsDemoState::from_rules_with_targets(
+    world.insert_resource(FpsObjectiveState::from_rules_with_targets(
         mission.pickups,
         mission.targets,
         map.title.clone(),

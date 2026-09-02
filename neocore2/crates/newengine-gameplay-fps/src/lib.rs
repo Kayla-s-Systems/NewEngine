@@ -8,7 +8,7 @@
 mod provider;
 
 pub use newengine_gameplay_fps_api::{
-    action as fps_action, FpsActionFrame, FpsDemoGoal, FpsDemoHazard, FpsDemoPickup, FpsDemoRules,
-    FpsDemoState, FpsDemoTarget, FpsPlayerTuning,
+    action as fps_action, FpsActionFrame, FpsObjectiveGoal, FpsObjectiveHazard, FpsObjectivePickup,
+    FpsObjectiveState, FpsObjectiveTarget, FpsPlayerTuning, FpsRuntimeRules,
 };
 pub use provider::FpsGameplayProvider;

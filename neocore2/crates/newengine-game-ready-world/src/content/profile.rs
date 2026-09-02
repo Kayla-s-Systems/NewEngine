@@ -1,3 +1,6 @@
+pub(crate) use newengine_authored_world_runtime::{
+    AuthoredMapStreamingSpec, AuthoredWorldPlacementSpec,
+};
 use newengine_math::Vec3;
 use newengine_model_domain_api::MeshRenderOptions;
 
@@ -5,36 +8,22 @@ pub(crate) type ColorRgba = [f32; 4];
 pub(crate) type ColorRgb = [f32; 3];
 
 #[derive(Clone, Debug)]
-pub(crate) struct GameReadyMapProfile {
+pub(crate) struct AuthoredWorldProfile {
     pub(crate) title: String,
     pub(crate) objective: String,
-    pub(crate) authored_map_streaming: Option<GameReadyAuthoredMapStreamingSpec>,
+    pub(crate) authored_map_streaming: Option<AuthoredMapStreamingSpec>,
     pub(crate) player: GameReadyPlayerSpec,
     pub(crate) terrain: GameReadyTerrainSpec,
     pub(crate) sky: GameReadySkySpec,
     pub(crate) materials: GameReadyMaterialSetSpec,
     pub(crate) lighting: GameReadyLightingSpec,
     pub(crate) foliage: GameReadyFoliageSpec,
-    pub(crate) prefabs: Vec<GameReadyPrefabSpec>,
+    pub(crate) prefabs: Vec<AuthoredWorldPlacementSpec>,
     pub(crate) definitions: Vec<GameReadyDefinitionInstanceSpec>,
+    pub(crate) audio_emitters: Vec<GameReadyAudioEmitterSpec>,
     pub(crate) acoustic_materials: newengine_audio_api::AcousticMaterialLibrary,
     pub(crate) gameplay: GameReadyGameplaySpec,
     pub(crate) palette: GameReadyPaletteSpec,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct GameReadyAuthoredMapStreamingSpec {
-    pub(crate) map_ref: String,
-    pub(crate) index: newengine_assets_api::MapIndexV1,
-    pub(crate) initial_render_cells: Vec<newengine_assets_api::MapCellCoordV1>,
-    pub(crate) initial_simulation_cells: Vec<newengine_assets_api::MapCellCoordV1>,
-    pub(crate) initial_placement_ids:
-        std::collections::BTreeMap<newengine_assets_api::MapCellCoordV1, Vec<String>>,
-    pub(crate) render_radius: i32,
-    pub(crate) simulation_radius: i32,
-    pub(crate) render_unload_radius: i32,
-    pub(crate) simulation_unload_radius: i32,
-    pub(crate) max_cells_per_tick: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -99,6 +88,8 @@ pub(crate) struct GameReadyPlayerModelSpec {
         Option<newengine_engine_runtime::gameplay::PlayerSkinSidecarDefinition>,
     pub(crate) braid_secondary_motion:
         Option<newengine_engine_runtime::gameplay::PlayerBraidSecondaryMotionRig>,
+    pub(crate) skeletal_secondary_motion:
+        Option<newengine_engine_runtime::gameplay::PlayerSkeletalSecondaryMotionRig>,
     pub(crate) equipment_ready_animation: Option<String>,
     pub(crate) equipment_aim_animation: Option<String>,
     pub(crate) equipment_reload_animation: Option<String>,
@@ -344,31 +335,6 @@ pub(crate) struct GameReadyFoliageSpec {
     pub(crate) render_options: MeshRenderOptions,
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct GameReadyPrefabSpec {
-    pub(crate) id: String,
-    pub(crate) authored_map_ref: String,
-    pub(crate) authored_placement_id: String,
-    /// Discrete YMAP cell ownership. None for legacy/profile-authored prefabs.
-    pub(crate) authored_cell: Option<newengine_assets_api::MapCellCoordV1>,
-    pub(crate) authored_discrete_placement: bool,
-    pub(crate) authored_primary: bool,
-    pub(crate) source: String,
-    pub(crate) proxy: String,
-    pub(crate) material: String,
-    /// Project-authored physics surface identity and generic semantic event bindings.
-    /// Keys are capability/signal ids; values are arbitrary project gameplay event ids.
-    pub(crate) surface_id: String,
-    pub(crate) surface_events: std::collections::BTreeMap<String, String>,
-    pub(crate) ballistic_material:
-        Option<newengine_engine_runtime::gameplay::BallisticMaterialResponse>,
-    pub(crate) ground_placement_surface: bool,
-    pub(crate) enabled: bool,
-    pub(crate) position: Vec3,
-    pub(crate) rotation_ypr: Vec3,
-    pub(crate) scale: Vec3,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub(crate) enum GameReadyDefinitionApplyMode {
     /// Resolve metadata/dependency graph only. No ECS marker and no render packet
@@ -400,6 +366,13 @@ impl GameReadyDefinitionApplyMode {
 }
 
 #[derive(Clone, Debug)]
+pub(crate) struct GameReadyAudioEmitterSpec {
+    pub(crate) id: String,
+    pub(crate) position: Vec3,
+    pub(crate) emitter: newengine_audio_api::AudioEmitter,
+}
+
+#[derive(Clone, Debug)]
 pub(crate) struct GameReadyDefinitionInstanceSpec {
     pub(crate) definition_ref: String,
     pub(crate) position: Vec3,
@@ -422,23 +395,23 @@ pub(crate) struct GameReadyGameplaySpec {
     pub(crate) player_visual: GameReadyPlayerVisualSpec,
     pub(crate) camera: GameReadyCameraSpec,
     pub(crate) physics: GameReadyPhysicsSpec,
-    pub(crate) mission: GameReadyMissionSpec,
+    pub(crate) mission: AuthoredMissionSpec,
 }
 
 #[derive(Clone, Debug, Default)]
-pub(crate) struct GameReadyMissionSpec {
+pub(crate) struct AuthoredMissionSpec {
     pub(crate) core_material: Option<String>,
     pub(crate) target_material: Option<String>,
     pub(crate) hazard_material: Option<String>,
     pub(crate) goal_material: Option<String>,
-    pub(crate) pickups: Vec<GameReadyMissionPickupSpec>,
-    pub(crate) targets: Vec<GameReadyMissionTargetSpec>,
-    pub(crate) hazards: Vec<GameReadyMissionHazardSpec>,
-    pub(crate) goals: Vec<GameReadyMissionGoalSpec>,
+    pub(crate) pickups: Vec<AuthoredMissionPickupSpec>,
+    pub(crate) targets: Vec<AuthoredMissionTargetSpec>,
+    pub(crate) hazards: Vec<AuthoredMissionHazardSpec>,
+    pub(crate) goals: Vec<AuthoredMissionGoalSpec>,
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct GameReadyMissionPickupSpec {
+pub(crate) struct AuthoredMissionPickupSpec {
     pub(crate) id: String,
     pub(crate) item: Option<String>,
     pub(crate) quantity: u32,
@@ -450,7 +423,7 @@ pub(crate) struct GameReadyMissionPickupSpec {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct GameReadyMissionTargetSpec {
+pub(crate) struct AuthoredMissionTargetSpec {
     pub(crate) id: String,
     pub(crate) character_ref: Option<String>,
     pub(crate) position: Vec3,
@@ -475,7 +448,7 @@ pub(crate) struct GameReadyEnemyAiSpec {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct GameReadyMissionHazardSpec {
+pub(crate) struct AuthoredMissionHazardSpec {
     pub(crate) id: String,
     pub(crate) position: Vec3,
     pub(crate) radius: f32,
@@ -483,7 +456,7 @@ pub(crate) struct GameReadyMissionHazardSpec {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct GameReadyMissionGoalSpec {
+pub(crate) struct AuthoredMissionGoalSpec {
     pub(crate) id: String,
     pub(crate) position: Vec3,
     pub(crate) radius: f32,

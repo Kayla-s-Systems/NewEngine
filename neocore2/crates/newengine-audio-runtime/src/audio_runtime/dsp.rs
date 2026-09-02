@@ -1,6 +1,6 @@
 #[path = "dsp_types.rs"]
 mod dsp_types;
-use dsp_types::{CachedClip, EmbeddedYscdClipLocator, YscdRuntimeLayer, YscdRuntimeMeta};
+use dsp_types::{CachedClip, EmbeddedYsncdClipLocator, YsncdRuntimeLayer, YsncdRuntimeMeta};
 
 #[derive(Clone, Debug)]
 struct SpectralFilterControl {
@@ -155,13 +155,51 @@ struct ReverbSendSnapshot {
     diffusion: f32,
 }
 
+const MAX_REVERB_SEND_GAIN: f32 = 1.0;
+const MAX_REVERB_EARLY_GAIN: f32 = 1.0;
+const MAX_EARLY_REFLECTION_TAP_GAIN: f32 = 1.0;
+
+#[inline]
+fn bounded_reverb_send_gain(value: f32) -> f32 {
+    if value.is_finite() {
+        value.clamp(0.0, MAX_REVERB_SEND_GAIN)
+    } else {
+        0.0
+    }
+}
+
+#[inline]
+fn normalized_reverb_send_gains(source: f32, listener: f32) -> [f32; 2] {
+    let source = bounded_reverb_send_gain(source);
+    let listener = bounded_reverb_send_gain(listener);
+    let total = source + listener;
+    if total > MAX_REVERB_SEND_GAIN && total > f32::EPSILON {
+        let scale = MAX_REVERB_SEND_GAIN / total;
+        [source * scale, listener * scale]
+    } else {
+        [source, listener]
+    }
+}
+
+#[inline]
+fn bounded_early_reflection_tap_gain(value: f32) -> f32 {
+    if value.is_finite() {
+        value.clamp(0.0, MAX_EARLY_REFLECTION_TAP_GAIN)
+    } else {
+        0.0
+    }
+}
+
 impl ReverbSendSnapshot {
     fn from_send(send: AudioReverbSend) -> Self {
         let send = send.sanitized();
         Self {
-            gain: send.gain,
+            gain: bounded_reverb_send_gain(send.gain),
             early_reflections: send.early_reflections,
-            early_reflections_gain: send.preset.early_reflections_gain,
+            early_reflections_gain: send
+                .preset
+                .early_reflections_gain
+                .clamp(0.0, MAX_REVERB_EARLY_GAIN),
             early_reflections_high_frequency_gain: send
                 .preset
                 .early_reflections_high_frequency_gain,
@@ -306,10 +344,12 @@ impl ReverbSendControl {
 
     fn snapshot(&self) -> ReverbSendSnapshot {
         ReverbSendSnapshot {
-            gain: f32::from_bits(self.gain_bits.load(Ordering::Relaxed)).clamp(0.0, 2.0),
+            gain: bounded_reverb_send_gain(f32::from_bits(
+                self.gain_bits.load(Ordering::Relaxed),
+            )),
             early_reflections: self.early_field.snapshot(),
             early_reflections_gain: f32::from_bits(self.early_bits.load(Ordering::Relaxed))
-                .clamp(0.0, 2.0),
+                .clamp(0.0, MAX_REVERB_EARLY_GAIN),
             early_reflections_high_frequency_gain: f32::from_bits(
                 self.early_hf_bits.load(Ordering::Relaxed),
             )
@@ -682,6 +722,9 @@ impl ReverbTank {
                     * params.early_reflections_high_frequency_gain.clamp(0.0, 1.0))
                 * params.early_reflections_gain;
         } else {
+            // Discrete reflection taps are separate authored arrivals. Bound each arrival at
+            // unity but do not normalize the entire time-separated field as if all taps were
+            // coherent at one instant; final coincident peaks are handled by the master limiter.
             for (index, tap) in params.early_reflections.active().iter().enumerate() {
                 let delay_frames = ((tap.delay_ms * 0.001 * self.sample_rate).round() as usize)
                     .min((self.sample_rate * 0.5) as usize);
@@ -694,7 +737,7 @@ impl ReverbTank {
                 let low = previous + early_alpha * (delayed - previous);
                 self.explicit_early_low_state[channel][index] = low;
                 let filtered = low + (delayed - low) * tap.high_frequency_gain.clamp(0.0, 1.0);
-                early_taps[index] = filtered * tap.gain;
+                early_taps[index] = filtered * bounded_early_reflection_tap_gain(tap.gain);
                 early += early_taps[index];
             }
         }

@@ -11,8 +11,8 @@ impl AudioRuntimeState {
             });
         }
 
-        let bytes = if let Some(locator) = self.embedded_yscd_clips.get(&uri).cloned() {
-            self.read_embedded_yscd_clip(&locator)?
+        let bytes = if let Some(locator) = self.embedded_ysncd_clips.get(&uri).cloned() {
+            self.read_embedded_ysncd_clip(&locator)?
         } else {
             self.assets
                 .raw_bytes_v1(&uri)
@@ -49,6 +49,7 @@ impl AudioRuntimeState {
             CachedClip {
                 bytes,
                 source_duration: OnceLock::new(),
+                native_pcm: OnceLock::new(),
             },
         );
         self.cached_bytes = self.cached_bytes.saturating_add(len);
@@ -61,16 +62,16 @@ impl AudioRuntimeState {
         })
     }
 
-    fn read_embedded_yscd_clip(
+    fn read_embedded_ysncd_clip(
         &self,
-        locator: &EmbeddedYscdClipLocator,
+        locator: &EmbeddedYsncdClipLocator,
     ) -> Result<Vec<u8>, String> {
         let source = self
             .assets
             .raw_bytes_v1(&locator.dictionary_path)
             .map_err(|error| {
                 format!(
-                    "YSCD VFS read failed dictionary='{}' cue='{}': {error}",
+                    "YSNCD VFS read failed dictionary='{}' cue='{}': {error}",
                     locator.dictionary_path, locator.cue_name
                 )
             })?;
@@ -89,7 +90,7 @@ impl AudioRuntimeState {
             "audio format module '{}' does not declare content_schema_version",
             descriptor.module_id
         ))?;
-        let dictionary = newengine_asset_format_nef8::decode_yscd_nef8(
+        let dictionary = newengine_asset_format_nef8::decode_ysncd_nef8(
             &source,
             &locator.dictionary_path,
             content_kind,
@@ -97,7 +98,7 @@ impl AudioRuntimeState {
         )?;
         let cue = dictionary.cue(&locator.cue_name).ok_or_else(|| {
             format!(
-                "YSCD cue '{}' not found in '{}'",
+                "YSNCD cue '{}' not found in '{}'",
                 locator.cue_name, locator.dictionary_path
             )
         })?;
@@ -106,7 +107,7 @@ impl AudioRuntimeState {
             .map(|clip| clip.bytes.clone())
             .ok_or_else(|| {
                 format!(
-                    "YSCD cue '{}' clip index {} out of range in '{}'",
+                    "YSNCD cue '{}' clip index {} out of range in '{}'",
                     locator.cue_name, locator.clip_index, locator.dictionary_path
                 )
             })
@@ -140,6 +141,36 @@ impl AudioRuntimeState {
             .ok_or_else(|| format!("audio clip cache admission failed: '{normalized}'"))
     }
 
+    fn clip_source(&mut self, uri: &str) -> Result<Box<dyn Source + Send>, String> {
+        let normalized = normalize_vfs_path(uri)?;
+        if !self.clips.contains_key(&normalized) {
+            let _ = self.clip_bytes(&normalized)?;
+        }
+
+        if let Some(decoded) = self
+            .clips
+            .get(&normalized)
+            .and_then(|clip| clip.native_pcm.get())
+            .cloned()
+        {
+            return Ok(Box::new(decoded.source()));
+        }
+
+        let bytes = self
+            .clips
+            .get(&normalized)
+            .map(|clip| Arc::clone(&clip.bytes))
+            .ok_or_else(|| format!("audio clip cache admission failed: '{normalized}'"))?;
+        if let Some(decoded) = decode_native_clip_pcm(&self.assets, &normalized, bytes.as_ref())? {
+            if let Some(clip) = self.clips.get(&normalized) {
+                let _ = clip.native_pcm.set(Arc::clone(&decoded));
+                let _ = clip.source_duration.set(decoded.total_duration());
+            }
+            return Ok(Box::new(decoded.source()));
+        }
+        decode_generic_clip_source(&normalized, bytes)
+    }
+
     fn clip_source_duration(&mut self, uri: &str) -> Result<Option<Duration>, String> {
         let normalized = normalize_vfs_path(uri)?;
         if !self.clips.contains_key(&normalized) {
@@ -152,13 +183,7 @@ impl AudioRuntimeState {
         {
             return Ok(duration);
         }
-        let bytes = self
-            .clips
-            .get(&normalized)
-            .map(|clip| Arc::clone(&clip.bytes))
-            .ok_or_else(|| format!("audio clip cache admission failed: '{normalized}'"))?;
-        let decoder = Decoder::try_from(Cursor::new(bytes))
-            .map_err(|error| format!("audio decode failed '{normalized}': {error}"))?;
+        let decoder = self.clip_source(&normalized)?;
         let duration = decoder.total_duration();
         if let Some(clip) = self.clips.get(&normalized) {
             let _ = clip.source_duration.set(duration);

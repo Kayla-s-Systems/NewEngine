@@ -10,9 +10,9 @@
     }
   },
   "engine": {
-    "modules_dir": "pluginsRuntimeAssetInspector",
-    "CACHE_FILES": "../../cache/asset-inspector",
-    "CONFIG": "../../config/asset-inspector"
+    "modules_dir": "ROOT-DIR/pluginsRuntimeAssetInspector",
+    "CACHE_FILES": "ROOT-DIR/NewEngine/neocore2/cache/asset-inspector",
+    "CONFIG": "ROOT-DIR/NewEngine/neocore2/config/asset-inspector"
   },
   "plugins": {
     "engine.logging.chronicle": {

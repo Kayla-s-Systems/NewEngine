@@ -271,17 +271,17 @@ pub(super) fn prepare_player_animation_binding(
     };
     let bind_locals = animation_runtime.bind_locals().to_vec();
     let bind_joint_frames = animation_runtime.bind_joint_frames().to_vec();
-    let braid_secondary_motion = match prepare_native_braid_secondary_motion(
+    let skeletal_secondary_motion = match prepare_skeletal_secondary_motion(
         parts,
         skeleton,
-        assignment.presentation.braid_secondary_motion.as_ref(),
+        assignment.presentation.skeletal_secondary_motion.as_ref(),
         source_to_model,
         &bind_joint_frames,
     ) {
         Ok(binding) => binding,
         Err(error) => {
             newengine_ulog_api::ulog::warn!(
-                "game-ready: player presentation degraded capability='braid_secondary_motion' err='{}' action='keep locomotion animation'",
+                "game-ready: player presentation degraded capability='skeletal_secondary_motion' err='{}' action='keep locomotion animation'",
                 error
             );
             None
@@ -825,7 +825,7 @@ pub(super) fn prepare_player_animation_binding(
         turn_sequence: 0,
         pose_continuity,
         authored_look,
-        braid_secondary_motion,
+        skeletal_secondary_motion,
         helper_pose_copies,
         eye_contract,
         head_follow,

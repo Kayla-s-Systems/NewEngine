@@ -699,7 +699,7 @@ pub(super) struct PlayerAnimationRuntimeBinding {
     /// Original-content authored look-at pose spaces. Range geometry, active joints and turn
     /// hand-off are derived from the selected native base/range clips, never from character constants.
     authored_look: AuthoredLookRuntimeBinding,
-    braid_secondary_motion: Option<AbbyBraidRuntime>,
+    skeletal_secondary_motion: Option<SkeletalSecondaryMotionRuntime>,
     /// Definition-authored local-pose copy rules resolved to this skeleton.
     helper_pose_copies: Vec<ResolvedJointCopyRule>,
     /// Imported Rigify control/face branches need the authored constraint order restored:

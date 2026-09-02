@@ -73,6 +73,7 @@ include!("audio_runtime/voices.rs");
 include!("audio_runtime/state_core.rs");
 include!("audio_runtime/voice_policy.rs");
 include!("audio_runtime/sound_graph.rs");
+include!("audio_runtime/native_clip.rs");
 include!("audio_runtime/state_cache.rs");
 include!("audio_runtime/state_playback.rs");
 include!("audio_runtime/state_control.rs");

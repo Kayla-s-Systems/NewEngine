@@ -160,21 +160,17 @@ pub(super) fn build_light_shadow_plan(
         return Ok(LightShadowPlan::disabled(lit.white_texture));
     }
 
-    let mut registry =
-        super::light_extraction::LightExtractionProviderRegistry::from_runtime_providers(
-            this.features
-                .light_extraction_providers
-                .runtime_provider_arcs(),
-        );
     if let Some(snapshot) = plugin_snapshot {
-        registry.sync_plugin_capabilities(snapshot);
+        this.features
+            .light_extraction_providers
+            .sync_plugin_capabilities(snapshot);
     }
 
     let trace_frame = super::trace_policy::should_trace_frame(this.frame.frame_index);
     if trace_frame && newengine_ulog_api::ulog::debug_enabled() {
         newengine_ulog_api::ulog::debug!(
             "render light extraction providers: {}",
-            registry.labels().join(",")
+            this.features.light_extraction_providers.labels().join(",")
         );
     }
 
@@ -191,11 +187,19 @@ pub(super) fn build_light_shadow_plan(
         surface_extent,
     );
 
-    if let Some(plan) = registry.extract_external_shadow_plan(&ctx)? {
+    if let Some(plan) = this
+        .features
+        .light_extraction_providers
+        .extract_external_shadow_plan(&ctx)?
+    {
         return Ok(plan);
     }
 
-    if let Some(command) = registry.extract_runtime_command(&ctx)? {
+    let command = this
+        .features
+        .light_extraction_providers
+        .extract_runtime_command(&ctx)?;
+    if let Some(command) = command {
         return lower_light_extraction_command(
             this,
             r,

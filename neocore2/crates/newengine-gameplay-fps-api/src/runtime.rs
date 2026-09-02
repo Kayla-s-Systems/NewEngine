@@ -93,7 +93,7 @@ impl Default for FpsPlayerTuning {
     #[inline]
     fn default() -> Self {
         // Mechanics-safe schema defaults only. Product/player tuning is authored by the
-        // active project and installed as `FpsDemoRules` during scene bootstrap.
+        // active project and installed as `FpsRuntimeRules` during scene bootstrap.
         Self {
             motion_response: None,
             body_radius: 0.35,
@@ -156,7 +156,7 @@ impl FpsPlayerTuning {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct FpsDemoRules {
+pub struct FpsRuntimeRules {
     pub default_status: String,
     pub pickup_status: String,
     pub target_status: String,
@@ -168,7 +168,7 @@ pub struct FpsDemoRules {
     pub player: FpsPlayerTuning,
 }
 
-impl Default for FpsDemoRules {
+impl Default for FpsRuntimeRules {
     #[inline]
     fn default() -> Self {
         Self {
@@ -186,22 +186,22 @@ impl Default for FpsDemoRules {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct FpsDemoPickup {
+pub struct FpsObjectivePickup {
     pub radius: f32,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct FpsDemoGoal {
+pub struct FpsObjectiveGoal {
     pub radius: f32,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct FpsDemoHazard {
+pub struct FpsObjectiveHazard {
     pub radius: f32,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct FpsDemoTarget;
+pub struct FpsObjectiveTarget;
 
 /// Persistent physical brass ejected by an FPS weapon shot. The gameplay layer owns motion and
 /// collision; product world packages may attach an authored visual selected by `variant`.
@@ -308,7 +308,7 @@ impl PersistentImpactDebris {
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
-pub struct FpsDemoState {
+pub struct FpsObjectiveState {
     pub title: String,
     pub objective: String,
     pub elapsed_sec: f32,
@@ -324,14 +324,14 @@ pub struct FpsDemoState {
 }
 
 #[allow(dead_code)]
-impl FpsDemoState {
+impl FpsObjectiveState {
     #[inline]
     pub fn new(pickups_total: u32) -> Self {
         Self::from_rules(
             pickups_total,
             String::new(),
             String::new(),
-            &FpsDemoRules::default(),
+            &FpsRuntimeRules::default(),
         )
     }
 
@@ -340,7 +340,7 @@ impl FpsDemoState {
         pickups_total: u32,
         title: impl Into<String>,
         objective: impl Into<String>,
-        rules: &FpsDemoRules,
+        rules: &FpsRuntimeRules,
     ) -> Self {
         Self::from_rules_with_targets(pickups_total, 0, title, objective, rules)
     }
@@ -351,7 +351,7 @@ impl FpsDemoState {
         targets_total: u32,
         title: impl Into<String>,
         objective: impl Into<String>,
-        rules: &FpsDemoRules,
+        rules: &FpsRuntimeRules,
     ) -> Self {
         Self {
             title: title.into(),
@@ -382,7 +382,7 @@ impl FpsDemoState {
             return self.failed_progress_label.clone();
         }
         format!(
-            "Cores {}/{} · Targets {}/{} · {:.1}s",
+            "Pickups {}/{} · Targets {}/{} · {:.1}s",
             self.pickups_collected.min(self.pickups_total),
             self.pickups_total,
             self.targets_destroyed.min(self.targets_total),
@@ -392,7 +392,7 @@ impl FpsDemoState {
     }
 }
 
-impl Default for FpsDemoState {
+impl Default for FpsObjectiveState {
     #[inline]
     fn default() -> Self {
         Self::new(0)

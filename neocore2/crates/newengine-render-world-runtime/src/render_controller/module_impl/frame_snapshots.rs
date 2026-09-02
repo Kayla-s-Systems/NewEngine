@@ -12,9 +12,9 @@ use newengine_transform::GlobalTransform;
 use std::sync::Arc;
 
 use newengine_gameplay_world_runtime::gameplay::{
-    display_visible_in_mode, player_render_model_matrix, EnvironmentDomeRenderState,
-    PlayerSkinBinding, PlayerVisualKind, PlayerVisualPart, WorldItemPresentation,
-    WorldItemVisualPart,
+    display_shadow_caster_visible_in_mode, display_visible_in_mode, player_render_model_matrix,
+    EnvironmentDomeRenderState, PlayerSkinBinding, PlayerVisualKind, PlayerVisualPart,
+    WorldItemPresentation, WorldItemVisualPart,
 };
 
 use super::{scene, RuntimeRenderController};
@@ -105,6 +105,84 @@ impl PrimitiveSceneSnapshot {
     }
 }
 
+/// Frame-coherent admission set for skinned directional-shadow casters.
+///
+/// CSM cascades share entity/material/owner admission; only the light matrix and
+/// projected-size decision vary per cascade. Capturing this once prevents four
+/// complete ECS scans of the same character parts every frame.
+pub(in crate::render_controller) struct SkinnedShadowSceneSnapshot {
+    frame_index: u64,
+    scene_key: usize,
+    runtime: bool,
+    pub(super) entries: Box<[SkinnedShadowSceneEntry]>,
+}
+
+pub(super) struct SkinnedShadowSceneEntry {
+    pub(super) entity: newengine_ecs::EntityId,
+    pub(super) owner: newengine_ecs::EntityId,
+    pub(super) primitive: Primitive,
+    pub(super) render_model: Mat4,
+    pub(super) material_ref: Option<MaterialRef>,
+    pub(super) proxy_center_ws: Vec3,
+    pub(super) proxy_radius_ws: f32,
+    pub(super) pose_generation: u64,
+}
+
+impl SkinnedShadowSceneSnapshot {
+    fn capture(frame_index: u64, scene: &Scene, runtime: bool) -> Self {
+        let world = scene.world();
+        let mut entries = Vec::new();
+        for (entity, primitive, global) in world.query2::<Primitive, GlobalTransform>() {
+            let Some(skin) = world.get::<PlayerSkinBinding>(entity) else {
+                continue;
+            };
+            if !display_shadow_caster_visible_in_mode(world, entity, runtime) {
+                continue;
+            }
+            let render_model = player_render_model_matrix(world, entity, global.0);
+            let owner_height = world
+                .get::<newengine_gameplay_world_runtime::gameplay::PlayerModelBinding>(skin.owner)
+                .map(|binding| binding.target_height.max(1.0))
+                .unwrap_or(2.0);
+            let proxy_center_ws = world
+                .get::<GlobalTransform>(skin.owner)
+                .map(|owner_global| {
+                    owner_global
+                        .0
+                        .transform_point3(Vec3::new(0.0, owner_height * 0.5, 0.0))
+                })
+                .unwrap_or_else(|| render_model.transform_point3(Vec3::ZERO));
+            let pose_generation = world
+                .get::<newengine_gameplay_world_runtime::gameplay::PlayerModelBinding>(skin.owner)
+                .map(|binding| binding.assignment_revision)
+                .unwrap_or(0);
+            entries.push(SkinnedShadowSceneEntry {
+                entity,
+                owner: skin.owner,
+                primitive: *primitive,
+                render_model,
+                material_ref: world.get::<MaterialRef>(entity).copied(),
+                proxy_center_ws,
+                proxy_radius_ws: owner_height * 0.80 + 0.45,
+                pose_generation,
+            });
+        }
+        Self {
+            frame_index,
+            scene_key: scene as *const Scene as usize,
+            runtime,
+            entries: entries.into_boxed_slice(),
+        }
+    }
+
+    #[inline]
+    fn matches(&self, frame_index: u64, scene: &Scene, runtime: bool) -> bool {
+        self.frame_index == frame_index
+            && self.scene_key == scene as *const Scene as usize
+            && self.runtime == runtime
+    }
+}
+
 impl RuntimeRenderController {
     /// Returns the frame-coherent primitive snapshot and whether it was already captured.
     pub(super) fn primitive_scene_snapshot(
@@ -121,6 +199,27 @@ impl RuntimeRenderController {
 
         let snapshot = Arc::new(PrimitiveSceneSnapshot::capture(frame_index, scene, runtime));
         self.frame.primitive_scene_snapshot = Some(Arc::clone(&snapshot));
+        (snapshot, false)
+    }
+
+    /// Returns skinned shadow admission captured once for all CSM cascades.
+    pub(super) fn skinned_shadow_scene_snapshot(
+        &mut self,
+        scene: &Scene,
+        runtime: bool,
+    ) -> (Arc<SkinnedShadowSceneSnapshot>, bool) {
+        let frame_index = self.frame.frame_index;
+        if let Some(snapshot) = self.frame.skinned_shadow_scene_snapshot.as_ref() {
+            if snapshot.matches(frame_index, scene, runtime) {
+                return (Arc::clone(snapshot), true);
+            }
+        }
+        let snapshot = Arc::new(SkinnedShadowSceneSnapshot::capture(
+            frame_index,
+            scene,
+            runtime,
+        ));
+        self.frame.skinned_shadow_scene_snapshot = Some(Arc::clone(&snapshot));
         (snapshot, false)
     }
 }

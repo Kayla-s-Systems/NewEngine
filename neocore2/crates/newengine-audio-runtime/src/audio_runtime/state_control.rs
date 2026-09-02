@@ -100,13 +100,11 @@ impl AudioRuntimeState {
                     voice.physical_source_origin = Duration::ZERO;
                 }
             }
-            voice.virtual_source_position = voice.normalized_source_position(
-                if stream_source {
-                    target
-                } else {
-                    target.mul_f32(voice.speed)
-                },
-            );
+            voice.virtual_source_position = voice.normalized_source_position(if stream_source {
+                target
+            } else {
+                target.mul_f32(voice.speed)
+            });
             voice.virtual_since = (!voice.paused).then_some(now);
         }
         if let Some(paused) = request.paused {
@@ -158,6 +156,12 @@ impl AudioRuntimeState {
                 }
             }
         }
+
+        // A logical voice can be accepted while the lazy native output is still initializing.
+        // Revisit physical arbitration on every subsequent update until that voice materializes;
+        // otherwise non-spatial looping ambience can remain virtual forever because none of its
+        // steady-state fields necessarily changes after the initial play request.
+        needs_rebalance |= voice.is_virtual();
 
         // Release the mutable voice borrow before room-bus allocation/rebinding and gain updates.
         let _ = voice;

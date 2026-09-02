@@ -6,7 +6,7 @@ use newengine_physics_contracts::{CollisionShapeDesc, PhysicsBodyDesc};
 use newengine_sim::{AngularVelocity, Velocity};
 
 fn authored_physics_surface(
-    prefab: &GameReadyPrefabSpec,
+    prefab: &AuthoredWorldPlacementSpec,
 ) -> Option<newengine_engine_runtime::gameplay::PhysicsSurface> {
     let id = prefab.surface_id.trim().to_owned();
     let event_bindings = prefab
@@ -28,7 +28,7 @@ fn authored_physics_surface(
 fn attach_authored_physics_surface(
     world: &mut newengine_ecs::World,
     entity: EntityId,
-    prefab: &GameReadyPrefabSpec,
+    prefab: &AuthoredWorldPlacementSpec,
 ) {
     if let Some(surface) = authored_physics_surface(prefab) {
         let _ = world.insert(entity, surface);
@@ -39,7 +39,7 @@ fn attach_authored_physics_surface(
 }
 
 #[inline]
-fn ensure_ydd_prefab_source(prefab: &GameReadyPrefabSpec, role: &str) -> Result<(), String> {
+fn ensure_ydd_prefab_source(prefab: &AuthoredWorldPlacementSpec, role: &str) -> Result<(), String> {
     newengine_assets_api::require_asset_reference_extension(&prefab.source, &["ydd"], true)
         .map(|_| ())
         .map_err(|error| {
@@ -101,7 +101,7 @@ fn attach_unambiguous_impact_material(
 fn attach_authored_map_placement(
     world: &mut newengine_ecs::World,
     entity: EntityId,
-    prefab: &GameReadyPrefabSpec,
+    prefab: &AuthoredWorldPlacementSpec,
 ) {
     if prefab.authored_map_ref.trim().is_empty() || prefab.authored_placement_id.trim().is_empty() {
         return;
@@ -130,7 +130,7 @@ pub(super) fn spawn_collision_ydd_prefab_from_decoded(
     world: &mut newengine_ecs::World,
     mats: &MaterialRegistry,
     parent: EntityId,
-    prefab: &GameReadyPrefabSpec,
+    prefab: &AuthoredWorldPlacementSpec,
     decoded: &[DecodedPrefabMeshPart],
 ) -> Result<(u32, u64), String> {
     ensure_ydd_prefab_source(prefab, "collision")?;
@@ -219,7 +219,7 @@ pub(super) fn spawn_box_collision_ydd_prefab_from_decoded(
     world: &mut newengine_ecs::World,
     mats: &MaterialRegistry,
     parent: EntityId,
-    prefab: &GameReadyPrefabSpec,
+    prefab: &AuthoredWorldPlacementSpec,
     decoded: &[DecodedPrefabMeshPart],
 ) -> Result<(u32, u64), String> {
     ensure_ydd_prefab_source(prefab, "box collision")?;
@@ -309,7 +309,7 @@ pub(super) fn spawn_dynamic_ydd_prefab_from_decoded(
     prims: &mut PrimitiveRegistry,
     mats: &MaterialRegistry,
     parent: EntityId,
-    prefab: &GameReadyPrefabSpec,
+    prefab: &AuthoredWorldPlacementSpec,
     decoded: &[DecodedPrefabMeshPart],
 ) -> Result<(u32, u64), String> {
     ensure_ydd_prefab_source(prefab, "dynamic")?;
@@ -402,7 +402,7 @@ pub(super) fn spawn_static_ydd_prefab_from_decoded(
     prims: &mut PrimitiveRegistry,
     mats: &MaterialRegistry,
     parent: EntityId,
-    prefab: &GameReadyPrefabSpec,
+    prefab: &AuthoredWorldPlacementSpec,
     decoded: &[DecodedPrefabMeshPart],
 ) -> Result<(u32, u64), String> {
     ensure_ydd_prefab_source(prefab, "static")?;

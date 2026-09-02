@@ -1,4 +1,3 @@
-
 use super::*;
 use rodio::buffer::SamplesBuffer;
 
@@ -119,7 +118,6 @@ fn paused_node_does_not_advance_source_clock() {
     assert_eq!(handle.get_pos(), Duration::ZERO);
 }
 
-
 #[test]
 fn same_sample_commands_preserve_submission_sequence() {
     let (graph, mut source) = native_block_render_graph(
@@ -138,4 +136,39 @@ fn same_sample_commands_preserve_submission_sequence() {
     assert!(rendered[32..]
         .iter()
         .all(|sample| (*sample - 0.5).abs() < 1.0e-6));
+}
+
+#[test]
+fn master_output_limiter_bounds_overloaded_voice_sum_without_touching_unity() {
+    let (graph, mut source) = native_block_render_graph(
+        ChannelCount::new(1).unwrap(),
+        SampleRate::new(48_000).unwrap(),
+    );
+    graph
+        .add_source(mono(&[1.0, 1.0]), 1.0, 1.0, false, Duration::ZERO)
+        .unwrap();
+    graph
+        .add_source(mono(&[1.0, 1.0]), 1.0, 1.0, false, Duration::ZERO)
+        .unwrap();
+    assert!((source.next().unwrap() - 1.0).abs() < 1.0e-6);
+}
+
+#[test]
+fn master_output_limiter_is_channel_linked() {
+    let (graph, mut source) = native_block_render_graph(
+        ChannelCount::new(2).unwrap(),
+        SampleRate::new(48_000).unwrap(),
+    );
+    let stereo = SamplesBuffer::new(
+        ChannelCount::new(2).unwrap(),
+        SampleRate::new(48_000).unwrap(),
+        vec![2.0, 1.0],
+    );
+    graph
+        .add_source(stereo, 1.0, 1.0, false, Duration::ZERO)
+        .unwrap();
+    let left = source.next().unwrap();
+    let right = source.next().unwrap();
+    assert!((left - 1.0).abs() < 1.0e-6, "left={left}");
+    assert!((right - 0.5).abs() < 1.0e-6, "right={right}");
 }

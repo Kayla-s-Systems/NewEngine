@@ -49,9 +49,9 @@ fn non_finite_camera_frame_never_reaches_spatial_audio() {
 }
 
 #[test]
-fn authored_audio_emitter_references_yscd_cue_not_backend_clip() {
-    let emitter = AudioEmitter::new("shared/audio/weapon/rifle/rifle.yscd@fire");
-    assert_eq!(emitter.cue, "shared/audio/weapon/rifle/rifle.yscd@fire");
+fn authored_audio_emitter_references_ysncd_cue_not_backend_clip() {
+    let emitter = AudioEmitter::new("shared/audio/weapon/rifle/rifle.ysncd@fire");
+    assert_eq!(emitter.cue, "shared/audio/weapon/rifle/rifle.ysncd@fire");
     assert!(emitter.enabled);
     assert!(emitter.autoplay);
     assert!(emitter.spatial);
@@ -73,7 +73,7 @@ fn acoustic_provider_batches_multi_ray_queries_and_explicitly_ignores_listener_p
             ..Transform::default()
         },
     );
-    let mut authored = AudioEmitter::new("shared/audio/weapon/rifle/rifle.yscd@fire");
+    let mut authored = AudioEmitter::new("shared/audio/weapon/rifle/rifle.ysncd@fire");
     authored.occlusion.ray_count = 3;
     let _ = world.insert(emitter, authored);
 
@@ -128,7 +128,7 @@ fn acoustic_provider_resolves_partial_blockage_into_continuous_occlusion_observa
             ..Transform::default()
         },
     );
-    let mut authored = AudioEmitter::new("shared/audio/weapon/rifle/rifle.yscd@fire");
+    let mut authored = AudioEmitter::new("shared/audio/weapon/rifle/rifle.ysncd@fire");
     authored.occlusion.ray_count = 3;
     let _ = world.insert(emitter, authored);
     let blocker = world.spawn();
@@ -187,7 +187,7 @@ fn acoustic_provider_marks_all_blocked_rays_as_full_occlusion() {
             ..Transform::default()
         },
     );
-    let mut authored = AudioEmitter::new("shared/audio/weapon/rifle/rifle.yscd@fire");
+    let mut authored = AudioEmitter::new("shared/audio/weapon/rifle/rifle.ysncd@fire");
     authored.occlusion.ray_count = 3;
     let _ = world.insert(emitter, authored);
     let blocker = world.spawn();
@@ -234,7 +234,7 @@ fn acoustic_provider_treats_emitter_endpoint_hits_as_clear() {
             ..Transform::default()
         },
     );
-    let mut authored = AudioEmitter::new("shared/audio/weapon/rifle/rifle.yscd@fire");
+    let mut authored = AudioEmitter::new("shared/audio/weapon/rifle/rifle.ysncd@fire");
     authored.occlusion.ray_count = 3;
     let _ = world.insert(emitter, authored);
 
@@ -280,7 +280,7 @@ fn authored_acoustic_surface_override_wins_over_physics_surface_fallback() {
             ..Transform::default()
         },
     );
-    let mut authored_emitter = AudioEmitter::new("shared/audio/weapon/rifle/rifle.yscd@fire");
+    let mut authored_emitter = AudioEmitter::new("shared/audio/weapon/rifle/rifle.ysncd@fire");
     authored_emitter.occlusion.ray_count = 1;
     let _ = world.insert(emitter, authored_emitter);
 
@@ -855,7 +855,7 @@ fn reflection_visibility_contract_reaches_directional_environment_send() {
     );
     let _ = world.insert(
         emitter,
-        AudioEmitter::new("shared/audio/weapon/rifle/rifle.yscd@fire"),
+        AudioEmitter::new("shared/audio/weapon/rifle/rifle.ysncd@fire"),
     );
 
     let provider = AudioReflectionPhysicsQueryProvider::new();
@@ -970,7 +970,7 @@ fn proven_occlusion_blocker_drives_only_its_diffraction_edge_graph() {
             ..Transform::default()
         },
     );
-    let _ = world.insert(emitter, AudioEmitter::new("shared/audio/test.yscd@edge"));
+    let _ = world.insert(emitter, AudioEmitter::new("shared/audio/test.ysncd@edge"));
     let _ = world.insert(
         emitter,
         AudioOcclusionObservation {

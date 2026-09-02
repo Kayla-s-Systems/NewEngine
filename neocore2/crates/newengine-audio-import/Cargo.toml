@@ -1,0 +1,11 @@
+[package]
+name = "newengine-audio-import"
+version = "0.2.0"
+edition = "2021"
+readme = "README.md"
+description = "Research/import audio container probing and canonicalization contracts for NorthStar"
+license = "Proprietary"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+newengine-audio-xvag = { path = "../newengine-audio-xvag" }

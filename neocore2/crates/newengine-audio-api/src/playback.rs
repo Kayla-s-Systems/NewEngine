@@ -235,7 +235,7 @@ pub struct AudioPreloadAck {
     pub bytes: usize,
     #[serde(default)]
     pub provider: String,
-    /// Provider-authored semantic trace lines, e.g. YSCD dictionary resolution.
+    /// Provider-authored semantic trace lines, e.g. YSNCD dictionary resolution.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<String>,
 }
@@ -573,7 +573,7 @@ pub struct AudioCuePlayRequest {
     pub acoustic: AudioAcousticState,
     #[serde(default)]
     pub environment: AudioEnvironmentState,
-    /// Trigger-time project parameters consumed by YSCD SoundGraph. Names are opaque.
+    /// Trigger-time project parameters consumed by YSNCD SoundGraph. Names are opaque.
     #[serde(default)]
     pub parameters: AudioParameterSet,
     /// Optional absolute provider render sample for exact physical onset.

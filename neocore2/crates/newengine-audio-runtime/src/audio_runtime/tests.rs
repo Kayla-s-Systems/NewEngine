@@ -37,18 +37,18 @@ mod tests {
         assert!(normalize_vfs_path("C:/audio/test.wav").is_err());
         assert!(normalize_vfs_path("../audio/test.wav").is_err());
         assert!(normalize_vfs_path("shared/audio/clip.wav@entry").is_err());
-        assert!(normalize_vfs_path("shared/audio/weapon/rifle/rifle.yscd@fire").is_err());
+        assert!(normalize_vfs_path("shared/audio/weapon/rifle/rifle.ysncd@fire").is_err());
     }
 
     #[test]
-    fn yscd_metadata_maps_to_audio_runtime_semantics() {
-        assert_eq!(audio_route_from_yscd("project.test.route").unwrap(), AudioRouteId::new("project.test.route"));
+    fn ysncd_metadata_maps_to_audio_runtime_semantics() {
+        assert_eq!(audio_route_from_ysncd("project.test.route").unwrap(), AudioRouteId::new("project.test.route"));
         assert_eq!(
-            sound_cue_spatial_policy_from_yscd("spatial").unwrap(),
+            sound_cue_spatial_policy_from_ysncd("spatial").unwrap(),
             SoundCueSpatialPolicy::Spatial
         );
         let attenuation =
-            audio_attenuation_from_yscd(&newengine_asset_format_nef8::YscdAttenuation {
+            audio_attenuation_from_ysncd(&newengine_asset_format_nef8::YsncdAttenuation {
                 min_distance: 2.0,
                 max_distance: 140.0,
                 curve: "inverse".to_owned(),
@@ -66,11 +66,11 @@ mod tests {
     }
 
     #[test]
-    fn yscd_embedded_clip_keys_are_stable_and_codec_suffixed() {
-        let a = embedded_yscd_clip_key("shared/audio/rifle.yscd@fire", 0, "wav");
-        let b = embedded_yscd_clip_key("shared/audio/rifle.yscd@fire", 0, "wav");
+    fn ysncd_embedded_clip_keys_are_stable_and_codec_suffixed() {
+        let a = embedded_ysncd_clip_key("shared/audio/rifle.ysncd@fire", 0, "wav");
+        let b = embedded_ysncd_clip_key("shared/audio/rifle.ysncd@fire", 0, "wav");
         assert_eq!(a, b);
-        assert!(a.starts_with("__yscd/"));
+        assert!(a.starts_with("__ysncd/"));
         assert!(a.ends_with(".wav"));
     }
 

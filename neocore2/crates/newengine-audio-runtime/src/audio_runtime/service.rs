@@ -33,7 +33,7 @@ fn audio_service(state: AudioRuntimeState) -> newengine_plugin_api::ServiceV1Dyn
         "stream-logical-virtualization",
         "block-native-render-graph",
         "sample-addressed-render-scheduling",
-        "yscd-sound-graph-v1",
+        "ysncd-sound-graph-v1",
         "sound-graph-trigger-parameters",
         "block-based-native-render-graph",
         "single-master-output",
@@ -50,6 +50,9 @@ fn audio_service(state: AudioRuntimeState) -> newengine_plugin_api::ServiceV1Dyn
         "environment-zones",
         "portal-sends",
         "dynamic-reverb",
+        "bounded-reverb-sends",
+        "bounded-early-reflection-arrivals",
+        "stereo-linked-output-peak-limiter",
     ])
     .notes("First-party native audio provider; replaceable through engine.audio gateway routing.");
     newengine_ulog_api::ulog::info!("audio service build: step='description-done'");

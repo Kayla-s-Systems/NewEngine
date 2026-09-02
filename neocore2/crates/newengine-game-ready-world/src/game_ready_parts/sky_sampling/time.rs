@@ -59,7 +59,7 @@ pub(crate) fn environment_frame_for_sky_cycle(
     };
     let request = newengine_world_environment_api::EnvironmentFrameRequest {
         frame_id: snapshot.frame_index,
-        world_instance_id: "game-ready-fps.world".to_owned(),
+        world_instance_id: cycle.world_instance_id.clone(),
         time: snapshot,
         observer_position: newengine_world_environment_api::Vec3Dto::zero(),
         observer_cell: None,

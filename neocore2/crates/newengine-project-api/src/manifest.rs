@@ -335,8 +335,8 @@ impl Default for ProjectManifest {
                 required: false,
                 owner: "project".to_owned(),
             }],
-            definitions: vec![PathBuf::from("definitions")],
-            scripts: vec![PathBuf::from("scripts")],
+            definitions: vec![PathBuf::from("Content/definitions")],
+            scripts: vec![PathBuf::from("Content/scripts")],
             plugins: Vec::new(),
         }
     }

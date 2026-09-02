@@ -10,7 +10,9 @@ use newengine_game_data_lua::{
 use newengine_runtime_host::app_launcher::RuntimeHostRuntimeUnitRegistration;
 use newengine_service_api::{EngineRuntimeUnitKind, EngineRuntimeUnitSpec};
 
-use crate::scene_bootstrap::{GameReadySceneBootstrapModule, GameReadyWorldSceneBootstrapProvider};
+use crate::scene_bootstrap::{
+    GameReadyWorldSceneBootstrapProvider, ProjectAudioMixBootstrapCompletion,
+};
 use crate::world_runtime::GameReadyWorldRuntimeProvider;
 
 const GAME_READY_UNIT_TAGS: &[&str] = &[
@@ -125,7 +127,10 @@ fn scene_bootstrap_factory(
     scene.set_scene_bootstrap_provider(GameReadyWorldSceneBootstrapProvider::shared(
         game_data_provider,
     ));
-    Ok(Some(Box::new(GameReadySceneBootstrapModule::new(scene))))
+    Ok(Some(Box::new(
+        newengine_authored_world_runtime::AuthoredWorldBootstrapModule::new(scene)
+            .with_completion(Arc::new(ProjectAudioMixBootstrapCompletion)),
+    )))
 }
 
 fn render_contributions_mut(
