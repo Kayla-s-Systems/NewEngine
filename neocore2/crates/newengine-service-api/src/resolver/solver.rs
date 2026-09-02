@@ -61,7 +61,7 @@ impl CompositionSolver {
                 let explanation = explain_candidate(
                     &capability_matrix,
                     requirement,
-                    &typed_requirements,
+                    typed_requirements,
                     &candidate,
                 );
                 if explanation.rejection_reasons.is_empty() {
