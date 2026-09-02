@@ -19,9 +19,7 @@ mod voice;
 
 use commands::{render_command_node_id, RenderCommand, RenderCommandKind};
 use limiter::OutputPeakLimiter;
-use voice::{
-    finite_gain, finite_speed, BlockSourceAdapter, BlockVoiceNode, BlockVoiceNodeInit,
-};
+use voice::{finite_gain, finite_speed, BlockSourceAdapter, BlockVoiceNode, BlockVoiceNodeInit};
 
 pub(crate) const NATIVE_BLOCK_FRAMES: usize = 256;
 const MAX_BLOCK_NODES: usize = 256;
