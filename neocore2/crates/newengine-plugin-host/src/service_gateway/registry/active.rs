@@ -130,25 +130,29 @@ pub(crate) fn host_route_composition_candidates(
         .map(|route| route.composition_candidate())
         .collect()
 }
-fn runtime_contract_resolution(
+struct RuntimeContractResolutionInput<'a> {
     subject: CompositionContractResolutionSubject,
-    gateway_id: &str,
+    gateway_id: &'a str,
     candidate_id: Option<String>,
     capability_id: String,
-    reference: &str,
-    entry: &newengine_runtime_contract_catalog::RuntimeContractEntry,
+    reference: &'a str,
     min_version: u32,
     max_version: Option<u32>,
+}
+
+fn runtime_contract_resolution(
+    input: RuntimeContractResolutionInput<'_>,
+    entry: &newengine_runtime_contract_catalog::RuntimeContractEntry,
 ) -> CompositionContractResolution {
     CompositionContractResolution {
-        subject,
-        gateway_id: gateway_id.to_owned(),
-        candidate_id,
-        capability_id,
-        reference: reference.to_owned(),
+        subject: input.subject,
+        gateway_id: input.gateway_id.to_owned(),
+        candidate_id: input.candidate_id,
+        capability_id: input.capability_id,
+        reference: input.reference.to_owned(),
         canonical_id: entry.spec.key.clone(),
-        min_version,
-        max_version,
+        min_version: input.min_version,
+        max_version: input.max_version,
         authority: match entry.authority {
             newengine_runtime_contract_catalog::RuntimeContractAuthority::Engine => "engine",
             newengine_runtime_contract_catalog::RuntimeContractAuthority::Plugin => "plugin",
@@ -359,14 +363,16 @@ impl ActiveGatewayRegistry {
                 continue;
             };
             resolutions.push(runtime_contract_resolution(
-                CompositionContractResolutionSubject::Candidate,
-                &route.gateway_id,
-                Some(route.selection_key.clone()),
-                route.backend_capability_id.clone(),
-                &reference,
+                RuntimeContractResolutionInput {
+                    subject: CompositionContractResolutionSubject::Candidate,
+                    gateway_id: &route.gateway_id,
+                    candidate_id: Some(route.selection_key.clone()),
+                    capability_id: route.backend_capability_id.clone(),
+                    reference: &reference,
+                    min_version: version.unwrap_or(0),
+                    max_version: version,
+                },
                 entry,
-                version.unwrap_or(0),
-                version,
             ));
         }
         for gateway in self.plan.explanation().gateways() {
@@ -378,14 +384,16 @@ impl ActiveGatewayRegistry {
                     continue;
                 };
                 resolutions.push(runtime_contract_resolution(
-                    CompositionContractResolutionSubject::Requirement,
-                    &gateway.gateway_id,
-                    None,
-                    requirement.capability_id.clone(),
-                    reference,
+                    RuntimeContractResolutionInput {
+                        subject: CompositionContractResolutionSubject::Requirement,
+                        gateway_id: &gateway.gateway_id,
+                        candidate_id: None,
+                        capability_id: requirement.capability_id.clone(),
+                        reference,
+                        min_version: requirement.min_contract_version,
+                        max_version: requirement.max_contract_version,
+                    },
                     entry,
-                    requirement.min_contract_version,
-                    requirement.max_contract_version,
                 ));
             }
         }

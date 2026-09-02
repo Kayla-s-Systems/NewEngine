@@ -72,7 +72,7 @@ fn finalize_player_pose_and_palette(
     let look_allowed = !noclip_enabled
         && !fall_presentation_requested
         && unarmed_attack_sequence == 0
-        && equipment_stance != EquipmentPresentationStance::Reload;
+        && equipment_allows_authored_head_look(equipment_stance);
     if look_allowed {
         let look_state = resolve_authored_look_state(active_state, equipment_stance, look_context);
         let _ = binding.authored_look.apply(
@@ -194,6 +194,7 @@ fn finalize_player_pose_and_palette(
                 rifle_secondary_rotation_offset_local,
                 equipment_hand_contact_pose_present,
                 equipment_prop_socket_authority_present,
+                strict_rifle_contact_contract,
                 rifle_reload_progress
                     .map(|progress| progress <= 0.08 || progress >= 0.92)
                     .unwrap_or(true),

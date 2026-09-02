@@ -1,14 +1,9 @@
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FoliageExtractionPathV1 {
+    #[default]
     CpuFallback,
     GpuIndirect,
-}
-
-impl Default for FoliageExtractionPathV1 {
-    fn default() -> Self {
-        Self::CpuFallback
-    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,7 +51,7 @@ impl Default for FoliageInstanceInputV1 {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FoliageExtractionRequestV1 {
     pub settings: FoliageSettings,
@@ -64,18 +59,6 @@ pub struct FoliageExtractionRequestV1 {
     pub instances: Vec<FoliageInstanceInputV1>,
     pub view: FoliageExtractionViewV1,
     pub capabilities: FoliageExtractionCapabilitiesV1,
-}
-
-impl Default for FoliageExtractionRequestV1 {
-    fn default() -> Self {
-        Self {
-            settings: FoliageSettings::default(),
-            runtime_asset: FoliageRuntimeAssetV1::default(),
-            instances: Vec::new(),
-            view: FoliageExtractionViewV1::default(),
-            capabilities: FoliageExtractionCapabilitiesV1::default(),
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

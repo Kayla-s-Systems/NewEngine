@@ -30,7 +30,7 @@ fn normalized_reverb_send_gains(source: f32, listener: f32) -> [f32; 2] {
     let source = bounded_reverb_send_gain(source);
     let listener = bounded_reverb_send_gain(listener);
     let total = source + listener;
-    if total > MAX_REVERB_SEND_GAIN && total > f32::EPSILON {
+    if total > MAX_REVERB_SEND_GAIN {
         let scale = MAX_REVERB_SEND_GAIN / total;
         [source * scale, listener * scale]
     } else {

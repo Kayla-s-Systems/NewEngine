@@ -69,7 +69,7 @@ impl LightSceneSnapshot {
     #[inline]
     pub fn sorted_point_lights(&self) -> Vec<PointLightSnapshot> {
         let mut pts = self.point_lights.clone();
-        pts.sort_by(|a, b| a.stable_id.cmp(&b.stable_id));
+        pts.sort_by_key(|light| light.stable_id);
         pts
     }
 
@@ -84,7 +84,7 @@ impl LightSceneSnapshot {
     #[inline]
     pub fn sorted_spot_lights(&self) -> Vec<SpotLightSnapshot> {
         let mut spots = self.spot_lights.clone();
-        spots.sort_by(|a, b| a.stable_id.cmp(&b.stable_id));
+        spots.sort_by_key(|light| light.stable_id);
         spots
     }
 }

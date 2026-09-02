@@ -499,7 +499,7 @@
         "does_not_require_concrete_runtime_internals",
         "route_is_descriptor_driven",
         "active_and_shadowed_routes_visible_in_diagnostics",
-        "font_dictionary_comes_from_yft_asset",
+        "font_dictionary_comes_from_yfd_asset",
         "shaping_uses_text_dto_not_ui_provider_state",
         "atlas_pages_are_dto_outputs"
       ]

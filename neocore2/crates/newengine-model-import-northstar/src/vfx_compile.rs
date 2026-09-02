@@ -151,7 +151,12 @@ pub fn compile_vfx_texture_dictionary(
                 ));
             }
             let alpha_rgba = alpha.base_rgba8(&pak)?;
-            for (color, mask) in rgba.chunks_exact_mut(4).zip(alpha_rgba.chunks_exact(4)) {
+            for (color, mask) in rgba
+                .as_chunks_mut::<4>()
+                .0
+                .iter_mut()
+                .zip(alpha_rgba.as_chunks::<4>().0.iter())
+            {
                 color[3] = mask[3];
             }
             Some(alpha)

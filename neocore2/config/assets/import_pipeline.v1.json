@@ -36,7 +36,7 @@
     "supported_importers": [
       "northstar.importer.blender_map.v1",
       "northstar.importer.neui.v1",
-      "northstar.importer.yft_font.v1",
+      "northstar.importer.yfd_font.v1",
       "northstar.importer.speedtree_srt.v1",
       "northstar.importer.speedtree_spm.v1"
     ],

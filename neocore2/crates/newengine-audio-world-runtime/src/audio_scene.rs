@@ -243,7 +243,7 @@ impl AudioSceneRuntimeModule {
         self.tick = self.tick.wrapping_add(1);
         let playback_available = self.refresh_provider();
         let (emitters, environment_frame) = self.snapshot_emitters();
-        if !emitters.is_empty() && (self.tick <= 3 || self.tick % 300 == 0) {
+        if !emitters.is_empty() && (self.tick <= 3 || self.tick.is_multiple_of(300)) {
             newengine_ulog_api::ulog::info!(
                 "audio scene runtime: tick={} emitters={} playback_available={} provider='{}' managed={} autoplay_armed={} policy='throttled-runtime-health'",
                 self.tick,

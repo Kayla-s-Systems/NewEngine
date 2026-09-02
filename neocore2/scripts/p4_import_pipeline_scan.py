@@ -96,7 +96,7 @@ def scan_importer_descriptors() -> list[Finding]:
 def scan_pipeline_config() -> list[Finding]:
     data, findings = read_json(PIPELINE_CONFIG)
     text = json.dumps(data, sort_keys=True)
-    for token in ("source_to_runtime_graph", "dependency_invalidation", "cache_key_policy", "assets.package_writer.nepak", "asset.package_write_nepak_json_v1", "descriptor_driven", "northstar.importer.yft_font.v1", "invalidation_index"):
+    for token in ("source_to_runtime_graph", "dependency_invalidation", "cache_key_policy", "assets.package_writer.nepak", "asset.package_write_nepak_json_v1", "descriptor_driven", "northstar.importer.yfd_font.v1", "invalidation_index"):
         if token not in text:
             findings.append(Finding("ERROR", "pipeline-config", rel(PIPELINE_CONFIG), f"missing pipeline token {token}"))
     return findings
@@ -109,7 +109,7 @@ def scan_generated_runtime_graph() -> list[Finding]:
     for token in (
         "northstar.assets.runtime_graph.generated.v1",
         "northstar.importer.neui.v1",
-        "northstar.importer.yft_font.v1",
+        "northstar.importer.yfd_font.v1",
         "font_dictionary",
         "cache_keys",
         "invalidation_index",

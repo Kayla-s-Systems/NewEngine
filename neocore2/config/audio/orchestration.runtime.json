@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "command_capacity": 2048,
+  "command_initial_reserve": 256,
+  "transport_event_capacity": 4096,
+  "provider_prearm_blocks": 2
+}

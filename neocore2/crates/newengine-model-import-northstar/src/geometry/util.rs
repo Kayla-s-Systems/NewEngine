@@ -1,12 +1,12 @@
 fn reverse_northstar_triangle_winding(indices: &mut [u32]) {
-    for triangle in indices.chunks_exact_mut(3) {
+    for triangle in indices.as_chunks_mut::<3>().0 {
         triangle.swap(1, 2);
     }
 }
 
 fn recalculate_normals(positions: &[[f32; 4]], indices: &[u32]) -> Vec<[f32; 3]> {
     let mut normals = vec![Vec3::ZERO; positions.len()];
-    for triangle in indices.chunks_exact(3) {
+    for triangle in indices.as_chunks::<3>().0 {
         let a = vec3(positions[triangle[0] as usize]);
         let b = vec3(positions[triangle[1] as usize]);
         let c = vec3(positions[triangle[2] as usize]);

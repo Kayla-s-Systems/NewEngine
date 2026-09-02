@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use newengine_plugin_api::{PluginBootstrapPhase, PluginKind};
 
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub(super) enum ScannedDynlibKind {
     PlatformRuntime {
         id: String,

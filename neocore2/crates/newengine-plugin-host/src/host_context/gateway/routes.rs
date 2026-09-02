@@ -425,6 +425,7 @@ where
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn register_null_engine_gateway_provider_route_with_abi_and_tags<S>(
     gateway_id: &str,
     service_kind: S,

@@ -268,25 +268,6 @@
       }
     },
     {
-      "domain": "assets.textures",
-      "capability_id": "assets.textures.backend",
-      "owner_service": "textures.api",
-      "engine_gateway": "engine.assets.textures",
-      "contract": "textures.api",
-      "quality_tier": "production",
-      "backend_priority": 0,
-      "requires": [
-        "asset_manager.backend"
-      ],
-      "conflicts": [],
-      "fallback_policy": "explicit_profile_only",
-      "diagnostics": {
-        "must_show_active_route": true,
-        "must_show_shadowed_routes": true,
-        "must_show_capability_id": true
-      }
-    },
-    {
       "domain": "assets.definitions",
       "capability_id": "assets.definitions.backend",
       "owner_service": "definitions.api",

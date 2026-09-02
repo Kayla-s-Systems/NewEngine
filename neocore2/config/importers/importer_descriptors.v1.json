@@ -78,17 +78,17 @@
       "version": "1"
     },
     {
-      "importer_id": "northstar.importer.yft_font.v1",
+      "importer_id": "northstar.importer.yfd_font.v1",
       "version": "1",
-      "label": "YFT font dictionary importer",
+      "label": "YFD font dictionary importer",
       "source_extensions": [
-        "yft.import.json"
+        "yfd.import.json"
       ],
       "source_content_kinds": [
-        "source.yft.import_descriptor"
+        "source.yfd.import_descriptor"
       ],
       "runtime_outputs": [
-        ".yft@font_dictionary"
+        ".yfd@font_dictionary"
       ],
       "owner_gateway": "engine.ui.text",
       "cache_key_inputs": [

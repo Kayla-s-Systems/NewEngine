@@ -452,7 +452,7 @@ pub fn encode_xvag_ps_adpcm(
         return Err(format!("XVAG sample rate out of range: {sample_rate_hz}"));
     }
     let channel_count = usize::from(channels);
-    if samples.len() % channel_count != 0 {
+    if !samples.len().is_multiple_of(channel_count) {
         return Err(format!(
             "XVAG interleaved sample count {} is not divisible by channels {channels}",
             samples.len()

@@ -36,19 +36,10 @@ pub trait GameplayPhysicsQueryProvider: Send + Sync {
 
 /// Gameplay-facing project-authored surface semantics attached to collidable ECS entities.
 /// Physics backends remain material-agnostic; domain capabilities resolve the opaque surface id.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PhysicsSurface {
     pub id: String,
     pub event_bindings: BTreeMap<String, String>,
-}
-
-impl Default for PhysicsSurface {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            event_bindings: BTreeMap::new(),
-        }
-    }
 }
 
 impl PhysicsSurface {

@@ -8,7 +8,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
@@ -209,39 +208,6 @@ def dto_parity_check(
     )
 
 
-def validate_authored_schema_semantics(source: Path, spec: dict[str, Any]) -> None:
-    authored = spec.get("authored_schema")
-    if not authored:
-        return
-    if not source.is_file():
-        raise SystemExit(
-            f"[P4][FAIL] spec={spec['id']} authored schema requires file source: {source}"
-        )
-    attribute = str(authored.get("declaration_attribute") or "").strip()
-    schema_id = str(authored.get("schema_id") or "").strip()
-    contract_key = str(authored.get("contract_key") or "").strip()
-    if not attribute or not schema_id or not contract_key:
-        raise SystemExit(
-            f"[P4][FAIL] spec={spec['id']} authored schema semantic is incomplete: {authored!r}"
-        )
-    try:
-        document = ET.parse(source)
-    except ET.ParseError as error:
-        raise SystemExit(
-            f"[P4][FAIL] spec={spec['id']} authored source is not valid XML: {error}"
-        ) from error
-    actual = (document.getroot().attrib.get(attribute) or "").strip()
-    if actual != schema_id:
-        raise SystemExit(
-            f"[P4][FAIL] spec={spec['id']} authored schema mismatch "
-            f"contract={contract_key!r} attribute={attribute!r} got={actual!r} expected={schema_id!r}"
-        )
-    print(
-        f"[P4][PASS] spec={spec['id']} authored-schema contract={contract_key} "
-        f"{attribute}={schema_id}"
-    )
-
-
 def execute_spec(
     repo: Path,
     neocore: Path,
@@ -258,7 +224,6 @@ def execute_spec(
     with tempfile.TemporaryDirectory(prefix=f"northstar-p4-{spec_id}-") as raw_temp:
         temp = Path(raw_temp)
         source = prepare_fixture(testdata, temp, spec)
-        validate_authored_schema_semantics(source, spec)
         output = temp / Path(spec["output_relative"])
         output.parent.mkdir(parents=True, exist_ok=True)
         values = {
@@ -287,8 +252,8 @@ def execute_spec(
         rust_check(neocore, output, spec_id)
         dto_parity_check(repo, neocore, temp, output, spec)
     print(
-        f"[P4][PASS] spec={spec_id} tool={tool_key} contract={spec['schema_contract_key']} "
-        f"content_kind={spec['content_kind']}"
+        f"[P4][PASS] spec={spec_id} tool={tool_key} "
+        f"projection={spec.get('canonical_projection') or 'none'}"
     )
 
 

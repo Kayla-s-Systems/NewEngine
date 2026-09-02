@@ -322,17 +322,9 @@ impl VfxSurfaceResponseLibrary {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct VfxEffectLibrary {
     effects: BTreeMap<String, VfxEffectDefinition>,
-}
-
-impl Default for VfxEffectLibrary {
-    fn default() -> Self {
-        Self {
-            effects: BTreeMap::new(),
-        }
-    }
 }
 
 impl VfxEffectLibrary {

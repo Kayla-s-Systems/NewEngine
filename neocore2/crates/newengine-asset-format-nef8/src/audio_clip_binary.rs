@@ -27,7 +27,11 @@ pub struct AudioClipBinary {
 impl AudioClipBinary {
     pub fn frame_count(&self) -> Result<u64, String> {
         validate_format(self.sample_rate_hz, self.channels)?;
-        if self.samples.len() % usize::from(self.channels) != 0 {
+        if !self
+            .samples
+            .len()
+            .is_multiple_of(usize::from(self.channels))
+        {
             return Err(format!(
                 "NEF8 audio clip interleaved sample count {} is not divisible by channels {}",
                 self.samples.len(),
@@ -156,8 +160,8 @@ pub fn decode_audio_clip_binary_body(body: &[u8]) -> Result<AudioClipBinary, Str
     }
 
     let mut samples = Vec::with_capacity(expected_samples);
-    for bytes in sample_data.chunks_exact(4) {
-        let sample = f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+    for bytes in sample_data.as_chunks::<4>().0 {
+        let sample = f32::from_le_bytes(*bytes);
         if !sample.is_finite() {
             return Err("NEF8 audio clip samples contain non-finite values".to_owned());
         }

@@ -86,7 +86,7 @@ impl Schedule {
         });
 
         self.entries
-            .sort_by(|a, b| (a.stage, a.order, a.seq).cmp(&(b.stage, b.order, b.seq)));
+            .sort_by_key(|entry| (entry.stage, entry.order, entry.seq));
     }
 
     /// Runs a single stage.

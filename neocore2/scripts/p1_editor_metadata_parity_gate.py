@@ -92,8 +92,8 @@ for manifest_path in sorted(CODECS_ROOT.glob("*/Cargo.toml")):
         continue
     if not metadata.get("system_tags"):
         errors.append(f"{manifest_path}: enabled codec lacks explicit system_tags")
-    if not metadata.get("formats"):
-        errors.append(f"{manifest_path}: enabled codec lacks declared formats")
+    if "formats" in metadata:
+        errors.append(f"{manifest_path}: codec metadata must not declare asset formats; engine.assets.types owns format identity")
     if not capabilities or any(not isinstance(item, dict) for item in capabilities):
         errors.append(f"{manifest_path}: capabilities must be V2 metadata objects")
     for capability in capabilities:
@@ -105,7 +105,6 @@ for manifest_path in sorted(CODECS_ROOT.glob("*/Cargo.toml")):
         "runtime_provider_id": runtime_provider_id,
         "backend_priority": metadata.get("backend_priority"),
         "system_tags": sorted(metadata.get("system_tags") or []),
-        "formats": sorted(metadata.get("formats") or []),
         "capability_ids": sorted(item.get("id") for item in capabilities if isinstance(item, dict)),
     }
 
@@ -139,8 +138,8 @@ else:
             errors.append(f"{name}: deployed backend_priority drift")
         if sorted(item.get("system_tags") or []) != source["system_tags"]:
             errors.append(f"{name}: deployed system_tags drift")
-        if sorted(item.get("formats") or []) != source["formats"]:
-            errors.append(f"{name}: deployed formats drift")
+        if item.get("formats"):
+            errors.append(f"{name}: deployed codec manifest illegally carries asset format ownership")
         caps = item.get("capabilities") or []
         if any(not isinstance(cap, dict) or not isinstance(cap.get("capability_version"), int) for cap in caps):
             errors.append(f"{name}: deployed capabilities are not typed V2 objects")
@@ -176,5 +175,5 @@ if errors:
     sys.exit(1)
 
 print("[p1-editor-metadata-parity] OK")
-print("  source Cargo V2 metadata -> generated codec_manifest.v3 -> Editor provider -> CompositionSolver")
+print("  source codec capabilities -> codec_manifest.v3; asset format identity -> engine.assets.types")
 print(f"  first_party_codecs={len(source_workers)} deployed={len(source_workers)}")

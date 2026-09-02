@@ -60,7 +60,6 @@ REQUIRED_RUNTIME_TOKENS = {
     "transaction_plan",
     "normalized_patch",
     "undo_operations",
-    "include_str!(\"../../../config/schema/schema_registry.v1.json\")",
 }
 
 

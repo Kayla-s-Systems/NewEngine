@@ -41,7 +41,9 @@ impl AudioDiffractionPhysicsQueryProvider {
 
     #[inline]
     fn sample_due(&self) -> bool {
-        self.sample_tick.fetch_add(1, Ordering::Relaxed) % DIFFRACTION_QUERY_INTERVAL_TICKS == 0
+        self.sample_tick
+            .fetch_add(1, Ordering::Relaxed)
+            .is_multiple_of(DIFFRACTION_QUERY_INTERVAL_TICKS)
     }
 
     fn static_mesh_entities(world: &World) -> BTreeMap<u64, EntityId> {

@@ -7,20 +7,11 @@ const MAX_SOUND_GRAPH_EDGES_PER_NODE: usize = 64;
 const MAX_SOUND_GRAPH_DEPTH: usize = 64;
 const MAX_SYMBOL_LEN: usize = 256;
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct YsncdSoundGraph {
     pub root: String,
     pub nodes: Vec<YsncdSoundGraphNode>,
-}
-
-impl Default for YsncdSoundGraph {
-    fn default() -> Self {
-        Self {
-            root: String::new(),
-            nodes: Vec::new(),
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -134,7 +134,7 @@ pub fn compile_rigid_joint_variants(
             let mut remap = std::collections::BTreeMap::<u32, u32>::new();
             let mut vertices = Vec::new();
             let mut indices = Vec::new();
-            for triangle in source_mesh.indices.chunks_exact(3) {
+            for triangle in source_mesh.indices.as_chunks::<3>().0 {
                 if !triangle.iter().all(|index| {
                     dominant
                         .get(*index as usize)

@@ -102,9 +102,9 @@ fn decode_raw_f32_stream(
     for vertex in 0..vertex_count {
         let mut value = [0.0f32; 4];
         let base = vertex * stride;
-        for component in 0..wanted_components {
+        for (component, output) in value.iter_mut().enumerate().take(wanted_components) {
             let at = base + component * 4;
-            value[component] =
+            *output =
                 f32::from_le_bytes(bytes[at..at + 4].try_into().expect("raw f32 component"));
         }
         if value[..wanted_components]
@@ -152,10 +152,10 @@ fn decode_raw_f16_stream(
     for vertex in 0..vertex_count {
         let mut value = [0.0f32; 4];
         let base = vertex * stride;
-        for component in 0..wanted_components {
+        for (component, output) in value.iter_mut().enumerate().take(wanted_components) {
             let at = base + component * 2;
             let bits = u16::from_le_bytes([bytes[at], bytes[at + 1]]);
-            value[component] = f16_to_f32(bits);
+            *output = f16_to_f32(bits);
         }
         if value[..wanted_components]
             .iter()
@@ -210,16 +210,16 @@ fn decode_quantized_stream(
     let mut out = Vec::with_capacity(vertex_count);
     for _ in 0..vertex_count {
         let mut value = [0.0f32; 4];
-        for component in 0..4 {
+        for (component, output) in value.iter_mut().enumerate() {
             let width = stream.sizes[component] as usize;
             if width > 32 {
                 return Err(format!("unsupported quantized component width {width}"));
             }
             if width != 0 {
-                value[component] = bits.read(width)? as f32 * stream.q_scale[component]
+                *output = bits.read(width)? as f32 * stream.q_scale[component]
                     + stream.q_offset[component];
             } else if stream.kind == 64 && component < 3 {
-                value[component] = stream.q_scale[component] + stream.q_offset[component];
+                *output = stream.q_scale[component] + stream.q_offset[component];
             }
         }
         if value[..wanted_components]

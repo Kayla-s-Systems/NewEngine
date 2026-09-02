@@ -542,6 +542,15 @@ mod transition_tests {
             resolve_authored_look_state(L::Idle, EquipmentPresentationStance::Aim, C::Standard),
             AuthoredLookState::Tense
         );
+        assert!(equipment_allows_authored_head_look(
+            EquipmentPresentationStance::Ready
+        ));
+        assert!(!equipment_allows_authored_head_look(
+            EquipmentPresentationStance::Aim
+        ));
+        assert!(!equipment_allows_authored_head_look(
+            EquipmentPresentationStance::Reload
+        ));
     }
 
     #[test]
@@ -855,6 +864,7 @@ mod transition_tests {
             Vec3::ZERO,
             true,
             false,
+            false,
             true,
             true,
         )
@@ -977,6 +987,7 @@ mod transition_tests {
             Vec3::ZERO,
             true,
             false,
+            false,
             true,
             true,
         )
@@ -993,9 +1004,9 @@ mod transition_tests {
         assert_eq!(unqualified_socket_result.socket_position_error_m, 0.0);
         assert_eq!(unqualified_socket_result.socket_angular_error_deg, 0.0);
 
-        // A native equipment prop socket owns the weapon root and the complete authored grip owns
-        // both anatomical arm chains. Palm-target IK must not rewrite that pose: TLOU-style rigs
-        // deliberately keep palm and prop-helper domains as siblings under the wrist.
+        // A native equipment prop socket owns the weapon root. TLOU-style rigs keep the anatomical
+        // palm and prop-helper branches separate, so strict rifle presentation may stabilize only the
+        // support arm while the firing arm/root remain authored.
         let socket_rig = WeaponArmIkRig {
             right_prop_attachment: Some(rig.right_palm),
             ..rig
@@ -1005,6 +1016,9 @@ mod transition_tests {
         socket_presentation.handle_rotation_from_root = [0.0, 0.0, 0.0, 1.0];
         socket_presentation.ready_right_palm_to_weapon = [0.0, 0.0, 0.0, 1.0];
         socket_presentation.right_palm_to_handle = [0.0; 3];
+        // Keep the synthetic support target reachable so this fixture exercises the strict
+        // left-only solve rather than the solver's intentional unreachable-target fail-open path.
+        socket_presentation.left_grip_from_handle = [0.30, 0.05, 0.0];
         let mut socket_pose = authored_pose.clone();
         let mut socket_frames = Vec::new();
         rebuild_model_joint_frames(&animation_runtime, &socket_pose, &mut socket_frames)
@@ -1016,11 +1030,11 @@ mod transition_tests {
         .expect("authored socket root");
         let socket_pose_before = socket_pose.clone();
         let socket_left_before = socket_frames[rig.left_palm].transform_point3(Vec3::ZERO);
-        let socket_left_target = crate::weapon_grip::weapon_ready_left_palm_position(
+        let socket_left_grip_before = crate::weapon_grip::weapon_ready_left_grip_position(
             &socket_presentation,
             expected_socket_root,
         );
-        let socket_left_before_error = socket_left_before.distance(socket_left_target);
+        let socket_left_before_error = socket_left_before.distance(socket_left_grip_before);
         let socket_result = apply_equipped_weapon_support_ik(
             &socket_presentation,
             Some(&socket_rig),
@@ -1037,6 +1051,7 @@ mod transition_tests {
             0.0,
             0.0,
             Vec3::ZERO,
+            true,
             true,
             true,
             true,
@@ -1064,22 +1079,91 @@ mod transition_tests {
             rig.right_elbow,
             rig.right_wrist,
             rig.right_palm,
-            rig.left_shoulder,
-            rig.left_elbow,
-            rig.left_wrist,
-            rig.left_palm,
         ] {
             assert_eq!(
                 socket_pose[index], socket_pose_before[index],
-                "qualified prop-owned grip must preserve authored anatomical arm pose"
+                "qualified prop-owned rifle must preserve the authored firing arm"
             );
         }
         let socket_left_after = socket_frames[rig.left_palm].transform_point3(Vec3::ZERO);
-        assert!(socket_left_after.distance(socket_left_before) <= 1.0e-6);
-        assert!(socket_left_before_error.is_finite());
+        let socket_left_grip = crate::weapon_grip::weapon_ready_left_grip_position(
+            &socket_presentation,
+            socket_result.base_root,
+        );
+        assert!(
+            socket_left_after.distance(socket_left_grip) < socket_left_before_error,
+            "strict native rifle support solve must pull the visible left palm toward the moving foregrip before={:.6} after={:.6}",
+            socket_left_before_error,
+            socket_left_after.distance(socket_left_grip),
+        );
         assert!(socket_result.right_error_m <= 1.0e-6);
         assert!(socket_result.socket_position_error_m <= 1.0e-6);
         assert!(socket_result.socket_angular_error_deg <= 0.001);
+
+        // Third-person RMB/ADS transfers view intent to the real weapon sight, not to head-look.
+        // The current authored handle stays fixed while the firing/support arm chains follow the
+        // sight-aligned weapon root returned to equipment_visual.
+        let mut tpp_aim_pose = authored_pose.clone();
+        let mut tpp_aim_frames = Vec::new();
+        rebuild_model_joint_frames(&animation_runtime, &tpp_aim_pose, &mut tpp_aim_frames)
+            .expect("TPP aim initial frames");
+        let tpp_authored_root = crate::weapon_grip::weapon_root_from_authored_prop_frame(
+            &socket_presentation,
+            tpp_aim_frames[socket_rig.right_prop_attachment.expect("TPP socket joint")],
+        )
+        .expect("TPP authored socket root");
+        let tpp_handle_before =
+            crate::weapon_grip::weapon_handle_position(&socket_presentation, tpp_authored_root);
+        let tpp_sight_before =
+            crate::weapon_grip::weapon_sight_forward(&socket_presentation, tpp_authored_root);
+        let tpp_view_forward =
+            (Quat::from_rotation_y(0.16) * Quat::from_rotation_x(-0.08) * tpp_sight_before)
+                .normalize_or_zero();
+        let tpp_aim_result = apply_equipped_weapon_support_ik(
+            &socket_presentation,
+            Some(&socket_rig),
+            &skeleton,
+            &animation_runtime,
+            &mut tpp_aim_pose,
+            &mut tpp_aim_frames,
+            Some(tpp_view_forward),
+            None,
+            None,
+            false,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            Vec3::ZERO,
+            true,
+            true,
+            true,
+            true,
+            true,
+        )
+        .expect("TPP native sight-aligned presentation")
+        .expect("TPP native sight-aligned root");
+        let tpp_sight_after = crate::weapon_grip::weapon_sight_forward(
+            &socket_presentation,
+            tpp_aim_result.base_root,
+        );
+        let tpp_handle_after = crate::weapon_grip::weapon_handle_position(
+            &socket_presentation,
+            tpp_aim_result.base_root,
+        );
+        assert!(tpp_sight_after.dot(tpp_view_forward) > 0.999_9);
+        assert!(tpp_handle_before.distance(tpp_handle_after) <= 1.0e-6);
+        assert!(tpp_aim_result.right_error_m <= 0.005);
+        assert!(tpp_aim_result.left_error_m <= 0.005);
+        assert!(tpp_aim_result.socket_position_error_m <= 0.005);
+        assert!(
+            tpp_aim_result.socket_angular_error_deg <= 1.0,
+            "TPP socket angular residual too large: {:.4} deg pos={:.5}m right={:.5}m left={:.5}m",
+            tpp_aim_result.socket_angular_error_deg,
+            tpp_aim_result.socket_position_error_m,
+            tpp_aim_result.right_error_m,
+            tpp_aim_result.left_error_m,
+        );
 
         // Full-body FPP must preserve the same qualified prop ownership. Camera aim/recoil and
         // generic secondary offsets may not reinterpret r_palm as a weapon socket or twist the
@@ -1115,6 +1199,7 @@ mod transition_tests {
             true,
             true,
             true,
+            true,
         )
         .expect("FPP qualified prop presentation")
         .expect("FPP qualified prop root");
@@ -1138,16 +1223,17 @@ mod transition_tests {
             rig.right_elbow,
             rig.right_wrist,
             rig.right_palm,
-            rig.left_shoulder,
-            rig.left_elbow,
-            rig.left_wrist,
-            rig.left_palm,
         ] {
             assert_eq!(
                 fpp_socket_pose[index], fpp_socket_pose_before[index],
-                "FPP qualified prop ownership must never twist authored arm chains"
+                "FPP qualified prop ownership must preserve the authored firing arm"
             );
         }
+        assert!(
+            fpp_socket_result.left_error_m <= 0.02,
+            "FPP strict rifle support palm must converge on the moving foregrip residual={}",
+            fpp_socket_result.left_error_m
+        );
         assert!(fpp_socket_result.socket_position_error_m <= 1.0e-6);
         assert!(fpp_socket_result.socket_angular_error_deg <= 0.001);
 
@@ -1202,6 +1288,7 @@ mod transition_tests {
             0.0,
             Vec3::ZERO,
             true,
+            false,
             false,
             true,
             true,
@@ -1563,10 +1650,9 @@ mod transition_tests {
             complete_ready_target[rig.right_shoulder].rotation[3],
         )
         .normalize_or_identity();
-        let expected_ready_right = (ready_rotation * ready_add_rotation).normalize_or_identity();
         assert!(
-            complete_right_shoulder.dot(expected_ready_right).abs() > 0.999_999,
-            "complete READY base must still consume the authored firing-arm additive"
+            complete_right_shoulder.dot(ready_rotation).abs() > 0.999_999,
+            "READY must preserve its carry base and must not consume stand-AIM grip layers"
         );
 
         let mut incomplete_ready_set = EquipmentPoseSet::default();

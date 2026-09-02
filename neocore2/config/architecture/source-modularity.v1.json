@@ -1,0 +1,29 @@
+{
+  "schema_version": 2,
+  "rust_roots": [
+    "NewEngine/neocore2/crates",
+    "PluginsSrc"
+  ],
+  "production_line_target": 1200,
+  "exclude_globs": [
+    "**/target/**",
+    "**/build/**",
+    "**/out/**",
+    "**/tests.rs",
+    "**/tests/**",
+    "**/graph_tests.rs"
+  ],
+  "enforced_budgets": {
+    "NewEngine/neocore2/crates/newengine-audio-api/src/lib.rs": 200,
+    "NewEngine/neocore2/crates/newengine-audio-world-runtime/src/audio_orchestration.rs": 900,
+    "NewEngine/neocore2/crates/newengine-fps-content-runtime/src/authored_world_profile/ytyp_metadata.rs": 1000,
+    "NewEngine/neocore2/crates/newengine-model-import-northstar/src/compile.rs": 1000,
+    "NewEngine/neocore2/crates/newengine-audio-runtime/src/audio_runtime/dsp.rs": 1200,
+    "NewEngine/neocore2/crates/newengine-fps-character-runtime/src/player_model_animation/runtime_tick.rs": 450,
+    "NewEngine/neocore2/crates/newengine-fps-character-runtime/src/player_model_animation/runtime_tick_prepare.rs": 300,
+    "NewEngine/neocore2/crates/newengine-fps-character-runtime/src/player_model_animation/runtime_tick_presentation.rs": 900,
+    "NewEngine/neocore2/crates/newengine-fps-character-runtime/src/player_model_animation/runtime_tick_pose.rs": 450
+  },
+  "debt_allowances": {},
+  "enforce_global_target": true
+}

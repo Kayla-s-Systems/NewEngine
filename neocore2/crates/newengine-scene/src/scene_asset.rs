@@ -295,7 +295,7 @@ impl Scene {
         }
 
         // Deterministic order: sort by guid.
-        entities.sort_by(|a, b| a.guid.cmp(&b.guid));
+        entities.sort_by_key(|entity| entity.guid);
 
         SceneAsset {
             schema: SCENE_ASSET_SCHEMA_V1.to_string(),

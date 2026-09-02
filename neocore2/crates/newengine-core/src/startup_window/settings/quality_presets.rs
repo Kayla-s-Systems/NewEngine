@@ -96,11 +96,12 @@ impl Default for ShadowQuality {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ShadowFilterMode {
     Hard,
     Pcf,
+    #[default]
     Pcss,
 }
 
@@ -123,17 +124,12 @@ impl ShadowFilterMode {
         }
     }
 }
-impl Default for ShadowFilterMode {
-    fn default() -> Self {
-        Self::Pcss
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LodQuality {
     Low,
     Medium,
+    #[default]
     High,
     Ultra,
     Cinematic,
@@ -183,12 +179,6 @@ impl LodQuality {
         }
     }
 }
-impl Default for LodQuality {
-    fn default() -> Self {
-        Self::High
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TextureQuality {

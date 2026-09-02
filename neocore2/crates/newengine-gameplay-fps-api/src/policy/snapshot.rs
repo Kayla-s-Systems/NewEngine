@@ -100,24 +100,13 @@ impl FpsGameplayPolicySnapshot {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct FpsRequiredContentPolicy {
     pub default_loadout: String,
     pub primary_weapon: String,
     pub primary_ammo: String,
     pub medkit: String,
-}
-
-impl Default for FpsRequiredContentPolicy {
-    fn default() -> Self {
-        Self {
-            default_loadout: String::new(),
-            primary_weapon: String::new(),
-            primary_ammo: String::new(),
-            medkit: String::new(),
-        }
-    }
 }
 
 impl FpsRequiredContentPolicy {

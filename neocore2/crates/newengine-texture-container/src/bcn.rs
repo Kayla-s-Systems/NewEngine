@@ -46,7 +46,7 @@ pub fn infer_bcn_format(name: &str, color_space: &str, rgba: &[u8]) -> &'static 
         return PIXEL_FORMAT_BC5_RG_UNORM;
     }
 
-    let has_alpha = rgba.chunks_exact(4).any(|pixel| pixel[3] < 250)
+    let has_alpha = rgba.as_chunks::<4>().0.iter().any(|pixel| pixel[3] < 250)
         || lower.contains("opacity")
         || lower.contains("alpha")
         || lower.contains("leaf")

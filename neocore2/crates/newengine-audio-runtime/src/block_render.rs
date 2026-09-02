@@ -19,7 +19,9 @@ mod voice;
 
 use commands::{render_command_node_id, RenderCommand, RenderCommandKind};
 use limiter::OutputPeakLimiter;
-use voice::{finite_gain, finite_speed, BlockSourceAdapter, BlockVoiceNode};
+use voice::{
+    finite_gain, finite_speed, BlockSourceAdapter, BlockVoiceNode, BlockVoiceNodeInit,
+};
 
 pub(crate) const NATIVE_BLOCK_FRAMES: usize = 256;
 const MAX_BLOCK_NODES: usize = 256;
@@ -276,17 +278,17 @@ impl NativeBlockRenderGraphHandle {
             sequence,
             schedule_id: None,
             kind: RenderCommandKind::Add {
-                node: BlockVoiceNode::new(
-                    node_id,
-                    adapter,
-                    finite_gain(gain),
-                    finite_speed(speed),
+                node: BlockVoiceNode::new(BlockVoiceNodeInit {
+                    id: node_id,
+                    source: adapter,
+                    gain: finite_gain(gain),
+                    speed: finite_speed(speed),
                     paused,
                     source_position,
-                    Arc::clone(&state),
-                    self.sample_rate,
-                    self.channels,
-                ),
+                    state: Arc::clone(&state),
+                    sample_rate: self.sample_rate,
+                    channels: self.channels,
+                }),
             },
         };
         match self.command_tx.try_send(command) {

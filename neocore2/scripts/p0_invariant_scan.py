@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import pathlib
 import re
 import subprocess
@@ -17,13 +16,19 @@ import sys
 from dataclasses import dataclass
 from typing import Iterable
 
+from architecture_scan_policy import (
+    ARCHITECTURE_EXCLUDED_DIR_NAMES,
+    assert_policy_contract,
+    iter_architecture_files,
+)
+
 SCRIPT_ROOT = pathlib.Path(__file__).resolve().parent
 ENGINE_ROOT = SCRIPT_ROOT.parent
 REPO_ROOT = ENGINE_ROOT.parents[1]
 
 TEXT_SUFFIXES = {".rs", ".py", ".toml", ".json", ".md", ".txt", ".bat", ".cmd", ".ps1", ".yml", ".yaml"}
 CODE_SUFFIXES = {".rs", ".py", ".toml", ".json", ".yml", ".yaml", ".bat", ".cmd", ".ps1"}
-SKIP_DIRS = {".git", ".takesome", ".northstar", "target", "node_modules", "third_party", "__pycache__", "logs", "cache", "dist", "out", "bin", "obj", "artifacts"}
+SKIP_DIRS = ARCHITECTURE_EXCLUDED_DIR_NAMES
 
 PROVIDER_IDS = (
     "render.api",
@@ -133,16 +138,9 @@ def rel(path: pathlib.Path) -> pathlib.Path:
 
 
 def iter_files_with_suffixes(root: pathlib.Path, suffixes: set[str]) -> Iterable[pathlib.Path]:
-    # Prune ignored build/cache trees before descent. pathlib.rglob() still walks those
-    # trees and only lets us discard entries afterwards, which made this CI gate scale
-    # with generated output rather than architecture source.
-    for dirpath, dirnames, filenames in os.walk(root, topdown=True):
-        dirnames[:] = [name for name in dirnames if name not in SKIP_DIRS]
-        base = pathlib.Path(dirpath)
-        for name in filenames:
-            path = base / name
-            if path.suffix.lower() in suffixes:
-                yield path
+    # Broad architecture traversal is centralized so scratch/diagnostic repository copies
+    # under Temp/Intermediate can never become production architecture evidence.
+    yield from iter_architecture_files(root, suffixes)
 
 
 def iter_text_files() -> Iterable[pathlib.Path]:
@@ -263,7 +261,7 @@ def is_service_boundary_file(path: pathlib.Path) -> bool:
 def scan_service_boundaries(strict: bool) -> list[Finding]:
     findings: list[Finding] = []
     for path in (ENGINE_ROOT / "crates").glob("*/src/**/*.rs"):
-        if any(part in SKIP_DIRS for part in path.parts):
+        if any(part.casefold() in SKIP_DIRS for part in path.parts):
             continue
         if not is_service_boundary_file(path):
             continue
@@ -343,6 +341,7 @@ def run_checks(strict_large_files: bool, strict_boundaries: bool, fail_tracked_l
 
 
 def main(argv: list[str]) -> int:
+    assert_policy_contract()
     parser = argparse.ArgumentParser(prog="p0_invariant_scan.py")
     parser.add_argument("--strict-large-files", action="store_true", help="Treat >550 LOC first-party files as blocking errors. Default: report as WARN while split work is staged.")
     parser.add_argument("--strict-boundaries", action="store_true", help="Treat service-boundary candidate leaks as blocking errors. Default: report non-provider-facing ECS component/extraction APIs as WARN.")

@@ -94,7 +94,7 @@ mod tests {
                     lifetime_variance: 0.2,
                     acceleration: [0.0, -9.81, 0.0],
                     drag_per_second: 0.1,
-                    rotation_random_radians: 3.14159,
+                    rotation_random_radians: std::f32::consts::PI,
                     spin_radians_per_second: 4.0,
                     spin_variance: 2.0,
                     lifetime_seconds: 0.25,

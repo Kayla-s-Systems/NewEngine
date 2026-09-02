@@ -235,7 +235,7 @@ pub fn load_project_from_request_with_launch(
 ) -> Result<ProjectRuntimeContext, String> {
     let working_dir = std::env::current_dir()
         .map_err(|error| format!("resolve project request base directory: {error}"))?;
-    let manifest_path = resolve_project_manifest_request(request.to_path_buf(), &working_dir);
+    let manifest_path = resolve_project_manifest_request(request, &working_dir);
     let project_paths = ProjectPaths::from_manifest_path(&manifest_path);
     let project_root = project_paths.root().to_path_buf();
     let source = std::fs::read_to_string(&manifest_path).map_err(|error| {

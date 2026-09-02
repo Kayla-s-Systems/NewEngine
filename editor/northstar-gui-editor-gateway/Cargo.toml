@@ -1,8 +1,0 @@
-[package]
-name = "northstar-gui-editor-gateway"
-version = "0.1.0"
-edition = "2021"
-license = "MIT"
-
-[dependencies]
-northstar-gui-editor-assets = { path = "../northstar-gui-editor-assets" }

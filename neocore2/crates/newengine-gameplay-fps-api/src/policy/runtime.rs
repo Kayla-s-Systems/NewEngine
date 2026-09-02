@@ -66,7 +66,7 @@ impl FpsCombatPolicy {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct FpsMissionStateMachinePolicy {
     pub enabled: bool,
@@ -74,18 +74,6 @@ pub struct FpsMissionStateMachinePolicy {
     pub machine_id: String,
     pub initial_state: String,
     pub activate_event: String,
-}
-
-impl Default for FpsMissionStateMachinePolicy {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            instance_id: String::new(),
-            machine_id: String::new(),
-            initial_state: String::new(),
-            activate_event: String::new(),
-        }
-    }
 }
 
 impl FpsMissionStateMachinePolicy {
@@ -114,7 +102,7 @@ impl FpsMissionStateMachinePolicy {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct FpsMissionPolicy {
     pub require_pickups: bool,
@@ -130,26 +118,6 @@ pub struct FpsMissionPolicy {
     pub goal_complete_status: String,
     pub failed_progress_label: String,
     pub completed_progress_label: String,
-}
-
-impl Default for FpsMissionPolicy {
-    fn default() -> Self {
-        Self {
-            require_pickups: false,
-            require_targets: false,
-            hazard_fails: false,
-            goal_requires_objectives: false,
-            state_machine: FpsMissionStateMachinePolicy::default(),
-            default_status: String::new(),
-            pickup_status: String::new(),
-            target_status: String::new(),
-            hazard_status: String::new(),
-            goal_locked_status: String::new(),
-            goal_complete_status: String::new(),
-            failed_progress_label: String::new(),
-            completed_progress_label: String::new(),
-        }
-    }
 }
 
 impl FpsMissionPolicy {

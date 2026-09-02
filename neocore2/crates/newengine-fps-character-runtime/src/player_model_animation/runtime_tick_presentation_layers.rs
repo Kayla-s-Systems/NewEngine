@@ -148,9 +148,22 @@ fn evaluate_native_turn_presentation_layer(
         binding.turn_in_place = None;
     }
     let look_state = resolve_authored_look_state(active_state, equipment_stance, look_context);
+    let weapon_aim_authority = equipment_stance == EquipmentPresentationStance::Aim;
     let look_allowed =
-        unarmed_attack_sequence == 0 && equipment_stance != EquipmentPresentationStance::Reload;
-    let (live_turn_yaw_delta, live_turn_hysteresis) = if native_turn_allowed && look_allowed {
+        unarmed_attack_sequence == 0 && equipment_allows_authored_head_look(equipment_stance);
+    let aim_turn_hysteresis = binding
+        .minimum_turn_step_radians()
+        .map(|angle| angle * 0.5)
+        .unwrap_or(f32::INFINITY);
+    let (live_turn_yaw_delta, live_turn_hysteresis) = if native_turn_allowed && weapon_aim_authority
+    {
+        let residual = if view_body_yaw_delta.abs() > aim_turn_hysteresis {
+            view_body_yaw_delta
+        } else {
+            0.0
+        };
+        (residual, aim_turn_hysteresis)
+    } else if native_turn_allowed && look_allowed {
         if let Some(projection) =
             binding
                 .authored_look

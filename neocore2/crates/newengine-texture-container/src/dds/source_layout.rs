@@ -69,17 +69,17 @@ impl DdsSourceLayout {
             match self {
                 Self::Rgba8 => rgba.extend_from_slice(row_bytes),
                 Self::Bgra8 => {
-                    for pixel in row_bytes.chunks_exact(4) {
+                    for pixel in row_bytes.as_chunks::<4>().0 {
                         rgba.extend_from_slice(&[pixel[2], pixel[1], pixel[0], pixel[3]]);
                     }
                 }
                 Self::Rgb24 => {
-                    for pixel in row_bytes.chunks_exact(3) {
+                    for pixel in row_bytes.as_chunks::<3>().0 {
                         rgba.extend_from_slice(&[pixel[0], pixel[1], pixel[2], 0xff]);
                     }
                 }
                 Self::Bgr24 => {
-                    for pixel in row_bytes.chunks_exact(3) {
+                    for pixel in row_bytes.as_chunks::<3>().0 {
                         rgba.extend_from_slice(&[pixel[2], pixel[1], pixel[0], 0xff]);
                     }
                 }

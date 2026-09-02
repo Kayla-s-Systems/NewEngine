@@ -237,6 +237,14 @@ fn semantic_frame_state(
     }
 }
 
+#[inline]
+fn equipment_allows_authored_head_look(equipment: EquipmentPresentationStance) -> bool {
+    !matches!(
+        equipment,
+        EquipmentPresentationStance::Aim | EquipmentPresentationStance::Reload
+    )
+}
+
 fn resolve_authored_look_state(
     locomotion: newengine_engine_runtime::gameplay::PlayerLocomotionAnimation,
     equipment: EquipmentPresentationStance,

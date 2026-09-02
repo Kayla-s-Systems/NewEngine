@@ -111,7 +111,7 @@ impl UiHub {
     pub fn run(&mut self, ctx_any: &mut dyn Any, user_data: &mut dyn Any) {
         if self.dirty_sort {
             self.entries
-                .sort_by(|a, b| (a.layer, a.order, a.seq).cmp(&(b.layer, b.order, b.seq)));
+                .sort_by_key(|entry| (entry.layer, entry.order, entry.seq));
             self.dirty_sort = false;
         }
 

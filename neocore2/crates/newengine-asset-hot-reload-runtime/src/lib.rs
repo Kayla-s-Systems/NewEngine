@@ -112,7 +112,7 @@ struct ScanBatch {
     files: HashMap<PathBuf, FileStamp>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct AssetFileWatcherRuntime {
     config: AssetFileWatcherConfig,
     known: Option<HashMap<PathBuf, FileStamp>>,
@@ -120,19 +120,6 @@ pub struct AssetFileWatcherRuntime {
     scan_rx: Option<Receiver<ScanBatch>>,
     next_scan_unix_ms: u64,
     primed: bool,
-}
-
-impl Default for AssetFileWatcherRuntime {
-    fn default() -> Self {
-        Self {
-            config: AssetFileWatcherConfig::default(),
-            known: None,
-            pending: BTreeMap::new(),
-            scan_rx: None,
-            next_scan_unix_ms: 0,
-            primed: false,
-        }
-    }
 }
 
 impl AssetFileWatcherRuntime {

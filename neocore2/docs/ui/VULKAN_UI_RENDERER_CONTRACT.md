@@ -25,7 +25,7 @@ NEUI
   owns: declarative UI structure, theme tokens, spacing, typography, component templates,
 
 
-        resource references such as .ytd@entryName and .neftd@entryName
+        resource references such as .ytd@entryName and .yfd@entryName
 
 
 
@@ -874,7 +874,7 @@ Text is a first-class renderer system. A professional editor UI requires:
 font loading
 
 
-NEFTD font refs through .neftd@entryName
+YFD font refs through .yfd@entryName
 
 
 text shaping
@@ -976,7 +976,7 @@ Rules:
 .ytd@entryName is required for texture refs
 
 
-.neftd@entryName is required for font refs
+.yfd@entryName is required for font refs
 
 
 renderer receives resolved GPU-ready texture/material handles
@@ -1015,7 +1015,7 @@ asset container parsing remains asset-side
 6. Button visual bounds and hit bounds must match.
 
 
-7. Text must use the configured font stack / `.neftd@entryName` references, with fallback only when asset resolution fails.
+7. Text must use the configured font stack / `.yfd@entryName` references, with fallback only when asset resolution fails.
 
 
 8. Editor tools emit DTOs/state; they do not reach into renderer internals.

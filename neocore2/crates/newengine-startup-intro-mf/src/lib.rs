@@ -585,16 +585,18 @@ mod windows_provider {
                     let _ = unsafe { DeleteObject(brush.into()) };
                 }
 
-                let mut info = BITMAPINFO::default();
-                info.bmiHeader = BITMAPINFOHEADER {
-                    biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-                    biWidth: source_width as i32,
-                    // copy_rgb32_sample normalizes scanline order to logical top-down rows.
-                    biHeight: -(source_height as i32),
-                    biPlanes: 1,
-                    biBitCount: 32,
-                    biCompression: BI_RGB.0,
-                    biSizeImage: expected as u32,
+                let info = BITMAPINFO {
+                    bmiHeader: BITMAPINFOHEADER {
+                        biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                        biWidth: source_width as i32,
+                        // copy_rgb32_sample normalizes scanline order to logical top-down rows.
+                        biHeight: -(source_height as i32),
+                        biPlanes: 1,
+                        biBitCount: 32,
+                        biCompression: BI_RGB.0,
+                        biSizeImage: expected as u32,
+                        ..Default::default()
+                    },
                     ..Default::default()
                 };
 

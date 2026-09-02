@@ -37,6 +37,22 @@ const SECOND_ORDER_MIDDLE_SEGMENT_EPSILON: f32 = 0.05;
 /// rigid-body ticks. The last observation remains authoritative between samples.
 const REFLECTION_QUERY_INTERVAL_TICKS: u64 = 4;
 
+struct FirstOrderLegRequest {
+    emitter: ReflectionEmitterCandidate,
+    listener: Vec3,
+    geometry: AudioFirstOrderReflectionGeometry,
+    leg: ReflectionProbeLeg,
+    listener_entity: Option<u64>,
+}
+
+struct SecondOrderLegRequest {
+    emitter: ReflectionEmitterCandidate,
+    listener: Vec3,
+    geometry: AudioSecondOrderReflectionGeometry,
+    leg: SecondOrderProbeLeg,
+    listener_entity: Option<u64>,
+}
+
 /// Bounded first-order reflection visibility contributor. It emits only provider-neutral
 /// `PhysicsQueryDto::Ray` segments; room/material semantics remain engine/audio-domain data.
 pub struct AudioReflectionPhysicsQueryProvider {
@@ -75,7 +91,9 @@ impl AudioReflectionPhysicsQueryProvider {
 
     #[inline]
     fn sample_due(&self) -> bool {
-        self.sample_tick.fetch_add(1, Ordering::Relaxed) % REFLECTION_QUERY_INTERVAL_TICKS == 0
+        self.sample_tick
+            .fetch_add(1, Ordering::Relaxed)
+            .is_multiple_of(REFLECTION_QUERY_INTERVAL_TICKS)
     }
 
     fn emitter_candidates(&self, world: &World, listener: Vec3) -> Vec<ReflectionEmitterCandidate> {
@@ -142,12 +160,15 @@ impl AudioReflectionPhysicsQueryProvider {
         &self,
         pending: &mut BTreeMap<u64, PendingReflectionRay>,
         queries: &mut Vec<PhysicsQueryDto>,
-        emitter: ReflectionEmitterCandidate,
-        listener: Vec3,
-        geometry: AudioFirstOrderReflectionGeometry,
-        leg: ReflectionProbeLeg,
-        listener_entity: Option<u64>,
+        request: FirstOrderLegRequest,
     ) {
+        let FirstOrderLegRequest {
+            emitter,
+            listener,
+            geometry,
+            leg,
+            listener_entity,
+        } = request;
         let point = Vec3::new(
             geometry.reflection_point[0],
             geometry.reflection_point[1],
@@ -193,12 +214,15 @@ impl AudioReflectionPhysicsQueryProvider {
         &self,
         pending: &mut BTreeMap<u64, PendingSecondOrderRay>,
         queries: &mut Vec<PhysicsQueryDto>,
-        emitter: ReflectionEmitterCandidate,
-        listener: Vec3,
-        geometry: AudioSecondOrderReflectionGeometry,
-        leg: SecondOrderProbeLeg,
-        listener_entity: Option<u64>,
+        request: SecondOrderLegRequest,
     ) {
+        let SecondOrderLegRequest {
+            emitter,
+            listener,
+            geometry,
+            leg,
+            listener_entity,
+        } = request;
         let first_point = geometry.reflection_points[0];
         let second_point = geometry.reflection_points[1];
         let first = Vec3::new(first_point[0], first_point[1], first_point[2]);
@@ -285,20 +309,24 @@ impl GameplayPhysicsQueryProvider for AudioReflectionPhysicsQueryProvider {
                 self.push_leg(
                     &mut pending,
                     &mut queries,
-                    emitter,
-                    listener,
-                    geometry,
-                    ReflectionProbeLeg::Source,
-                    listener_entity,
+                    FirstOrderLegRequest {
+                        emitter,
+                        listener,
+                        geometry,
+                        leg: ReflectionProbeLeg::Source,
+                        listener_entity,
+                    },
                 );
                 self.push_leg(
                     &mut pending,
                     &mut queries,
-                    emitter,
-                    listener,
-                    geometry,
-                    ReflectionProbeLeg::Listener,
-                    listener_entity,
+                    FirstOrderLegRequest {
+                        emitter,
+                        listener,
+                        geometry,
+                        leg: ReflectionProbeLeg::Listener,
+                        listener_entity,
+                    },
                 );
             }
             let mut second_order = second_order_reflection_geometry(room, source, receiver);
@@ -312,11 +340,13 @@ impl GameplayPhysicsQueryProvider for AudioReflectionPhysicsQueryProvider {
                     self.push_second_order_leg(
                         &mut pending_second_order,
                         &mut queries,
-                        emitter,
-                        listener,
-                        geometry,
-                        leg,
-                        listener_entity,
+                        SecondOrderLegRequest {
+                            emitter,
+                            listener,
+                            geometry,
+                            leg,
+                            listener_entity,
+                        },
                     );
                 }
             }

@@ -207,7 +207,7 @@ impl UiNotifyRuntime {
         let before = state.active.len();
         state.active.retain(|toast| {
             let id_matches = id.is_empty() || toast.notification.id == id;
-            let source_matches = source.map_or(true, |source| toast.notification.source == source);
+            let source_matches = source.is_none_or(|source| toast.notification.source == source);
             !(id_matches && source_matches)
         });
         let affected = before.saturating_sub(state.active.len());
@@ -232,7 +232,7 @@ impl UiNotifyRuntime {
         let mut state = self.inner.lock();
         let before = state.active.len();
         state.active.retain(|toast| {
-            let source_matches = source.map_or(true, |source| toast.notification.source == source);
+            let source_matches = source.is_none_or(|source| toast.notification.source == source);
             !source_matches || (toast.sticky && !request.include_sticky)
         });
         let affected = before.saturating_sub(state.active.len());
@@ -263,7 +263,7 @@ impl UiNotifyRuntime {
         state.active.retain(|toast| {
             toast
                 .expires_at_ms
-                .map_or(true, |expires_at_ms| expires_at_ms > now_ms)
+                .is_none_or(|expires_at_ms| expires_at_ms > now_ms)
         });
         if state.active.len() != before {
             state.generation = state.generation.wrapping_add(1).max(1);
@@ -337,9 +337,11 @@ pub fn request_from_game_message(message: &GameMessageEnvelope) -> Option<UiNoti
         .map(str::to_owned)
         .or_else(|| message.correlation_id.clone())
         .unwrap_or_else(|| {
-            (message.sequence > 0)
-                .then(|| format!("{}.{}", message.id, message.sequence))
-                .unwrap_or_default()
+            if message.sequence > 0 {
+                format!("{}.{}", message.id, message.sequence)
+            } else {
+                String::new()
+            }
         });
 
     Some(UiNotifyRequest {

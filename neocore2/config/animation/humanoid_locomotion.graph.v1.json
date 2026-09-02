@@ -1,0 +1,114 @@
+{
+  "$schema": "northstar.animation_graph.v1",
+  "name": "humanoid.locomotion",
+  "entry_state": "Idle",
+  "parameters": [
+    {
+      "name": "normalized_speed",
+      "default": {
+        "float": 0.0
+      }
+    }
+  ],
+  "states": [
+    {
+      "name": "Idle",
+      "motion": {
+        "clip": {
+          "clip_ref": "slot://idle",
+          "speed": 1.0,
+          "sync_group": null
+        }
+      },
+      "speed": 1.0,
+      "root_motion": "disabled"
+    },
+    {
+      "name": "Walk",
+      "motion": {
+        "clip": {
+          "clip_ref": "slot://walk",
+          "speed": 1.0,
+          "sync_group": null
+        }
+      },
+      "speed": 1.0,
+      "root_motion": "disabled"
+    },
+    {
+      "name": "Run",
+      "motion": {
+        "clip": {
+          "clip_ref": "slot://run",
+          "speed": 1.0,
+          "sync_group": null
+        }
+      },
+      "speed": 1.0,
+      "root_motion": "disabled"
+    },
+    {
+      "name": "Sprint",
+      "motion": {
+        "clip": {
+          "clip_ref": "slot://sprint",
+          "speed": 1.0,
+          "sync_group": null
+        }
+      },
+      "speed": 1.0,
+      "root_motion": "disabled"
+    },
+    {
+      "name": "CrouchIdle",
+      "motion": {
+        "clip": {
+          "clip_ref": "slot://crouch_idle",
+          "speed": 1.0,
+          "sync_group": null
+        }
+      },
+      "speed": 1.0,
+      "root_motion": "disabled"
+    },
+    {
+      "name": "CrouchWalk",
+      "motion": {
+        "clip": {
+          "clip_ref": "slot://crouch_walk",
+          "speed": 1.0,
+          "sync_group": null
+        }
+      },
+      "speed": 1.0,
+      "root_motion": "disabled"
+    },
+    {
+      "name": "Jump",
+      "motion": {
+        "clip": {
+          "clip_ref": "slot://jump",
+          "speed": 1.0,
+          "sync_group": null
+        }
+      },
+      "speed": 1.0,
+      "root_motion": "disabled"
+    },
+    {
+      "name": "Fall",
+      "motion": {
+        "clip": {
+          "clip_ref": "slot://fall",
+          "speed": 1.0,
+          "sync_group": null
+        }
+      },
+      "speed": 1.0,
+      "root_motion": "disabled"
+    }
+  ],
+  "transitions": [],
+  "layers": [],
+  "root_motion_joint_tag": null
+}

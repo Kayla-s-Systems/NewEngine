@@ -88,7 +88,6 @@ impl Default for AssetPipelineSnapshotV1 {
 
 /// `ownership` is populated at runtime from `engine.assets.types`; the API does not
 /// carry a compiled first-party format catalog.
-
 pub const ASSET_IMPORTER_DESCRIPTOR_SCHEMA: &str = "northstar.assets.importer_descriptor.v1";
 pub const ASSET_RUNTIME_GRAPH_SCHEMA: &str = "northstar.assets.runtime_graph.v1";
 pub const ASSET_INVALIDATION_PLAN_SCHEMA: &str = "northstar.assets.invalidation_plan.v1";

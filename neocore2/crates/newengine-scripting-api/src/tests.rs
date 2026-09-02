@@ -39,9 +39,7 @@ fn response_preserves_request_id_only() {
 
 #[test]
 fn completion_tooling_method_is_part_of_the_generic_scripting_surface() {
-    assert!(scripting_service_methods()
-        .iter()
-        .any(|method| *method == SCRIPTING_SERVICE_METHOD_COMPLETE_JSON_V1));
+    assert!(scripting_service_methods().contains(&SCRIPTING_SERVICE_METHOD_COMPLETE_JSON_V1));
 
     let request = ScriptingCompletionRequest::default();
     assert_eq!(request.schema, SCRIPTING_COMPLETION_REQUEST_SCHEMA_V1);
@@ -52,12 +50,8 @@ fn completion_tooling_method_is_part_of_the_generic_scripting_surface() {
 #[test]
 fn signature_and_tooling_catalog_methods_are_generic_scripting_surface() {
     let methods = scripting_service_methods();
-    assert!(methods
-        .iter()
-        .any(|method| *method == SCRIPTING_SERVICE_METHOD_SIGNATURE_HELP_JSON_V1));
-    assert!(methods
-        .iter()
-        .any(|method| *method == SCRIPTING_SERVICE_METHOD_SET_TOOLING_CATALOG_JSON_V1));
+    assert!(methods.contains(&SCRIPTING_SERVICE_METHOD_SIGNATURE_HELP_JSON_V1));
+    assert!(methods.contains(&SCRIPTING_SERVICE_METHOD_SET_TOOLING_CATALOG_JSON_V1));
 
     let signature_request = ScriptingSignatureHelpRequest::default();
     assert_eq!(

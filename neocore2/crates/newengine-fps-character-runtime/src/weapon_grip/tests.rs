@@ -23,6 +23,25 @@ fn fixture() -> WeaponPresentationDefinition {
 }
 
 #[test]
+fn third_person_ads_aligns_real_sights_while_preserving_firing_handle() {
+    let p = fixture();
+    let authored = WeaponRootTransform {
+        position: Vec3::new(0.12, 1.18, -0.24),
+        rotation: Quat::from_euler(newengine_math::EulerRot::YXZ, 0.15, -0.08, 0.04),
+    };
+    let handle_before = weapon_handle_position(&p, authored);
+    let current_sight = weapon_sight_forward(&p, authored);
+    let desired = (Quat::from_rotation_y(0.22) * Quat::from_rotation_x(-0.11) * current_sight)
+        .normalize_or_zero();
+    let aimed = weapon_sight_aligned_root_around_handle(&p, authored, desired, 1.0)
+        .expect("third-person sight-aligned root");
+    let handle_after = weapon_handle_position(&p, aimed);
+    let sight_after = weapon_sight_forward(&p, aimed);
+    assert!(handle_before.distance(handle_after) <= 1.0e-6);
+    assert!(sight_after.dot(desired) > 0.999_99);
+}
+
+#[test]
 fn authored_prop_socket_resolves_handle_then_inverse_full_handle_transform_once() {
     let mut p = fixture();
     p.handle_from_root = [0.03, -0.02, 0.11];

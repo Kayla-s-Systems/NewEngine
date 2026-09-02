@@ -65,10 +65,10 @@ impl AudioRuntimeState {
         Ok(plans)
     }
 
-    fn eval_sound_graph_voice_node<'a>(
+    fn eval_sound_graph_voice_node(
         &mut self,
         node_id: &str,
-        nodes: &HashMap<String, &'a newengine_asset_format_nef8::YsncdSoundGraphNode>,
+        nodes: &HashMap<String, &newengine_asset_format_nef8::YsncdSoundGraphNode>,
         ctx: &SoundGraphEvalContext<'_>,
         stack: &mut Vec<String>,
         staged_sequences: &mut HashMap<String, u64>,
@@ -245,10 +245,10 @@ impl AudioRuntimeState {
         result
     }
 
-    fn eval_sound_graph_scalar_node<'a>(
+    fn eval_sound_graph_scalar_node(
         &mut self,
         node_id: &str,
-        nodes: &HashMap<String, &'a newengine_asset_format_nef8::YsncdSoundGraphNode>,
+        nodes: &HashMap<String, &newengine_asset_format_nef8::YsncdSoundGraphNode>,
         ctx: &SoundGraphEvalContext<'_>,
         stack: &mut Vec<String>,
     ) -> Result<f32, String> {

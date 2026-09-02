@@ -898,6 +898,7 @@ mod tests {
         assert!(state.route_gains.is_empty());
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn insert_policy_test_voice(
         state: &mut AudioRuntimeState,
         voice_id: u64,

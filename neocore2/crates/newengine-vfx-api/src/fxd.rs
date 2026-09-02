@@ -528,7 +528,7 @@ mod tests {
                     acceleration: [0.0, -9.81, 0.0],
                     drag_per_second: 0.1,
                     depth_softness_m: 0.0,
-                    rotation_random_radians: 3.14159,
+                    rotation_random_radians: std::f32::consts::PI,
                     spin_radians_per_second: 2.0,
                     spin_variance: 1.0,
                     lifetime_seconds: 0.2,

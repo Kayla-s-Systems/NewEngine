@@ -53,27 +53,6 @@ fn native_options() -> eframe::NativeOptions {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn prestart_window_is_centered_and_not_position_persistent() {
-        let options = native_options();
-        assert!(options.centered);
-        assert!(!options.persist_window);
-        assert_eq!(
-            options.viewport.inner_size,
-            Some(egui::vec2(WINDOW_WIDTH, WINDOW_HEIGHT))
-        );
-        assert_eq!(
-            options.viewport.min_inner_size,
-            Some(egui::vec2(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT))
-        );
-        assert_eq!(options.viewport.clamp_size_to_monitor_size, Some(true));
-    }
-}
-
 fn present(config_path: &Path, startup: &StartupConfig) -> StartupWindowReport {
     let report_path = config_path.to_path_buf();
     let outcome = Arc::new(Mutex::new(PresenterOutcome::Pending));
@@ -119,5 +98,26 @@ fn present(config_path: &Path, startup: &StartupConfig) -> StartupWindowReport {
             report_path,
             "PreStart settings window was closed or cancelled; last confirmed settings were not changed",
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prestart_window_is_centered_and_not_position_persistent() {
+        let options = native_options();
+        assert!(options.centered);
+        assert!(!options.persist_window);
+        assert_eq!(
+            options.viewport.inner_size,
+            Some(egui::vec2(WINDOW_WIDTH, WINDOW_HEIGHT))
+        );
+        assert_eq!(
+            options.viewport.min_inner_size,
+            Some(egui::vec2(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT))
+        );
+        assert_eq!(options.viewport.clamp_size_to_monitor_size, Some(true));
     }
 }

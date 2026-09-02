@@ -128,8 +128,10 @@ fn callback_damage_multiplier_must_be_finite() {
 
 #[test]
 fn character_menu_policy_validates_semantic_toggle_contract() {
-    let mut policy = FpsCharacterMenuPolicySnapshot::default();
-    policy.title = "MODEL".to_owned();
+    let mut policy = FpsCharacterMenuPolicySnapshot {
+        title: "MODEL".to_owned(),
+        ..Default::default()
+    };
     policy.validate().expect("default semantic menu policy");
 
     policy.toggle_action = "KeyM".to_owned();

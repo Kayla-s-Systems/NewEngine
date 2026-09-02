@@ -33,6 +33,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--timeout", type=float, default=60.0)
     parser.add_argument("--keep-logs", action="store_true")
+    parser.add_argument(
+        "--project",
+        type=Path,
+        help="Game Ready game.toml to launch when using the generic NewEngine executable",
+    )
     return parser.parse_args()
 
 
@@ -75,7 +80,7 @@ def main() -> int:
     standalone = root / "target" / "release" / "game-ready-fps.exe"
     release_engine = root / "target" / "release" / "NewEngine.exe"
     debug_engine = root / "target" / "debug" / "NewEngine.exe"
-    project = repo / "Projects" / "GameReadyFPS" / "game.toml"
+    project = (args.project.resolve() if args.project is not None else repo / "Projects" / "GameReadyFPS" / "game.toml")
     if standalone.is_file():
         command = [str(standalone), "--no-startup-window"]
     else:
@@ -87,7 +92,7 @@ def main() -> int:
             )
             return 2
         if not project.is_file():
-            print(f"missing GameReadyFPS manifest: {project}", file=sys.stderr)
+            print(f"missing Game Ready manifest: {project}", file=sys.stderr)
             return 2
         command = [
             str(engine),

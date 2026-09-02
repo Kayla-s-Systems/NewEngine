@@ -185,7 +185,7 @@ pub(super) fn run_stage_parallel(
 
         let commit_started = Instant::now();
         for (expected_index, command_batch) in
-            indices.iter().copied().zip(result.commands.into_iter())
+            indices.iter().copied().zip(result.commands)
         {
             assert_eq!(
                 command_batch.system_index, expected_index,

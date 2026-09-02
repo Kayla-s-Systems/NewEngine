@@ -22,7 +22,6 @@ FUNCTION = re.compile(
 
 STRICT_RUNTIME_ROOTS = (
     ROOT / "crates/newengine-engine-runtime/src",
-    ROOT / "crates/newengine-game-ready-world/src",
     ROOT / "crates/newengine-audio-runtime/src",
     ROOT / "crates/newengine-authored-world-runtime/src",
     ROOT / "crates/newengine-asset-bootstrap-runtime/src",
@@ -56,13 +55,12 @@ ALLOWED_INGRESS_FUNCTIONS: dict[str, set[str]] = {
         "project_request_from_process",
         "project_launch_request_from_process",
     },
+    "crates/newengine-project-runtime/src/launch_env.rs": {
+        "set_default_env",
+        "apply_project_ui_env",
+    },
     "crates/newengine-project-runtime/src/project_browser.rs": {
         "default_projects_root",
-    },
-    "crates/newengine-plugin-host/src/host_context/state.rs": {
-        "refresh_environment_from_process",
-        "make_default_ctx",
-        "create_host_context",
     },
 }
 
@@ -193,7 +191,7 @@ def verify_launcher_boundary(errors: list[str]) -> None:
 
 
 def verify_host_fallback(errors: list[str]) -> None:
-    path = ROOT / "crates/newengine-plugin-host/src/host_context/state.rs"
+    path = ROOT / "crates/newengine-plugin-host/src/host_context/state/global.rs"
     source = path.read_text(encoding="utf-8")
     ctx_start = source.find("pub(crate) fn ctx()")
     services_start = source.find("pub fn services_generation()", ctx_start)

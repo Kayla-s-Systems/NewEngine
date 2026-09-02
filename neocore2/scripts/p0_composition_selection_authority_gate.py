@@ -5,12 +5,15 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_UNITS = ROOT / "crates/newengine-runtime-host/src/app_launcher/runtime_units.rs"
+RUNTIME_UNITS_FACADE = ROOT / 'crates/newengine-runtime-host/src/app_launcher/runtime_units.rs'
+RUNTIME_UNITS_SOLVER = ROOT / 'crates/newengine-runtime-host/src/app_launcher/runtime_units/solver.rs'
 THREADING = ROOT / "crates/newengine-runtime-host/src/threading_gateway.rs"
 BOOTSTRAP = ROOT / "crates/newengine-runtime-host/src/app_launcher/bootstrap.rs"
 
 errors: list[str] = []
-runtime_units = RUNTIME_UNITS.read_text(encoding="utf-8")
+runtime_units_facade = RUNTIME_UNITS_FACADE.read_text(encoding='utf-8')
+runtime_units_solver = RUNTIME_UNITS_SOLVER.read_text(encoding='utf-8')
+runtime_units = runtime_units_facade + '\n' + runtime_units_solver
 threading = THREADING.read_text(encoding="utf-8")
 bootstrap = BOOTSTRAP.read_text(encoding="utf-8")
 
@@ -21,12 +24,12 @@ for forbidden, message in (
     if forbidden in runtime_units:
         errors.append(message)
 
-select_start = runtime_units.find("fn select_runtime_unit_keys(")
-select_end = runtime_units.find("fn topological_runtime_unit_order(", select_start)
+select_start = runtime_units_solver.find("fn select_runtime_unit_keys(")
+select_end = runtime_units_solver.find("fn topological_runtime_unit_order(", select_start)
 if select_start < 0 or select_end < 0:
     errors.append("runtime-unit selection function boundaries are missing")
 else:
-    selection = runtime_units[select_start:select_end]
+    selection = runtime_units_solver[select_start:select_end]
     for token in (
         "CompositionSolver::resolve_input",
         "dependency_requirements",
@@ -36,7 +39,7 @@ else:
         # CompositionSolver lives in solve_candidates immediately above this function;
         # allow the shared helper as long as the fixed-point function calls it.
         if token == "CompositionSolver::resolve_input":
-            if token not in runtime_units:
+            if token not in runtime_units_solver:
                 errors.append("runtime-unit selection no longer delegates to CompositionSolver")
         elif token not in selection:
             errors.append(f"runtime-unit fixed-point closure missing: {token}")

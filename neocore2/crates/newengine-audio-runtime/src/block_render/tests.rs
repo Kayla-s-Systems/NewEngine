@@ -51,7 +51,7 @@ fn scheduled_add_starts_source_on_exact_frame_boundary() {
     );
     graph
         .add_boxed_source(
-            Box::new(mono(&vec![1.0; 32])),
+            Box::new(mono(&[1.0; 32])),
             1.0,
             1.0,
             false,

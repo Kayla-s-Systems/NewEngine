@@ -1,0 +1,84 @@
+{
+  "schema": "com.takesome.springsuite.repo-index.v1",
+  "generatedAt": "2026-08-12T04:46:00.6430573Z",
+  "tool": {
+    "name": "suite-repo-indexer",
+    "version": "0.1.1"
+  },
+  "input": {
+    "repositories": ".springsuite/repositories.json",
+    "roots": [
+      "."
+    ],
+    "output": ".springsuite\\repo-index-source-audit.json",
+    "depth": 5,
+    "maxFileSize": 0,
+    "hash": false
+  },
+  "repositoryCount": 1,
+  "repositories": [
+    {
+      "name": "NewEngine",
+      "rootPath": "C:\\Users\\Aiden\\Documents\\Repos\\NorthStar\\NewEngine",
+      "gitDirectory": "C:\\Users\\Aiden\\Documents\\Repos\\NorthStar\\NewEngine\\.git",
+      "descriptorPath": "C:\\Users\\Aiden\\Documents\\Repos\\NorthStar\\NewEngine\\.springsuite-repository.json",
+      "descriptorExists": true,
+      "branch": "main",
+      "files": {
+        "count": 2657,
+        "hashedCount": 0,
+        "totalBytes": 941915354,
+        "skippedBytes": 941915354
+      },
+      "languageBytes": {
+        ".bak-20260811-122020": 2587,
+        ".bak-20260811-122307": 610,
+        ".bak-20260811-122908": 6752,
+        ".bak-20260811-202241": 4967,
+        ".bak-20260811-203901": 7586,
+        ".bak-sunfx": 71597,
+        ".bat": 359,
+        ".bin": 1020714,
+        ".cargo-ok": 7,
+        ".clang-format": 20,
+        ".cmake": 32852,
+        ".cmd": 259,
+        ".cpp": 1767116,
+        ".css": 559,
+        ".csv": 1702865,
+        ".dll": 2017792,
+        ".drawio": 80210,
+        ".editorconfig": 344,
+        ".gitattributes": 408,
+        ".gitignore": 259,
+        ".gitmodules": 82,
+        ".gliffy": 16723,
+        ".h": 1758589,
+        ".inl": 201698,
+        ".jpg": 380886,
+        ".js": 8437,
+        ".json": 7387771,
+        ".lock": 122279,
+        ".md": 441240,
+        ".natvis": 4973,
+        ".ndjson": 52822586,
+        ".png": 8093637,
+        ".properties": 410,
+        ".py": 293014,
+        ".pyc": 80994,
+        ".rs": 7067870,
+        ".sh": 237,
+        ".spv": 912192,
+        ".svg": 184369,
+        ".toml": 69148,
+        ".txt": 2508,
+        ".yml": 25002,
+        ".zip": 855185230,
+        "\u003cnone\u003e": 137616
+      },
+      "datasetRoots": [],
+      "examples": [],
+      "samples": []
+    }
+  ]
+}

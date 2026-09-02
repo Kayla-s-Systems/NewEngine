@@ -121,7 +121,14 @@ impl Module<()> for UiNotifyModule {
 
         let frame = ctx.frame().copied();
         let dt_ms = frame
-            .map(|frame| (frame.dt.max(0.0).min(1.0) * 1_000.0).round() as u64)
+            .map(|frame| {
+                let dt = if frame.dt.is_finite() {
+                    frame.dt.clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                (dt * 1_000.0).round() as u64
+            })
             .unwrap_or(0);
         self.runtime.advance(dt_ms);
         let stack = self

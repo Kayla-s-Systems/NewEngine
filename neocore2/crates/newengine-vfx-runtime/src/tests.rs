@@ -123,7 +123,7 @@ fn test_effect_library() -> VfxEffectLibrary {
                     lifetime_variance: 0.15,
                     drag_per_second: 0.1,
                     depth_softness_m: 0.0,
-                    rotation_random_radians: 3.14159,
+                    rotation_random_radians: std::f32::consts::PI,
                     spin_radians_per_second: 3.0,
                     spin_variance: 1.5,
                     acceleration: Vec3::new(0.0, -9.8, 0.0),

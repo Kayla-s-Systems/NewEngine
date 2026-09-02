@@ -14,6 +14,18 @@ struct GainRamp {
     end_sample: u64,
 }
 
+pub(super) struct BlockVoiceNodeInit {
+    pub(super) id: u64,
+    pub(super) source: BlockSourceAdapter,
+    pub(super) gain: f32,
+    pub(super) speed: f32,
+    pub(super) paused: bool,
+    pub(super) source_position: Duration,
+    pub(super) state: Arc<SharedVoiceState>,
+    pub(super) sample_rate: SampleRate,
+    pub(super) channels: ChannelCount,
+}
+
 pub(super) struct BlockVoiceNode {
     pub(super) id: u64,
     source: BlockSourceAdapter,
@@ -28,17 +40,18 @@ pub(super) struct BlockVoiceNode {
 }
 
 impl BlockVoiceNode {
-    pub(super) fn new(
-        id: u64,
-        source: BlockSourceAdapter,
-        gain: f32,
-        speed: f32,
-        paused: bool,
-        source_position: Duration,
-        state: Arc<SharedVoiceState>,
-        sample_rate: SampleRate,
-        channels: ChannelCount,
-    ) -> Self {
+    pub(super) fn new(init: BlockVoiceNodeInit) -> Self {
+        let BlockVoiceNodeInit {
+            id,
+            source,
+            gain,
+            speed,
+            paused,
+            source_position,
+            state,
+            sample_rate,
+            channels,
+        } = init;
         Self {
             id,
             source,
@@ -192,8 +205,13 @@ impl BlockSourceAdapter {
             return false;
         }
         let t = self.phase.clamp(0.0, 1.0) as f32;
-        for channel in 0..self.channels {
-            out[channel] = self.current[channel] + (self.next[channel] - self.current[channel]) * t;
+        for ((output, current), next) in out
+            .iter_mut()
+            .zip(self.current.iter())
+            .zip(self.next.iter())
+            .take(self.channels)
+        {
+            *output = *current + (*next - *current) * t;
         }
 
         self.phase += f64::from(finite_speed(speed));

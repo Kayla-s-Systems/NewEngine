@@ -99,7 +99,7 @@ impl SceneStreamingPlan {
                 priority_key: coord.distance_key(center),
             })
             .collect::<Vec<_>>();
-        unloads.sort_by(|a, b| b.priority_key.cmp(&a.priority_key));
+        unloads.sort_by_key(|request| std::cmp::Reverse(request.priority_key));
 
         Self {
             center,
@@ -145,6 +145,8 @@ impl SceneLayeredStreamingPlan {
     }
 
     /// Build render/simulation layers from caller-authored desired sets.
+    // Render/simulation residency inputs are intentionally parallel at this boundary.
+    #[allow(clippy::too_many_arguments)]
     pub fn build_from_desired(
         center: SceneCellCoord,
         profile: SceneStreamingProfile,

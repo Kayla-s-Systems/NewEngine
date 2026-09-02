@@ -48,22 +48,12 @@ impl FpsProjectEventSubscription {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct FpsCallbackExports {
     pub interaction: String,
     pub hit: String,
     pub mission_event: String,
-}
-
-impl Default for FpsCallbackExports {
-    fn default() -> Self {
-        Self {
-            interaction: String::new(),
-            hit: String::new(),
-            mission_event: String::new(),
-        }
-    }
 }
 
 impl FpsCallbackExports {

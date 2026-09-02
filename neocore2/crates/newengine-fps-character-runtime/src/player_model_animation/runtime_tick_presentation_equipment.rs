@@ -371,18 +371,10 @@ fn apply_equipment_ready_pose(
         )?;
     }
 
-    if let Some(space) = pose_set.map(|set| set.pose_space(body_stance)) {
-        apply_equipment_grip_layers(
-            space,
-            0.0,
-            sample_phase,
-            1.0,
-            animation_runtime,
-            scratch_a,
-            target,
-            weights,
-        )?;
-    }
+    // READY and AIM are separate authored states. `pose_space(...).grip` contains the
+    // stand/crouch AIM composition and must never be layered over a carry/low-ready base.
+    // Doing so turns an idle carry into an aim pose before the player actually aims.
+    let _ = body_stance;
     Ok(self_contained)
 }
 

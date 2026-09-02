@@ -34,7 +34,7 @@ pub fn decode_geometry_lod0(pak: &PakFile) -> Result<DecodedGeometry, String> {
         let vertex_count = pak.read_u32(sub + count_offset)? as usize;
         let index_count = pak.read_u32(sub + count_offset + 4)? as usize;
         let stream_count = pak.read_u32(sub + count_offset + 8)? as usize;
-        if vertex_count == 0 || index_count == 0 || index_count % 3 != 0 {
+        if vertex_count == 0 || index_count == 0 || !index_count.is_multiple_of(3) {
             return Err(format!(
                 "invalid source submesh geometry name='{name}' vertices={vertex_count} indices={index_count}"
             ));

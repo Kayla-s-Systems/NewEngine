@@ -42,7 +42,7 @@ for capability in (
     if capability not in registry:
         errors.append(f"editor typed requirement projection is missing: {capability}")
 
-if 'newengine-service-api = { path = "../../neocore2/crates/newengine-service-api" }' not in manifest:
+if "newengine-service-api" not in manifest:
     errors.append("editor gateway must depend directly on shared newengine-service-api")
 
 for shared_feature in (

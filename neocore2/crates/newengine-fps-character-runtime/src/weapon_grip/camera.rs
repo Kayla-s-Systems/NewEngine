@@ -8,6 +8,49 @@ pub(crate) fn weapon_sight_forward(
     .normalize_or_zero()
 }
 
+/// Rotate an already-authored third-person weapon root around its physical firing handle until the
+/// rendered rear->front sight axis follows the gameplay view. Translation ownership stays with the
+/// character-authored handle; only orientation is transferred from camera intent.
+///
+/// This is deliberately root-in/root-out: native character rigs may have a prop socket that is a
+/// sibling of the anatomical palm, so the arm solver must consume the resulting root rather than
+/// inventing a separate camera-space attachment.
+pub(crate) fn weapon_sight_aligned_root_around_handle(
+    presentation: &WeaponPresentationDefinition,
+    authored: WeaponRootTransform,
+    view_forward_model: Vec3,
+    aim_alpha: f32,
+) -> Option<WeaponRootTransform> {
+    let presentation = presentation.clone().sanitized();
+    if !presentation.enabled
+        || !authored.position.is_finite()
+        || !authored.rotation.is_finite()
+        || !view_forward_model.is_finite()
+    {
+        return None;
+    }
+    let view_forward = view_forward_model.normalize_or_zero();
+    let sight_forward = weapon_sight_forward(&presentation, authored);
+    if view_forward.length_squared() <= 1.0e-8 || sight_forward.length_squared() <= 1.0e-8 {
+        return None;
+    }
+    let aim_alpha = if aim_alpha.is_finite() {
+        aim_alpha.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let full_rotation = (Quat::from_rotation_arc(sight_forward, view_forward) * authored.rotation)
+        .normalize_or_identity();
+    let rotation = authored
+        .rotation
+        .slerp(full_rotation, aim_alpha)
+        .normalize_or_identity();
+    let handle = weapon_handle_position(&presentation, authored);
+    let position = weapon_root_position_from_handle(&presentation, handle, rotation);
+    (position.is_finite() && rotation.is_finite())
+        .then_some(WeaponRootTransform { position, rotation })
+}
+
 /// Camera origin required by the authored eye-relief vector for a rendered weapon root. This is
 /// intentionally derived from the actual rear sight after all weapon presentation transforms.
 pub(crate) fn weapon_ads_camera_position(

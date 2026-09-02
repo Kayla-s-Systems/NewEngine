@@ -54,7 +54,7 @@ pub(super) fn scan_plugins_dir(dir: &Path) -> Result<DiscoveryGraph, PluginLoadE
         }
     }
 
-    items.sort_by(|a, b| sort_key(&a.path).cmp(&sort_key(&b.path)));
+    items.sort_by_key(|item| sort_key(&item.path));
 
     let mut platform_runtime_count = 0usize;
     let mut bootstrap_total = 0usize;

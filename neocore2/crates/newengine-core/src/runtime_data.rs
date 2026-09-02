@@ -90,8 +90,10 @@ mod tests {
 
     #[test]
     fn runtime_data_path_is_config_owned_not_source_tree_owned() {
-        let mut startup = StartupConfig::default();
-        startup.config = PathBuf::from("runtime-config-root");
+        let mut startup = StartupConfig {
+            config: PathBuf::from("runtime-config-root"),
+            ..Default::default()
+        };
         startup.plugins.insert(
             "example.provider".to_owned(),
             json!({"runtime_data": {"catalog": "domain/catalog.json"}}),

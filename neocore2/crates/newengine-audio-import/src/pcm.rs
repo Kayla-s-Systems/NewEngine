@@ -29,7 +29,7 @@ impl CanonicalPcmBuffer {
             ));
         }
         let channels = usize::from(self.channels);
-        if self.samples.len() % channels != 0 {
+        if !self.samples.len().is_multiple_of(channels) {
             return Err(format!(
                 "canonical PCM sample count {} is not divisible by channels {}",
                 self.samples.len(),

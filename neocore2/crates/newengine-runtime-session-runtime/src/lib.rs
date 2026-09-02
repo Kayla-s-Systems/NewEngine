@@ -156,7 +156,7 @@ fn apply_command(
         }
         RuntimeSessionCommand::Step { frames } => {
             if state.is_active() && state.paused {
-                let frames = frames.max(1).min(MAX_STEP_BUDGET);
+                let frames = frames.clamp(1, MAX_STEP_BUDGET);
                 state.step_budget = state
                     .step_budget
                     .saturating_add(frames)

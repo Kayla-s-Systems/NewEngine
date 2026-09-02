@@ -1,9 +1,11 @@
+type CompactedIndexedVertexStreams = (Vec<[f32; 4]>, Vec<[f32; 4]>, Vec<u32>, Vec<usize>);
+
 fn compact_indexed_vertex_streams(
     positions: &[[f32; 4]],
     uv0: &[[f32; 4]],
     source_indices: &[u32],
     mesh_name: &str,
-) -> Result<(Vec<[f32; 4]>, Vec<[f32; 4]>, Vec<u32>, Vec<usize>), String> {
+) -> Result<CompactedIndexedVertexStreams, String> {
     if positions.len() != uv0.len() {
         return Err(format!(
             "vertex stream length mismatch mesh='{mesh_name}' positions={} uv0={}",

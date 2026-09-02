@@ -13,182 +13,1173 @@
     "all_dataset_archives_must_be_mapped": true
   },
   "archive_coverage": [
-    { "reference_archive": "ai.zip", "mapped_systems": ["engine.ai", "engine.tags", "engine.tasks", "engine.animation", "engine.navigation"], "northstar_status": "covered", "production_gaps_visible": true, "gap_summary": ["utility/behavior planner provider", "spatial perception index provider", "ambient model provider"] },
-    { "reference_archive": "animation.zip", "mapped_systems": ["engine.animation", "engine.tags", "engine.tasks"], "northstar_status": "covered", "production_gaps_visible": true, "gap_summary": ["clip dictionary runtime", "blend tree evaluator", "animscene timeline"] },
-    { "reference_archive": "camera.zip", "mapped_systems": ["engine.camera", "engine.camera.modes", "engine.camera.animations"], "northstar_status": "covered", "production_gaps_visible": true, "gap_summary": ["cinematic director provider", "mounted/tracking provider family", "camera debug tooling parity"] },
-    { "reference_archive": "renderer.zip", "mapped_systems": ["engine.render", "engine.render.shadows", "engine.render.lighting", "engine.render.postfx", "engine.render.vfx", "engine.render.terrain", "engine.render.debug"], "northstar_status": "covered", "production_gaps_visible": true, "gap_summary": ["particle/VFX runtime", "terrain/foliage runtime", "occlusion/visibility runtime"] },
-    { "reference_archive": "scene.zip", "mapped_systems": ["engine.scene", "engine.scene.instantiation", "engine.world"], "northstar_status": "covered", "production_gaps_visible": true, "gap_summary": ["map/IPL loader provider", "entity batch/LOD parity", "decorator metadata registry"] },
-    { "reference_archive": "streaming.zip", "mapped_systems": ["engine.world.streaming", "engine.world.streaming.cells", "engine.assets.dependencies"], "northstar_status": "covered", "production_gaps_visible": true, "gap_summary": ["priority streamer scheduler", "zoned asset manager", "debug graph tooling"] },
-    { "reference_archive": "SaveLoad.zip", "mapped_systems": ["engine.world", "engine.world.snapshot", "engine.world.apply", "engine.scene"], "northstar_status": "covered", "production_gaps_visible": true, "gap_summary": ["slot management provider", "cloud/storage provider", "migration/version graph"] },
-    { "reference_archive": "script.zip", "mapped_systems": ["engine.scripting", "engine.schema"], "northstar_status": "covered", "production_gaps_visible": true, "gap_summary": ["real VM/provider", "full command binding generation", "script save/network bridge"] },
-    { "reference_archive": "replaycoordinator.zip", "mapped_systems": ["engine.time", "engine.replay"], "northstar_status": "covered", "production_gaps_visible": true, "gap_summary": ["runtime frame capture integration", "streamed replay chunks", "debug viewer"] },
-
-    { "reference_archive": "audio.zip", "mapped_systems": ["engine.audio"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["mixer/bus/effects/streams provider not at reference level", "runtime voice/event integration incomplete"] },
-    { "reference_archive": "network.zip", "mapped_systems": ["engine.network", "engine.replication", "engine.scripting"], "northstar_status": "missing_gateway", "production_gaps_visible": true, "gap_summary": ["engine.network and engine.replication root gateways are not declared yet", "network script handler remains reference-only"] },
-    { "reference_archive": "vfx.zip", "mapped_systems": ["engine.render.vfx"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["particles/VFX descriptors exist through render maturity", "runtime VFX simulation/provider parity missing"] },
-    { "reference_archive": "text.zip", "mapped_systems": ["engine.ui.text", "engine.assets.definitions"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["text gateway exists", "localization/font/text asset pipeline parity incomplete"] },
-    { "reference_archive": "frontend.zip", "mapped_systems": ["engine.ui", "engine.ui.debug", "engine.schema"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["editor shell exists", "full front-end menu flow/widget parity missing"] },
-    { "reference_archive": "debug.zip", "mapped_systems": ["engine.ui.debug", "engine.logging", "engine.render.debug"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["diagnostics gateways exist", "debug tooling breadth not at dataset level"] },
-    { "reference_archive": "event.zip", "mapped_systems": ["engine.scripting", "engine.tasks", "engine.schema"], "northstar_status": "missing_gateway", "production_gaps_visible": true, "gap_summary": ["event queue/domain is only indirectly covered", "explicit event gateway/capability decision required"] },
-    { "reference_archive": "control.zip", "mapped_systems": ["engine.input", "engine.input.actions", "engine.time"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["input/actions foundation exists", "control/replay packet parity missing"] },
-    { "reference_archive": "ik.zip", "mapped_systems": ["engine.animation", "engine.assets.models.skeletons"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["IK is not yet a distinct animation capability/provider family"] },
-    { "reference_archive": "Cutscene.zip", "mapped_systems": ["engine.scene", "engine.camera.animations", "engine.animation", "engine.time"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["cutscene/animscene timeline provider missing"] },
-    { "reference_archive": "tools.zip", "mapped_systems": ["engine.plugin_host", "engine.schema", "engine.ui"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["tooling surface exists", "tool-domain reference parity not mapped per tool"] },
-    { "reference_archive": "modelinfo.zip", "mapped_systems": ["engine.assets.models", "engine.assets.definitions", "engine.assets.validation"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["model metadata DTOs exist", "full modelinfo registry/provider parity missing"] },
-    { "reference_archive": "Objects.zip", "mapped_systems": ["engine.scene", "engine.entity", "engine.assets.definitions"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["object/entity archetype parity incomplete"] },
-    { "reference_archive": "pathserver.zip", "mapped_systems": ["engine.navigation", "engine.world.streaming"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["navigation gateway exists", "path server/runtime graph provider missing"] },
-    { "reference_archive": "Peds.zip", "mapped_systems": ["engine.ai", "engine.animation", "engine.assets.models", "engine.tags"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["ped intelligence/model/animation reference not production-parity"] },
-    { "reference_archive": "PedGroup.zip", "mapped_systems": ["engine.ai", "engine.tags", "engine.tasks"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["group AI/team/faction behaviors missing as provider assets"] },
-    { "reference_archive": "physics.zip", "mapped_systems": ["engine.physics", "engine.physics.contacts", "engine.physics.constraints"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["physics gateway exists", "material/contact/constraint parity incomplete"] },
-    { "reference_archive": "PhysX3.zip", "mapped_systems": ["engine.physics", "engine.assets.models.collisions"], "northstar_status": "external_reference", "production_gaps_visible": true, "gap_summary": ["third-party physics corpus", "do not import code directly", "use as behavioral/API reference only"] },
-    { "reference_archive": "performance.zip", "mapped_systems": ["engine.threading", "engine.scheduler_core", "engine.logging"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["jobs foundation exists", "budget/profiler/performance policy parity incomplete"] },
-    { "reference_archive": "framework.zip", "mapped_systems": ["engine.plugin_host", "engine.abi", "engine.gateway_registry", "engine.scheduler_core"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["host/gateway architecture exists", "framework breadth still split across staged gaps"] },
-    { "reference_archive": "SpeedTree.zip", "mapped_systems": ["engine.render.terrain", "engine.assets.models", "engine.assets.materials"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": [".srt/.spm source ownership and import contracts, deterministic CPU extraction and GPU capability seam implemented", "licensed/provider-side SpeedTree binary importer, wind vertex ABI and hardware smoke still required"] },
-    { "reference_archive": "pro-shaders.zip", "mapped_systems": ["engine.render", "engine.render.materials", "engine.render.postfx"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["shader graph/variant registry exists", "production shader library parity missing"] },
-    { "reference_archive": "scaleform.zip", "mapped_systems": ["engine.ui", "engine.ui.text", "engine.assets.ui"], "northstar_status": "external_reference", "production_gaps_visible": true, "gap_summary": ["legacy UI middleware reference", "do not mirror API", "use to benchmark UI/text/render behavior"] },
-    { "reference_archive": "cloth.zip", "mapped_systems": ["engine.physics", "engine.animation", "engine.assets.models"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["cloth simulation/import/provider parity missing"] },
-    { "reference_archive": "system.zip", "mapped_systems": ["engine.platform", "engine.security", "engine.plugin_host", "engine.logging"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["platform/security/system services exist as foundations", "system reference breadth incomplete"] },
-    { "reference_archive": "game.zip", "mapped_systems": ["engine.scene", "engine.entity", "engine.assets", "engine.scripting"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["game corpus must map to generic engine domains", "no game-specific root domain"] },
-    { "reference_archive": "Core.zip", "mapped_systems": ["engine.abi", "engine.plugin_host", "engine.security", "engine.schema"], "northstar_status": "visible_gap", "production_gaps_visible": true, "gap_summary": ["core abstractions exist", "reference-level utility coverage incomplete"] },
-    { "reference_archive": "extracted/script/scene.zip", "mapped_systems": ["engine.scene", "engine.scripting"], "northstar_status": "external_reference", "production_gaps_visible": true, "gap_summary": ["duplicate nested scene archive under script extraction", "canonical scene coverage is scene.zip"] }
+    {
+      "reference_archive": "ai.zip",
+      "mapped_systems": [
+        "engine.ai",
+        "engine.tags",
+        "engine.tasks",
+        "engine.animation",
+        "engine.navigation"
+      ],
+      "northstar_status": "covered",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "utility/behavior planner provider",
+        "spatial perception index provider",
+        "ambient model provider"
+      ]
+    },
+    {
+      "reference_archive": "animation.zip",
+      "mapped_systems": [
+        "engine.animation",
+        "engine.tags",
+        "engine.tasks"
+      ],
+      "northstar_status": "covered",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "clip dictionary runtime",
+        "blend tree evaluator",
+        "animscene timeline"
+      ]
+    },
+    {
+      "reference_archive": "camera.zip",
+      "mapped_systems": [
+        "engine.camera",
+        "engine.camera.modes",
+        "engine.camera.animations"
+      ],
+      "northstar_status": "covered",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "cinematic director provider",
+        "mounted/tracking provider family",
+        "camera debug tooling parity"
+      ]
+    },
+    {
+      "reference_archive": "renderer.zip",
+      "mapped_systems": [
+        "engine.render",
+        "engine.render.shadows",
+        "engine.render.lighting",
+        "engine.render.postfx",
+        "engine.render.vfx",
+        "engine.render.terrain",
+        "engine.render.debug"
+      ],
+      "northstar_status": "covered",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "particle/VFX runtime",
+        "terrain/foliage runtime",
+        "occlusion/visibility runtime"
+      ]
+    },
+    {
+      "reference_archive": "scene.zip",
+      "mapped_systems": [
+        "engine.scene",
+        "engine.scene.instantiation",
+        "engine.world"
+      ],
+      "northstar_status": "covered",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "map/IPL loader provider",
+        "entity batch/LOD parity",
+        "decorator metadata registry"
+      ]
+    },
+    {
+      "reference_archive": "streaming.zip",
+      "mapped_systems": [
+        "engine.world.streaming",
+        "engine.world.streaming.cells",
+        "engine.assets.dependencies"
+      ],
+      "northstar_status": "covered",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "priority streamer scheduler",
+        "zoned asset manager",
+        "debug graph tooling"
+      ]
+    },
+    {
+      "reference_archive": "SaveLoad.zip",
+      "mapped_systems": [
+        "engine.world",
+        "engine.world.snapshot",
+        "engine.world.apply",
+        "engine.scene"
+      ],
+      "northstar_status": "covered",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "slot management provider",
+        "cloud/storage provider",
+        "migration/version graph"
+      ]
+    },
+    {
+      "reference_archive": "script.zip",
+      "mapped_systems": [
+        "engine.scripting",
+        "engine.schema"
+      ],
+      "northstar_status": "covered",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "real VM/provider",
+        "full command binding generation",
+        "script save/network bridge"
+      ]
+    },
+    {
+      "reference_archive": "replaycoordinator.zip",
+      "mapped_systems": [
+        "engine.time",
+        "engine.replay"
+      ],
+      "northstar_status": "covered",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "runtime frame capture integration",
+        "streamed replay chunks",
+        "debug viewer"
+      ]
+    },
+    {
+      "reference_archive": "audio.zip",
+      "mapped_systems": [
+        "engine.audio"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "mixer/bus/effects/streams provider not at reference level",
+        "runtime voice/event integration incomplete"
+      ]
+    },
+    {
+      "reference_archive": "network.zip",
+      "mapped_systems": [
+        "engine.network",
+        "engine.replication",
+        "engine.scripting"
+      ],
+      "northstar_status": "missing_gateway",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "engine.network and engine.replication root gateways are not declared yet",
+        "network script handler remains reference-only"
+      ]
+    },
+    {
+      "reference_archive": "vfx.zip",
+      "mapped_systems": [
+        "engine.render.vfx"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "particles/VFX descriptors exist through render maturity",
+        "runtime VFX simulation/provider parity missing"
+      ]
+    },
+    {
+      "reference_archive": "text.zip",
+      "mapped_systems": [
+        "engine.ui.text",
+        "engine.assets.definitions"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "text gateway exists",
+        "localization/font/text asset pipeline parity incomplete"
+      ]
+    },
+    {
+      "reference_archive": "frontend.zip",
+      "mapped_systems": [
+        "engine.ui",
+        "engine.ui.debug",
+        "engine.schema"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "editor shell exists",
+        "full front-end menu flow/widget parity missing"
+      ]
+    },
+    {
+      "reference_archive": "debug.zip",
+      "mapped_systems": [
+        "engine.ui.debug",
+        "engine.logging",
+        "engine.render.debug"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "diagnostics gateways exist",
+        "debug tooling breadth not at dataset level"
+      ]
+    },
+    {
+      "reference_archive": "event.zip",
+      "mapped_systems": [
+        "engine.scripting",
+        "engine.tasks",
+        "engine.schema"
+      ],
+      "northstar_status": "missing_gateway",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "event queue/domain is only indirectly covered",
+        "explicit event gateway/capability decision required"
+      ]
+    },
+    {
+      "reference_archive": "control.zip",
+      "mapped_systems": [
+        "engine.input",
+        "engine.input.actions",
+        "engine.time"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "input/actions foundation exists",
+        "control/replay packet parity missing"
+      ]
+    },
+    {
+      "reference_archive": "ik.zip",
+      "mapped_systems": [
+        "engine.animation",
+        "engine.assets.models.skeletons"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "IK is not yet a distinct animation capability/provider family"
+      ]
+    },
+    {
+      "reference_archive": "Cutscene.zip",
+      "mapped_systems": [
+        "engine.scene",
+        "engine.camera.animations",
+        "engine.animation",
+        "engine.time"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "cutscene/animscene timeline provider missing"
+      ]
+    },
+    {
+      "reference_archive": "tools.zip",
+      "mapped_systems": [
+        "engine.plugin_host",
+        "engine.schema",
+        "engine.ui"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "tooling surface exists",
+        "tool-domain reference parity not mapped per tool"
+      ]
+    },
+    {
+      "reference_archive": "modelinfo.zip",
+      "mapped_systems": [
+        "engine.assets.models",
+        "engine.assets.definitions",
+        "engine.assets.validation"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "model metadata DTOs exist",
+        "full modelinfo registry/provider parity missing"
+      ]
+    },
+    {
+      "reference_archive": "Objects.zip",
+      "mapped_systems": [
+        "engine.scene",
+        "engine.entity",
+        "engine.assets.definitions"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "object/entity archetype parity incomplete"
+      ]
+    },
+    {
+      "reference_archive": "pathserver.zip",
+      "mapped_systems": [
+        "engine.navigation",
+        "engine.world.streaming"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "navigation gateway exists",
+        "path server/runtime graph provider missing"
+      ]
+    },
+    {
+      "reference_archive": "Peds.zip",
+      "mapped_systems": [
+        "engine.ai",
+        "engine.animation",
+        "engine.assets.models",
+        "engine.tags"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "ped intelligence/model/animation reference not production-parity"
+      ]
+    },
+    {
+      "reference_archive": "PedGroup.zip",
+      "mapped_systems": [
+        "engine.ai",
+        "engine.tags",
+        "engine.tasks"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "group AI/team/faction behaviors missing as provider assets"
+      ]
+    },
+    {
+      "reference_archive": "physics.zip",
+      "mapped_systems": [
+        "engine.physics",
+        "engine.physics.contacts",
+        "engine.physics.constraints"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "physics gateway exists",
+        "material/contact/constraint parity incomplete"
+      ]
+    },
+    {
+      "reference_archive": "PhysX3.zip",
+      "mapped_systems": [
+        "engine.physics",
+        "engine.assets.models.collisions"
+      ],
+      "northstar_status": "external_reference",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "third-party physics corpus",
+        "do not import code directly",
+        "use as behavioral/API reference only"
+      ]
+    },
+    {
+      "reference_archive": "performance.zip",
+      "mapped_systems": [
+        "engine.threading",
+        "engine.scheduler_core",
+        "engine.logging"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "jobs foundation exists",
+        "budget/profiler/performance policy parity incomplete"
+      ]
+    },
+    {
+      "reference_archive": "framework.zip",
+      "mapped_systems": [
+        "engine.plugin_host",
+        "engine.abi",
+        "engine.gateway_registry",
+        "engine.scheduler_core"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "host/gateway architecture exists",
+        "framework breadth still split across staged gaps"
+      ]
+    },
+    {
+      "reference_archive": "SpeedTree.zip",
+      "mapped_systems": [
+        "engine.render.terrain",
+        "engine.assets.models",
+        "engine.assets.materials"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        ".srt/.spm source ownership and import contracts, deterministic CPU extraction and GPU capability seam implemented",
+        "licensed/provider-side SpeedTree binary importer, wind vertex ABI and hardware smoke still required"
+      ]
+    },
+    {
+      "reference_archive": "pro-shaders.zip",
+      "mapped_systems": [
+        "engine.render",
+        "engine.render.materials",
+        "engine.render.postfx"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "shader graph/variant registry exists",
+        "production shader library parity missing"
+      ]
+    },
+    {
+      "reference_archive": "scaleform.zip",
+      "mapped_systems": [
+        "engine.ui",
+        "engine.ui.text",
+        "engine.assets.ui"
+      ],
+      "northstar_status": "external_reference",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "legacy UI middleware reference",
+        "do not mirror API",
+        "use to benchmark UI/text/render behavior"
+      ]
+    },
+    {
+      "reference_archive": "cloth.zip",
+      "mapped_systems": [
+        "engine.physics",
+        "engine.animation",
+        "engine.assets.models"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "cloth simulation/import/provider parity missing"
+      ]
+    },
+    {
+      "reference_archive": "system.zip",
+      "mapped_systems": [
+        "engine.platform",
+        "engine.security",
+        "engine.plugin_host",
+        "engine.logging"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "platform/security/system services exist as foundations",
+        "system reference breadth incomplete"
+      ]
+    },
+    {
+      "reference_archive": "game.zip",
+      "mapped_systems": [
+        "engine.scene",
+        "engine.entity",
+        "engine.assets",
+        "engine.scripting"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "game corpus must map to generic engine domains",
+        "no game-specific root domain"
+      ]
+    },
+    {
+      "reference_archive": "Core.zip",
+      "mapped_systems": [
+        "engine.abi",
+        "engine.plugin_host",
+        "engine.security",
+        "engine.schema"
+      ],
+      "northstar_status": "visible_gap",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "core abstractions exist",
+        "reference-level utility coverage incomplete"
+      ]
+    },
+    {
+      "reference_archive": "extracted/script/scene.zip",
+      "mapped_systems": [
+        "engine.scene",
+        "engine.scripting"
+      ],
+      "northstar_status": "external_reference",
+      "production_gaps_visible": true,
+      "gap_summary": [
+        "duplicate nested scene archive under script extraction",
+        "canonical scene coverage is scene.zip"
+      ]
+    }
   ],
   "domains": [
     {
       "reference_archive": "ai.zip",
       "reference_file_count": 72,
-      "northstar_gateways": ["engine.ai", "engine.tags", "engine.tasks", "engine.animation", "engine.navigation"],
-      "required_capabilities": ["ai.backend", "tags.registry", "tasks.backend", "animation.backend", "navigation.backend"],
-      "required_conformance_families": ["ai", "tags", "tasks", "animation", "navigation"],
-      "required_workspace_crates": ["crates/newengine-ai-api", "crates/newengine-gameplay-runtime", "crates/newengine-tags-api", "crates/newengine-tasks-api", "crates/newengine-animation-api", "crates/newengine-navigation-api"],
-      "required_source_tokens": [
-        { "path": "crates/newengine-ai-api/src/lib.rs", "tokens": ["AiFrameInputV1", "AiFrameOutputV1", "AiDecisionTraceV1", "AiIntentDtoV1", "AI_BACKEND_CAPABILITY_ID"] },
-        { "path": "crates/newengine-gameplay-runtime/src/state.rs", "tokens": ["ai_frame", "AiIntentKind", "runtime apply stage owns mutation", "selected_pattern"] }
+      "northstar_gateways": [
+        "engine.ai",
+        "engine.tags",
+        "engine.tasks",
+        "engine.animation",
+        "engine.navigation"
       ],
-      "reference_buckets": ["targeting/perception", "blackboard", "entity-scanner", "spatial-index", "ambient-models", "conditional-animation", "debug-categories", "deterministic-expensive-process"],
-      "implemented_baseline": ["DTO frame input/output", "intent-only AI boundary", "tags/tasks registry", "deterministic foundation provider", "decision trace"],
-      "production_gaps": ["utility/behavior planner provider", "spatial perception index provider", "ambient model provider", "debug category surface parity", "learned/weighted pattern assets"]
+      "required_capabilities": [
+        "ai.backend",
+        "tags.registry",
+        "tasks.backend",
+        "animation.backend",
+        "navigation.backend"
+      ],
+      "required_conformance_families": [
+        "ai",
+        "tags",
+        "tasks",
+        "animation",
+        "navigation"
+      ],
+      "required_workspace_crates": [
+        "crates/newengine-ai-api",
+        "crates/newengine-ai-runtime",
+        "crates/newengine-tags-api",
+        "crates/newengine-tags-runtime",
+        "crates/newengine-tasks-api",
+        "crates/newengine-tasks-runtime",
+        "crates/newengine-animation-api",
+        "crates/newengine-animation-foundation-runtime",
+        "crates/newengine-navigation-api",
+        "crates/newengine-navigation-runtime",
+        "crates/newengine-runtime-units"
+      ],
+      "required_source_tokens": [
+        {
+          "path": "crates/newengine-ai-api/src/lib.rs",
+          "tokens": [
+            "AiFrameInputV1",
+            "AiFrameOutputV1",
+            "AiDecisionTraceV1",
+            "AiIntentDtoV1",
+            "AI_BACKEND_CAPABILITY_ID"
+          ]
+        },
+        {
+          "path": "crates/newengine-ai-runtime/src/lib.rs",
+          "tokens": [
+            "engine.ai.foundation",
+            "register_ai_gateway_best_effort",
+            "RUNTIME_UNIT_REGISTRATION",
+            "intent-only"
+          ]
+        },
+        {
+          "path": "crates/newengine-runtime-units/src/lib.rs",
+          "tokens": [
+            "newengine_ai_runtime::RUNTIME_UNIT_REGISTRATION",
+            "newengine_tags_runtime::RUNTIME_UNIT_REGISTRATION",
+            "newengine_tasks_runtime::RUNTIME_UNIT_REGISTRATION",
+            "newengine_animation_foundation_runtime::RUNTIME_UNIT_REGISTRATION",
+            "newengine_navigation_runtime::RUNTIME_UNIT_REGISTRATION"
+          ]
+        }
+      ],
+      "reference_buckets": [
+        "targeting/perception",
+        "blackboard",
+        "entity-scanner",
+        "spatial-index",
+        "ambient-models",
+        "conditional-animation",
+        "debug-categories",
+        "deterministic-expensive-process"
+      ],
+      "implemented_baseline": [
+        "DTO frame input/output",
+        "intent-only AI boundary",
+        "tags/tasks registry",
+        "deterministic foundation provider",
+        "decision trace"
+      ],
+      "production_gaps": [
+        "utility/behavior planner provider",
+        "spatial perception index provider",
+        "ambient model provider",
+        "debug category surface parity",
+        "learned/weighted pattern assets"
+      ]
     },
     {
       "reference_archive": "animation.zip",
       "reference_file_count": 97,
-      "northstar_gateways": ["engine.animation", "engine.tags", "engine.tasks"],
-      "required_capabilities": ["animation.backend", "tags.registry", "tasks.backend"],
-      "required_conformance_families": ["animation", "tags", "tasks"],
-      "required_workspace_crates": ["crates/newengine-animation-api", "crates/newengine-gameplay-runtime", "crates/newengine-model-skeleton-api"],
-      "required_source_tokens": [
-        { "path": "crates/newengine-animation-api/src/lib.rs", "tokens": ["AnimationIntentDtoV1", "AnimationGraphDescriptorV1", "AnimationGraphRef", "ANIMATION_BACKEND_CAPABILITY_ID"] },
-        { "path": "crates/newengine-gameplay-runtime/src/config.rs", "tokens": ["RawAnimationGraph", "animation_graph_descriptor"] }
+      "northstar_gateways": [
+        "engine.animation",
+        "engine.tags",
+        "engine.tasks"
       ],
-      "reference_buckets": ["clip dictionary", "bones", "move sets", "facial data", "gesture manager", "animscene", "event tags", "debug editors"],
-      "implemented_baseline": ["animation graph descriptors", "animation intent DTO", "tags/tasks bridge", "foundation planning/validation route"],
-      "production_gaps": ["clip dictionary runtime", "blend tree/graph evaluator", "animscene timeline", "facial/gesture runtime", "animation event dispatch"]
+      "required_capabilities": [
+        "animation.backend",
+        "tags.registry",
+        "tasks.backend"
+      ],
+      "required_conformance_families": [
+        "animation",
+        "tags",
+        "tasks"
+      ],
+      "required_workspace_crates": [
+        "crates/newengine-animation-api",
+        "crates/newengine-animation-foundation-runtime",
+        "crates/newengine-tags-api",
+        "crates/newengine-tags-runtime",
+        "crates/newengine-tasks-api",
+        "crates/newengine-tasks-runtime",
+        "crates/newengine-model-skeleton-api",
+        "crates/newengine-runtime-units"
+      ],
+      "required_source_tokens": [
+        {
+          "path": "crates/newengine-animation-api/src/lib.rs",
+          "tokens": [
+            "AnimationIntentDtoV1",
+            "AnimationGraphDescriptorV1",
+            "AnimationGraphRef",
+            "ANIMATION_BACKEND_CAPABILITY_ID"
+          ]
+        },
+        {
+          "path": "crates/newengine-animation-foundation-runtime/src/lib.rs",
+          "tokens": [
+            "engine.animation.foundation",
+            "register_animation_gateway_best_effort",
+            "RUNTIME_UNIT_REGISTRATION"
+          ]
+        },
+        {
+          "path": "crates/newengine-runtime-units/src/lib.rs",
+          "tokens": [
+            "newengine_animation_foundation_runtime::RUNTIME_UNIT_REGISTRATION"
+          ]
+        }
+      ],
+      "reference_buckets": [
+        "clip dictionary",
+        "bones",
+        "move sets",
+        "facial data",
+        "gesture manager",
+        "animscene",
+        "event tags",
+        "debug editors"
+      ],
+      "implemented_baseline": [
+        "animation graph descriptors",
+        "animation intent DTO",
+        "tags/tasks bridge",
+        "foundation planning/validation route"
+      ],
+      "production_gaps": [
+        "clip dictionary runtime",
+        "blend tree/graph evaluator",
+        "animscene timeline",
+        "facial/gesture runtime",
+        "animation event dispatch"
+      ]
     },
     {
       "reference_archive": "camera.zip",
       "reference_file_count": 281,
-      "northstar_gateways": ["engine.camera", "engine.camera.modes", "engine.camera.animations"],
-      "required_capabilities": ["camera.backend", "camera.modes.backend", "camera.animations.backend"],
-      "required_conformance_families": ["camera"],
-      "required_workspace_crates": ["crates/newengine-camera", "crates/newengine-camera-api", "crates/newengine-camera-contracts", "crates/newengine-camera-runtime"],
-      "required_source_tokens": [
-        { "path": "crates/newengine-camera-api/src/lib.rs", "tokens": ["CameraViewMode", "CameraProjectionSnapshot", "CameraFrameSnapshot", "CAMERA_BACKEND_CAPABILITY_ID"] },
-        { "path": "crates/newengine-camera-runtime/src/api_bridge.rs", "tokens": ["camera_world_frame_snapshot", "CameraFrameSnapshot"] },
-        { "path": "crates/newengine-camera-runtime/src/session.rs", "tokens": ["CameraRuntimeSessionService", "CameraRuntimeSessionMode"] }
+      "northstar_gateways": [
+        "engine.camera",
+        "engine.camera.modes",
+        "engine.camera.animations"
       ],
-      "reference_buckets": ["directors", "base camera", "cinematic contexts", "mounted cameras", "tracking cameras", "animscene director", "camera channels", "post effects"],
-      "implemented_baseline": ["engine.camera gateway contract", "first/third-person modes", "frame snapshots", "session sync", "viewport layers", "postfx intent DTO"],
-      "production_gaps": ["cinematic director provider", "camera behavior stack", "animscene camera event bridge", "vehicle/mounted/tracking provider family", "camera debug tooling parity"]
+      "required_capabilities": [
+        "camera.backend",
+        "camera.modes.backend",
+        "camera.animations.backend"
+      ],
+      "required_conformance_families": [
+        "camera"
+      ],
+      "required_workspace_crates": [
+        "crates/newengine-camera",
+        "crates/newengine-camera-api",
+        "crates/newengine-camera-contracts",
+        "crates/newengine-camera-runtime"
+      ],
+      "required_source_tokens": [
+        {
+          "path": "crates/newengine-camera-api/src/lib.rs",
+          "tokens": [
+            "CameraViewMode",
+            "CameraProjectionSnapshot",
+            "CameraFrameSnapshot",
+            "CAMERA_BACKEND_CAPABILITY_ID"
+          ]
+        },
+        {
+          "path": "crates/newengine-camera-runtime/src/api_bridge.rs",
+          "tokens": [
+            "camera_world_frame_snapshot",
+            "CameraFrameSnapshot"
+          ]
+        },
+        {
+          "path": "crates/newengine-camera-runtime/src/session.rs",
+          "tokens": [
+            "CameraRuntimeSessionService",
+            "CameraRuntimeSessionMode"
+          ]
+        }
+      ],
+      "reference_buckets": [
+        "directors",
+        "base camera",
+        "cinematic contexts",
+        "mounted cameras",
+        "tracking cameras",
+        "animscene director",
+        "camera channels",
+        "post effects"
+      ],
+      "implemented_baseline": [
+        "engine.camera gateway contract",
+        "first/third-person modes",
+        "frame snapshots",
+        "session sync",
+        "viewport layers",
+        "postfx intent DTO"
+      ],
+      "production_gaps": [
+        "cinematic director provider",
+        "camera behavior stack",
+        "animscene camera event bridge",
+        "vehicle/mounted/tracking provider family",
+        "camera debug tooling parity"
+      ]
     },
     {
       "reference_archive": "renderer.zip",
       "reference_file_count": 276,
-      "northstar_gateways": ["engine.render", "engine.render.shadows", "engine.render.lighting", "engine.render.postfx", "engine.render.vfx", "engine.render.terrain", "engine.render.debug"],
-      "required_capabilities": ["render.backend", "render.shadow_system", "render.lighting_stack", "render.postfx_stack", "render.vfx.particles", "render.terrain", "render.debug.overlays"],
-      "required_conformance_families": ["render", "render.maturity"],
-      "required_workspace_crates": ["crates/newengine-render-api", "crates/newengine-render-feature-api", "crates/newengine-render-feature-gameready", "crates/newengine-render-frame-graph"],
-      "required_source_tokens": [
-        { "path": "crates/newengine-render-api/src/maturity.rs", "tokens": ["RenderDebugOverlayKind", "LightingStackDescriptorDto", "ShadowSystemDescriptorDto", "VfxSystemDescriptorDto"] },
-        { "path": "crates/newengine-render-feature-gameready/src/lib.rs", "tokens": ["GameReadyRenderFeaturePack", "GameReadyDirectionalShadowProvider", "GameReadyAmbientOcclusionProvider"] },
-        { "path": "config/render/render_maturity.v1.json", "tokens": ["shader_variant_registry", "lighting_shadows_postfx_probes", "terrain_foliage_lod_occlusion", "debug_overlays"] }
+      "northstar_gateways": [
+        "engine.render",
+        "engine.render.shadows",
+        "engine.render.lighting",
+        "engine.render.postfx",
+        "engine.render.vfx",
+        "engine.render.terrain",
+        "engine.render.debug"
       ],
-      "reference_buckets": ["render phases", "shader jobs", "lighting", "shadows", "postfx", "deferred", "particles", "water", "terrain", "visibility", "debug"],
-      "implemented_baseline": ["render feature capability matrix", "material/shader graph DTO", "shader variant registry", "shadow/light extraction provider descriptors", "debug overlay DTOs"],
-      "production_gaps": ["full renderer feature providers for point/spot shadows", "particle/VFX runtime", "terrain/foliage runtime", "probe update pipeline", "occlusion/visibility runtime", "production postfx chain"]
+      "required_capabilities": [
+        "render.backend",
+        "render.shadow_system",
+        "render.lighting_stack",
+        "render.postfx_stack",
+        "render.vfx.particles",
+        "render.terrain",
+        "render.debug.overlays"
+      ],
+      "required_conformance_families": [
+        "render",
+        "render.maturity"
+      ],
+      "required_workspace_crates": [
+        "crates/newengine-render-api",
+        "crates/newengine-render-feature-api",
+        "crates/newengine-render-feature-gameready",
+        "crates/newengine-render-frame-graph"
+      ],
+      "required_source_tokens": [
+        {
+          "path": "crates/newengine-render-api/src/maturity.rs",
+          "tokens": [
+            "RenderDebugOverlayKind",
+            "LightingStackDescriptorDto",
+            "ShadowSystemDescriptorDto",
+            "VfxSystemDescriptorDto"
+          ]
+        },
+        {
+          "path": "crates/newengine-render-feature-gameready/src/lib.rs",
+          "tokens": [
+            "GameReadyRenderFeaturePack",
+            "GameReadyDirectionalShadowProvider",
+            "GameReadyAmbientOcclusionProvider"
+          ]
+        },
+        {
+          "path": "config/render/render_maturity.v1.json",
+          "tokens": [
+            "shader_variant_registry",
+            "lighting_shadows_postfx_probes",
+            "terrain_foliage_lod_occlusion",
+            "debug_overlays"
+          ]
+        }
+      ],
+      "reference_buckets": [
+        "render phases",
+        "shader jobs",
+        "lighting",
+        "shadows",
+        "postfx",
+        "deferred",
+        "particles",
+        "water",
+        "terrain",
+        "visibility",
+        "debug"
+      ],
+      "implemented_baseline": [
+        "render feature capability matrix",
+        "material/shader graph DTO",
+        "shader variant registry",
+        "shadow/light extraction provider descriptors",
+        "debug overlay DTOs"
+      ],
+      "production_gaps": [
+        "full renderer feature providers for point/spot shadows",
+        "particle/VFX runtime",
+        "terrain/foliage runtime",
+        "probe update pipeline",
+        "occlusion/visibility runtime",
+        "production postfx chain"
+      ]
     },
     {
       "reference_archive": "scene.zip",
       "reference_file_count": 198,
-      "northstar_gateways": ["engine.scene", "engine.scene.instantiation", "engine.world"],
-      "required_capabilities": ["scene.backend", "scene.instantiation.backend", "world.backend"],
-      "required_conformance_families": ["scene", "world"],
-      "required_workspace_crates": ["crates/newengine-scene", "crates/newengine-scene-io", "crates/newengine-scene-runtime", "crates/newengine-world-api", "crates/newengine-world-runtime"],
-      "required_source_tokens": [
-        { "path": "crates/newengine-scene-runtime/src/lib.rs", "tokens": ["EngineSceneGatewayService", "instantiate", "SceneAsset"] },
-        { "path": "crates/newengine-world-runtime/src/lib.rs", "tokens": ["WORLD_SERVICE_METHOD_BOOT_JSON_V1", "WORLD_SERVICE_METHOD_APPLY_STAGE_JSON_V1"] }
+      "northstar_gateways": [
+        "engine.scene",
+        "engine.scene.instantiation",
+        "engine.world"
       ],
-      "reference_buckets": ["entity", "building/physical", "data file manager", "map loader", "ipl/cull", "lod", "entity batch", "metadata", "scene streamer debug"],
-      "implemented_baseline": ["engine.scene/runtime asset load", "archetype/prefab plan", "world boot/state", "opaque handles through entity boundary"],
-      "production_gaps": ["full map/ipl loader provider", "entity batch/lod ownership parity", "decorator/metadata registry", "scene debug report parity"]
+      "required_capabilities": [
+        "scene.backend",
+        "scene.instantiation.backend",
+        "world.backend"
+      ],
+      "required_conformance_families": [
+        "scene",
+        "world"
+      ],
+      "required_workspace_crates": [
+        "crates/newengine-scene",
+        "crates/newengine-scene-io",
+        "crates/newengine-scene-runtime",
+        "crates/newengine-world-api",
+        "crates/newengine-world-runtime"
+      ],
+      "required_source_tokens": [
+        {
+          "path": "crates/newengine-scene-runtime/src/lib.rs",
+          "tokens": [
+            "EngineSceneGatewayService",
+            "instantiate",
+            "SceneAsset"
+          ]
+        },
+        {
+          "path": "crates/newengine-world-runtime/src/lib.rs",
+          "tokens": [
+            "WORLD_SERVICE_METHOD_BOOT_JSON_V1",
+            "WORLD_SERVICE_METHOD_APPLY_STAGE_JSON_V1"
+          ]
+        }
+      ],
+      "reference_buckets": [
+        "entity",
+        "building/physical",
+        "data file manager",
+        "map loader",
+        "ipl/cull",
+        "lod",
+        "entity batch",
+        "metadata",
+        "scene streamer debug"
+      ],
+      "implemented_baseline": [
+        "engine.scene/runtime asset load",
+        "archetype/prefab plan",
+        "world boot/state",
+        "opaque handles through entity boundary"
+      ],
+      "production_gaps": [
+        "full map/ipl loader provider",
+        "entity batch/lod ownership parity",
+        "decorator/metadata registry",
+        "scene debug report parity"
+      ]
     },
     {
       "reference_archive": "streaming.zip",
       "reference_file_count": 40,
-      "northstar_gateways": ["engine.world.streaming", "engine.world.streaming.cells", "engine.assets.dependencies"],
-      "required_capabilities": ["world.streaming.backend", "world.streaming.cells", "assets.dependencies.backend"],
-      "required_conformance_families": ["world", "assets"],
-      "required_workspace_crates": ["crates/newengine-world-api", "crates/newengine-world-runtime", "crates/newengine-assets-api", "crates/newengine-assets"],
-      "required_source_tokens": [
-        { "path": "crates/newengine-world-api/src/lib.rs", "tokens": ["WORLD_SERVICE_METHOD_STREAMING_CELLS_JSON_V1", "WorldStreamingCellDto"] },
-        { "path": "crates/newengine-world-runtime/src/streaming_cells.rs", "tokens": ["streaming_response", "include_unloaded", "include_reasons"] }
+      "northstar_gateways": [
+        "engine.world.streaming",
+        "engine.world.streaming.cells",
+        "engine.assets.dependencies"
       ],
-      "reference_buckets": ["streaming request list", "box streamer", "island hopper", "zoned assets", "clip set streamer", "debug graph", "cleanup"],
-      "implemented_baseline": ["streaming cell DTOs", "world partition descriptors", "dependency invalidation hooks", "diagnostic reasons"],
-      "production_gaps": ["priority streamer scheduler", "zoned asset manager", "streaming request list editor/runtime", "debug graph tooling"]
+      "required_capabilities": [
+        "world.streaming.backend",
+        "world.streaming.cells",
+        "assets.dependencies.backend"
+      ],
+      "required_conformance_families": [
+        "world",
+        "assets"
+      ],
+      "required_workspace_crates": [
+        "crates/newengine-world-api",
+        "crates/newengine-world-runtime",
+        "crates/newengine-assets-api",
+        "crates/newengine-assets"
+      ],
+      "required_source_tokens": [
+        {
+          "path": "crates/newengine-world-api/src/lib.rs",
+          "tokens": [
+            "WORLD_SERVICE_METHOD_STREAMING_CELLS_JSON_V1",
+            "WorldStreamingCellDto"
+          ]
+        },
+        {
+          "path": "crates/newengine-world-runtime/src/streaming_cells.rs",
+          "tokens": [
+            "streaming_response",
+            "include_unloaded",
+            "include_reasons"
+          ]
+        }
+      ],
+      "reference_buckets": [
+        "streaming request list",
+        "box streamer",
+        "island hopper",
+        "zoned assets",
+        "clip set streamer",
+        "debug graph",
+        "cleanup"
+      ],
+      "implemented_baseline": [
+        "streaming cell DTOs",
+        "world partition descriptors",
+        "dependency invalidation hooks",
+        "diagnostic reasons"
+      ],
+      "production_gaps": [
+        "priority streamer scheduler",
+        "zoned asset manager",
+        "streaming request list editor/runtime",
+        "debug graph tooling"
+      ]
     },
     {
       "reference_archive": "SaveLoad.zip",
       "reference_file_count": 165,
-      "northstar_gateways": ["engine.world", "engine.world.snapshot", "engine.world.apply", "engine.scene"],
-      "required_capabilities": ["world.save_load.snapshots", "world.apply_stage", "scene.backend"],
-      "required_conformance_families": ["world", "scene"],
-      "required_workspace_crates": ["crates/newengine-world-api", "crates/newengine-world-runtime", "crates/newengine-scene-runtime", "crates/newengine-replay"],
-      "required_source_tokens": [
-        { "path": "crates/newengine-world-api/src/lib.rs", "tokens": ["WORLD_SERVICE_METHOD_SAVE_SNAPSHOT_JSON_V1", "WORLD_SERVICE_METHOD_LOAD_SNAPSHOT_JSON_V1", "WorldSnapshotResponse"] },
-        { "path": "crates/newengine-world-runtime/src/apply_stage.rs", "tokens": ["save_snapshot_json_v1", "load_snapshot_json_v1", "restore_snapshot_json_v1"] }
+      "northstar_gateways": [
+        "engine.world",
+        "engine.world.snapshot",
+        "engine.world.apply",
+        "engine.scene"
       ],
-      "reference_buckets": ["savegame frontend", "autoload", "save/load block", "damaged check", "cloud", "script save data", "migration", "free-space/date/list/delete"],
-      "implemented_baseline": ["world snapshot DTO", "restore/apply stage", "scene payload snapshot", "deterministic JSON payload"],
-      "production_gaps": ["slot management provider", "cloud/storage provider", "damaged/corruption verification", "script state save bridge", "migration/version graph"]
+      "required_capabilities": [
+        "world.save_load.snapshots",
+        "world.apply_stage",
+        "scene.backend"
+      ],
+      "required_conformance_families": [
+        "world",
+        "scene"
+      ],
+      "required_workspace_crates": [
+        "crates/newengine-world-api",
+        "crates/newengine-world-runtime",
+        "crates/newengine-scene-runtime",
+        "crates/newengine-replay"
+      ],
+      "required_source_tokens": [
+        {
+          "path": "crates/newengine-world-api/src/lib.rs",
+          "tokens": [
+            "WORLD_SERVICE_METHOD_SAVE_SNAPSHOT_JSON_V1",
+            "WORLD_SERVICE_METHOD_LOAD_SNAPSHOT_JSON_V1",
+            "WorldSnapshotResponse"
+          ]
+        },
+        {
+          "path": "crates/newengine-world-runtime/src/apply_stage.rs",
+          "tokens": [
+            "save_snapshot_json_v1",
+            "load_snapshot_json_v1",
+            "restore_snapshot_json_v1"
+          ]
+        }
+      ],
+      "reference_buckets": [
+        "savegame frontend",
+        "autoload",
+        "save/load block",
+        "damaged check",
+        "cloud",
+        "script save data",
+        "migration",
+        "free-space/date/list/delete"
+      ],
+      "implemented_baseline": [
+        "world snapshot DTO",
+        "restore/apply stage",
+        "scene payload snapshot",
+        "deterministic JSON payload"
+      ],
+      "production_gaps": [
+        "slot management provider",
+        "cloud/storage provider",
+        "damaged/corruption verification",
+        "script state save bridge",
+        "migration/version graph"
+      ]
     },
     {
       "reference_archive": "script.zip",
       "reference_file_count": 152,
-      "northstar_gateways": ["engine.scripting", "engine.schema"],
-      "required_capabilities": ["scripting.backend", "schema.registry"],
-      "required_conformance_families": ["scripting", "schema"],
-      "required_workspace_crates": ["crates/newengine-scripting-api", "crates/newengine-scripting-runtime", "crates/newengine-schema-api", "crates/newengine-schema-runtime"],
-      "required_source_tokens": [
-        { "path": "crates/newengine-scripting-api/src/lib.rs", "tokens": ["SCRIPTING_SERVICE_METHOD_LOAD_MODULE_BYTES_V1", "SCRIPTING_SERVICE_METHOD_BINDING_MANIFEST_JSON_V1", "ScriptModuleRef"] },
-        { "path": "crates/newengine-scripting-runtime/src/lib.rs", "tokens": ["binary-request-response", "ysc-module-bytes", "no script implementation is embedded"] }
+      "northstar_gateways": [
+        "engine.scripting",
+        "engine.schema"
       ],
-      "reference_buckets": ["command families", "script handler", "script manager", "resources", "metadata", "task types", "network handler"],
-      "implemented_baseline": ["opaque binary scripting boundary", "module load/invoke/frame DTO", "schema binding manifest", "baseline nullstar provider"],
-      "production_gaps": ["real VM/provider", "command binding generation for all domains", "script task scheduler", "script save state bridge", "network script handler"]
+      "required_capabilities": [
+        "scripting.backend",
+        "schema.registry"
+      ],
+      "required_conformance_families": [
+        "scripting",
+        "schema"
+      ],
+      "required_workspace_crates": [
+        "crates/newengine-scripting-api",
+        "crates/newengine-scripting-runtime",
+        "crates/newengine-schema-api",
+        "crates/newengine-schema-runtime"
+      ],
+      "required_source_tokens": [
+        {
+          "path": "crates/newengine-scripting-api/src/lib.rs",
+          "tokens": [
+            "SCRIPTING_SERVICE_METHOD_LOAD_MODULE_BYTES_V1",
+            "SCRIPTING_SERVICE_METHOD_BINDING_MANIFEST_JSON_V1",
+            "ScriptModuleRef"
+          ]
+        },
+        {
+          "path": "crates/newengine-scripting-runtime/src/lib.rs",
+          "tokens": [
+            "binary-request-response",
+            "ysc-module-bytes",
+            "no script implementation is embedded"
+          ]
+        }
+      ],
+      "reference_buckets": [
+        "command families",
+        "script handler",
+        "script manager",
+        "resources",
+        "metadata",
+        "task types",
+        "network handler"
+      ],
+      "implemented_baseline": [
+        "opaque binary scripting boundary",
+        "module load/invoke/frame DTO",
+        "schema binding manifest",
+        "baseline nullstar provider"
+      ],
+      "production_gaps": [
+        "real VM/provider",
+        "command binding generation for all domains",
+        "script task scheduler",
+        "script save state bridge",
+        "network script handler"
+      ]
     },
     {
       "reference_archive": "replaycoordinator.zip",
       "reference_file_count": 29,
-      "northstar_gateways": ["engine.time"],
-      "required_capabilities": ["time.backend"],
-      "required_conformance_families": ["time"],
-      "required_workspace_crates": ["crates/newengine-replay", "crates/newengine-time-api", "crates/newengine-time-runtime"],
-      "required_source_tokens": [
-        { "path": "crates/newengine-replay/src/lib.rs", "tokens": ["ReplayCoordinatorFsm", "ReplayCoordinatorSnapshot", "ReplayPlaybackClock"] },
-        { "path": "crates/newengine-time-runtime/src/lib.rs", "tokens": ["replay_deterministic", "replay_frame", "TimeReplayClockV1"] }
+      "northstar_gateways": [
+        "engine.time"
       ],
-      "reference_buckets": ["coordinator FSM", "record/playback", "cleanup", "clock", "transition", "state snapshot"],
-      "implemented_baseline": ["replay coordinator FSM", "time deterministic replay DTO", "runtime-hosted time provider"],
-      "production_gaps": ["runtime frame capture integration", "streamed replay chunks", "debug viewer", "record/playback asset format"]
+      "required_capabilities": [
+        "time.backend"
+      ],
+      "required_conformance_families": [
+        "time"
+      ],
+      "required_workspace_crates": [
+        "crates/newengine-replay",
+        "crates/newengine-time-api",
+        "crates/newengine-time-runtime"
+      ],
+      "required_source_tokens": [
+        {
+          "path": "crates/newengine-replay/src/lib.rs",
+          "tokens": [
+            "ReplayCoordinatorFsm",
+            "ReplayCoordinatorSnapshot",
+            "ReplayPlaybackClock"
+          ]
+        },
+        {
+          "path": "crates/newengine-time-runtime/src/lib.rs",
+          "tokens": [
+            "replay_deterministic",
+            "replay_frame",
+            "TimeReplayClockV1"
+          ]
+        }
+      ],
+      "reference_buckets": [
+        "coordinator FSM",
+        "record/playback",
+        "cleanup",
+        "clock",
+        "transition",
+        "state snapshot"
+      ],
+      "implemented_baseline": [
+        "replay coordinator FSM",
+        "time deterministic replay DTO",
+        "runtime-hosted time provider"
+      ],
+      "production_gaps": [
+        "runtime frame capture integration",
+        "streamed replay chunks",
+        "debug viewer",
+        "record/playback asset format"
+      ]
     }
   ]
 }
