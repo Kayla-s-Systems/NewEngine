@@ -232,6 +232,11 @@ impl HairSkinPoseRegistryV1 {
     pub fn len(&self) -> usize {
         self.poses.len()
     }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.poses.is_empty()
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

@@ -77,19 +77,14 @@ impl UiEditorRuntimeMode {
 }
 
 /// Projection preset selected by the editor viewport chrome.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum UiEditorViewportProjection {
+    #[default]
     Perspective,
     Top,
     Front,
     Side,
-}
-
-impl Default for UiEditorViewportProjection {
-    fn default() -> Self {
-        Self::Perspective
-    }
 }
 
 impl UiEditorViewportProjection {
@@ -105,18 +100,13 @@ impl UiEditorViewportProjection {
 
 /// View-mode intent for the editor viewport. Render backends may map these
 /// generic modes to their own debug/material pipelines.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum UiEditorViewportShading {
+    #[default]
     Lit,
     Unlit,
     Wireframe,
-}
-
-impl Default for UiEditorViewportShading {
-    fn default() -> Self {
-        Self::Lit
-    }
 }
 
 impl UiEditorViewportShading {
@@ -130,19 +120,14 @@ impl UiEditorViewportShading {
 }
 
 /// Active transform tool in the editor viewport.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum UiEditorTransformMode {
     Select,
+    #[default]
     Translate,
     Rotate,
     Scale,
-}
-
-impl Default for UiEditorTransformMode {
-    fn default() -> Self {
-        Self::Translate
-    }
 }
 
 impl UiEditorTransformMode {
@@ -156,16 +141,11 @@ impl UiEditorTransformMode {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UiEditorTransformSpace {
+    #[default]
     World,
     Local,
-}
-
-impl Default for UiEditorTransformSpace {
-    fn default() -> Self {
-        Self::World
-    }
 }
 
 impl UiEditorTransformSpace {

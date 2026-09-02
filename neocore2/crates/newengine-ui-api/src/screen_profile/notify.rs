@@ -104,20 +104,11 @@ pub struct UiNotifyDismissRequest {
     pub source: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UiNotifyClearRequest {
     pub source: Option<String>,
     pub include_sticky: bool,
-}
-
-impl Default for UiNotifyClearRequest {
-    fn default() -> Self {
-        Self {
-            source: None,
-            include_sticky: false,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
