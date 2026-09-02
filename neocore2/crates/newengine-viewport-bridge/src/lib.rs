@@ -186,7 +186,7 @@ impl ViewportBridge {
     }
 
     fn request_external_redraw_frames(&self, frames: u64) {
-        let _ = self.external_redraw_budget.fetch_update(
+        let _ = self.external_redraw_budget.try_update(
             Ordering::AcqRel,
             Ordering::Acquire,
             |current| Some(current.max(frames.max(1))),
@@ -204,7 +204,7 @@ impl ViewportBridge {
     }
 
     pub fn mark_external_redraw_presented(&self) {
-        let _ = self.external_redraw_budget.fetch_update(
+        let _ = self.external_redraw_budget.try_update(
             Ordering::AcqRel,
             Ordering::Acquire,
             |current| Some(current.saturating_sub(1)),

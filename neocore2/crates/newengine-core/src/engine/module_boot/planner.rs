@@ -307,8 +307,8 @@ impl DependencyGraph {
 
     fn topological_order(&mut self, include: impl Fn(usize) -> bool) -> Vec<usize> {
         let mut queue = VecDeque::new();
-        for i in 0..self.indegree.len() {
-            if include(i) && self.indegree[i] == 0 {
+        for (i, indegree) in self.indegree.iter().copied().enumerate() {
+            if include(i) && indegree == 0 {
                 queue.push_back(i);
             }
         }
