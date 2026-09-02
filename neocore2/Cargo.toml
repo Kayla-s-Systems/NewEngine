@@ -24,6 +24,8 @@ members = [
     "crates/newengine-authored-xml",
     "crates/newengine-authored-world-runtime",
     "crates/newengine-audio-api",
+    "crates/newengine-audio-import",
+    "crates/newengine-audio-xvag",
     "crates/newengine-material-client",
     "crates/newengine-model-client",
     "crates/newengine-audio-client",
@@ -37,6 +39,7 @@ members = [
     "crates/newengine-camera-api",
     "crates/newengine-camera-contracts",
     "crates/newengine-camera-runtime",
+    "crates/newengine-camera-gateway-runtime",
     "crates/newengine-console-api",
     "crates/newengine-console-runtime",
     "crates/newengine-contract-registry",
@@ -59,6 +62,8 @@ members = [
     "crates/newengine-windowed-host-runtime",
     "crates/newengine-host-capabilities-api",
     "crates/newengine-startup-window-egui",
+    "crates/newengine-startup-intro",
+    "crates/newengine-startup-intro-mf",
     "crates/newengine-null-providers-runtime",
     "crates/newengine-ecs",
     "crates/newengine-ecs-api",
@@ -83,7 +88,6 @@ members = [
     "crates/newengine-game-module-composition",
     "crates/newengine-game-module-fps",
     "crates/newengine-game-ready-profile",
-    "crates/newengine-game-ready-world",
     "crates/newengine-game-data",
     "crates/newengine-game-events-api",
     "crates/newengine-game-events-runtime",
@@ -98,7 +102,7 @@ members = [
     "crates/newengine-item-assets-runtime",
     "crates/newengine-gameplay-fps-api",
     "crates/newengine-gameplay-fps-lua",
-    "crates/newengine-gameplay-runtime",
+    "crates/newengine-gameplay-world-runtime",
     "crates/newengine-tags-runtime",
     "crates/newengine-tasks-runtime",
     "crates/newengine-animation-foundation-runtime",
@@ -127,10 +131,12 @@ members = [
     "crates/newengine-material-runtime",
     "crates/newengine-math",
     "crates/newengine-physics-contracts",
+    "crates/newengine-physics-world-api",
     "crates/newengine-physics-api",
     "crates/newengine-platform-api",
     "crates/newengine-plugin-api",
     "crates/newengine-plugin-host",
+    "crates/newengine-plugin-manager-bridge",
     "crates/newengine-plugin-kit",
     "crates/newengine-plugin-manifest-tool",
     "crates/newengine-primitives",
@@ -138,6 +144,7 @@ members = [
     "crates/newengine-project-runtime",
     "crates/newengine-procedural-noise",
     "crates/newengine-render-api",
+    "crates/newengine-visibility-api",
     "crates/newengine-render-feature-api",
     "crates/newengine-render-feature-gameready",
     "crates/newengine-render-feature-standard",
@@ -152,12 +159,17 @@ members = [
     "crates/newengine-runtime-units",
     "crates/newengine-runtime-adapter-core",
     "crates/newengine-render-runtime-adapter",
+    "crates/newengine-render-world-runtime",
     "crates/newengine-physics-runtime-adapter",
     "crates/newengine-runtime-session-api",
+    "crates/newengine-runtime-provider-api",
+    "crates/newengine-runtime-policy",
+    "crates/newengine-runtime-env",
     "crates/newengine-runtime-session-runtime",
     "crates/newengine-scene",
     "crates/newengine-scene-io",
     "crates/newengine-scene-authoring-api",
+    "crates/newengine-scene-bridge-runtime",
     "crates/newengine-scene-authoring-conformance",
     "crates/newengine-scene-authoring-runtime",
     "crates/newengine-scene-runtime",
@@ -176,13 +188,13 @@ members = [
     "crates/newengine-text-api",
     "crates/newengine-time-api",
     "crates/newengine-time-runtime",
-    "crates/newengine-textures-runtime",
     "crates/newengine-texture-container",
     "crates/newengine-transform",
     "crates/newengine-transform-api",
     "crates/newengine-ulog-api",
     "crates/newengine-ui",
     "crates/newengine-ui-api",
+    "crates/newengine-ui-client",
     "crates/newengine-ui-draw",
     "crates/newengine-ui-notify-runtime",
     "crates/newengine-ui-navigation-api",
@@ -191,6 +203,7 @@ members = [
     "crates/newengine-world-api",
     "crates/newengine-world-authoring-api",
     "crates/newengine-world-authority-runtime",
+    "crates/newengine-world-runtime-api",
     "crates/newengine-world-environment-api",
     "crates/newengine-world-environment-runtime",
     "crates/newengine-world-runtime",
@@ -203,3 +216,35 @@ members = [
 # into multi-second launcher stalls. Keep engine crates debuggable while allowing
 # the cryptographic primitive itself to run at production speed.
 opt-level = 3
+
+[workspace.dependencies]
+newengine-asset-bootstrap-runtime = { path = "crates/newengine-asset-bootstrap-runtime" }
+newengine-asset-inspector-runtime = { path = "crates/newengine-asset-inspector-runtime" }
+newengine-asset-preview-runtime = { path = "crates/newengine-asset-preview-runtime" }
+newengine-assets = { path = "crates/newengine-assets" }
+newengine-assets-api = { path = "crates/newengine-assets-api" }
+newengine-assets-ui-runtime = { path = "crates/newengine-assets-ui-runtime" }
+newengine-core = { path = "crates/newengine-core" }
+newengine-definitions-runtime = { path = "crates/newengine-definitions-runtime" }
+newengine-engine-runtime = { path = "crates/newengine-engine-runtime" }
+newengine-game-module-api = { path = "crates/newengine-game-module-api" }
+newengine-game-ready-profile = { path = "crates/newengine-game-ready-profile" }
+newengine-material-domain-gameready = { path = "crates/newengine-material-domain-gameready" }
+newengine-material-runtime = { path = "crates/newengine-material-runtime" }
+newengine-model-runtime = { path = "crates/newengine-model-runtime" }
+newengine-plugin-api = { path = "crates/newengine-plugin-api" }
+newengine-plugin-host = { path = "crates/newengine-plugin-host" }
+newengine-project-api = { path = "crates/newengine-project-api" }
+newengine-project-runtime = { path = "crates/newengine-project-runtime" }
+newengine-startup-intro = { path = "crates/newengine-startup-intro" }
+newengine-startup-intro-mf = { path = "crates/newengine-startup-intro-mf" }
+newengine-render-runtime-adapter = { path = "crates/newengine-render-runtime-adapter" }
+newengine-runtime-host = { path = "crates/newengine-runtime-host", default-features = false }
+newengine-scene = { path = "crates/newengine-scene" }
+newengine-scene-runtime = { path = "crates/newengine-scene-runtime" }
+newengine-schema-runtime = { path = "crates/newengine-schema-runtime" }
+newengine-ui = { path = "crates/newengine-ui", default-features = false }
+newengine-ui-api = { path = "crates/newengine-ui-api" }
+newengine-ulog-api = { path = "crates/newengine-ulog-api" }
+newengine-viewport-bridge = { path = "crates/newengine-viewport-bridge" }
+newengine-windowed-host-runtime = { path = "crates/newengine-windowed-host-runtime", default-features = false }

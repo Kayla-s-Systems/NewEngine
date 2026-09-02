@@ -12,3 +12,4 @@ startup_config = "config.json"
 plugin_target = "runtime"
 headless = false
 startup_window = true
+startup_intro = "ROOT-DIR/Shared/Source/authoring/northstar/intro/intro.toml"

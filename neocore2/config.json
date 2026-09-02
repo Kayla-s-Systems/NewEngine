@@ -1,8 +1,8 @@
 {
   "engine": {
-    "cache_files": "cache",
-    "config": "config",
-    "modules_dir": "pluginsRuntime"
+    "cache_files": "ROOT-DIR/NewEngine/neocore2/cache",
+    "config": "ROOT-DIR/NewEngine/neocore2/config",
+    "modules_dir": "ROOT-DIR/pluginsRuntime"
   },
   "plugins": {
     "engine.animation.foundation": {
@@ -29,13 +29,13 @@
         {
           "dir": null,
           "mount": "shared",
-          "path": "../../Shared/Content/",
+          "path": "ROOT-DIR/Shared/Content",
           "pattern": null,
           "priority": 230,
           "type": "dir"
         },
         {
-          "dir": "../../Shared/Content/",
+          "dir": "ROOT-DIR/Shared/Content",
           "mount": "shared",
           "path": null,
           "pattern": "*",
@@ -45,13 +45,13 @@
         {
           "dir": null,
           "mount": "",
-          "path": "../../Engine/Content/",
+          "path": "ROOT-DIR/Shared/Content",
           "pattern": null,
           "priority": 240,
           "type": "dir"
         },
         {
-          "dir": "../../Engine/Content/",
+          "dir": "ROOT-DIR/Shared/Content",
           "mount": "",
           "path": null,
           "pattern": "*",
@@ -85,7 +85,7 @@
       ],
       "pump_steps": 16
     },
-    "engine.game-ready.world": {
+    "engine.fps.character": {
       "runtime_data": {
         "locomotion_graph": "animation/humanoid_locomotion.graph.v1.json"
       }
@@ -274,8 +274,9 @@
       },
       "ui": {
         "screen_profile": {
+          "editor_fly_speed_scale": 0.2,
           "profile": "game",
-          "publish_editor_shell": true
+          "publish_editor_shell": false
         }
       }
     },
@@ -1430,59 +1431,63 @@
     "display": {
       "center_window": true,
       "frame_limit": 0,
-      "hdr": "auto",
+      "hdr": "enabled",
       "monitor_index": -1,
       "refresh_rate_millihz": 0,
       "render_scale": 1.0,
+      "resolution": [
+        1280,
+        720
+      ],
       "vsync": true,
       "window_mode": "windowed"
     },
     "graphics": {
-      "anisotropy": 2,
-      "bloom_enabled": false,
+      "anisotropy": 16,
+      "bloom_enabled": true,
       "bloom_intensity": 0.09,
       "bloom_knee": 0.35000000000000003,
       "bloom_radius": 1.0,
       "bloom_threshold": 0.8500000000000001,
-      "depth_of_field_enabled": false,
+      "depth_of_field_enabled": true,
       "fxaa_edge_threshold": 0.125,
-      "fxaa_edge_threshold_min": 0.031199999153614044,
+      "fxaa_edge_threshold_min": 0.031,
       "fxaa_enabled": true,
       "fxaa_subpixel_quality": 0.75,
-      "lod_distance_scale": 1.75,
-      "lod_quality": "medium",
-      "motion_blur_enabled": false,
-      "msaa_samples": 2,
-      "preset": "balanced",
+      "lod_distance_scale": 1.35,
+      "lod_quality": "ultra",
+      "motion_blur_enabled": true,
+      "msaa_samples": 4,
+      "preset": "ultra",
       "shadow_advanced_override": false,
-      "shadow_bias": 0.0024999999441206455,
-      "shadow_cascade_count": 2,
-      "shadow_contact_strength": 0.44999998807907104,
+      "shadow_bias": 0.0025,
+      "shadow_cascade_count": 4,
+      "shadow_contact_strength": 0.25,
       "shadow_filter": "pcss",
-      "shadow_map_resolution": 1024,
+      "shadow_map_resolution": 4096,
       "shadow_max_distance": 240.0,
-      "shadow_normal_bias": 0.014999999664723871,
-      "shadow_pcss_blocker_radius_texels": 4.5,
+      "shadow_normal_bias": 0.015,
+      "shadow_pcss_blocker_radius_texels": 3.0,
       "shadow_pcss_blocker_samples": 16,
       "shadow_pcss_filter_samples": 16,
-      "shadow_pcss_light_radius_degrees": 0.26600000262260437,
+      "shadow_pcss_light_radius_degrees": 0.266,
       "shadow_pcss_max_filter_radius_texels": 8.0,
-      "shadow_pcss_min_filter_radius_texels": 0.18000000715255737,
+      "shadow_pcss_min_filter_radius_texels": 0.18,
       "shadow_pcss_stable_kernel_texels": 8.0,
-      "shadow_quality": "balanced",
-      "shadow_softness": 1.15,
+      "shadow_quality": "cinematic",
+      "shadow_softness": 1.0,
       "shadows_enabled": true,
       "ssao_enabled": true,
-      "ssao_half_resolution": true,
+      "ssao_half_resolution": false,
       "ssao_intensity": 0.8,
-      "ssao_quality_steps": 16,
+      "ssao_quality_steps": 32,
       "ssao_radius_ws": 0.7500000000000001,
       "sun_rays_enabled": true,
       "taa_enabled": true,
-      "taa_feedback": 0.9200000166893004,
+      "taa_feedback": 0.92,
       "taa_jitter_scale": 1.0,
       "taa_neighborhood_clamping": 1.0,
-      "texture_quality": "medium"
+      "texture_quality": "ultra"
     },
     "schema_version": 3
   },
