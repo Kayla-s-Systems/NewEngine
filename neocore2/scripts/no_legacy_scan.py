@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pathlib
 import re
+import subprocess
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SKIP_DIRS = {"target", ".git", "docs", "archive", "research", "third_party", "assets", "cache"}
@@ -111,16 +112,36 @@ def has_forbidden_method_v2(line: str, rel: pathlib.Path) -> bool:
     return bool(METHOD_V2_LITERAL_RE.search(line) and AD_HOC_METHOD_CONTEXT_RE.search(line))
 
 
+def iter_tracked_repository_paths() -> list[pathlib.Path]:
+    result = subprocess.run(
+        ["git", "ls-files", "-z"],
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(f"git ls-files failed while scanning repository artifacts: {detail}")
+
+    paths: list[pathlib.Path] = []
+    for raw in result.stdout.split(b"\0"):
+        if not raw:
+            continue
+        rel = pathlib.PurePosixPath(raw.decode("utf-8", errors="surrogateescape"))
+        paths.append(ROOT.joinpath(*rel.parts))
+    return paths
+
+
 def iter_forbidden_repository_artifacts() -> list[pathlib.Path]:
     out: list[pathlib.Path] = []
     skip = {"target", ".git", "docs", "archive", "research", "third_party", "cache"}
-    for path in ROOT.rglob("*"):
-        if any(part in skip for part in path.parts):
+    for path in iter_tracked_repository_paths():
+        rel = path.relative_to(ROOT)
+        if any(part in skip for part in rel.parts):
             continue
-        if path.is_dir() and path.name == "__pycache__":
+        if "__pycache__" in rel.parts:
             out.append(path)
-            continue
-        if not path.is_file():
             continue
         if path.suffix == ".pyc" or path.name.endswith(".bak") or ".bak-" in path.name:
             out.append(path)
