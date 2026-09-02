@@ -247,7 +247,14 @@ pub(super) fn finish_drag(world: &mut World, player: EntityId, target_node: &str
         return;
     };
     if let Some(target_index) = parse_inventory_slot_index(world, target_node) {
-        reorder_inventory(world, player, drag.instance_id, target_index);
+        let target_instance = inventory_instance_at(world, player, target_index);
+        let merged = target_instance
+            .filter(|target| *target != drag.instance_id)
+            .and_then(|target| merge_inventory_stacks(world, player, drag.instance_id, target).ok())
+            .is_some_and(|mutation| mutation.accepted > 0);
+        if !merged {
+            reorder_inventory(world, player, drag.instance_id, target_index);
+        }
     } else if let Some(target_slot) = parse_equipment_node(target_node) {
         equip_dragged_instance(world, player, drag.instance_id, target_slot);
     } else if target_node == "inventory.drop.zone" {
@@ -265,28 +272,9 @@ pub(super) fn reorder_inventory(
     instance: ItemInstanceId,
     target_index: usize,
 ) {
-    let Some(inventory) = world.get_mut::<PlayerInventory>(player) else {
-        return;
-    };
-    let Some(source_index) = inventory
-        .entries
-        .iter()
-        .position(|entry| entry.instance_id == instance)
-    else {
-        return;
-    };
-    if source_index == target_index || source_index >= inventory.entries.len() {
-        return;
+    if reorder_inventory_instance(world, player, instance, target_index).unwrap_or(false) {
+        touch_hud_state(world);
     }
-    let entry = inventory.entries.remove(source_index);
-    let adjusted = if source_index < target_index {
-        target_index.saturating_sub(1)
-    } else {
-        target_index
-    };
-    let insertion = adjusted.min(inventory.entries.len());
-    inventory.entries.insert(insertion, entry);
-    touch_hud_state(world);
 }
 
 pub(super) fn equip_dragged_instance(
@@ -327,7 +315,7 @@ pub(super) fn activate_inventory_instance(
     };
     match definition.kind {
         ItemKind::Consumable => {
-            let _ = use_item(world, player, item);
+            let _ = use_item_instance(world, player, instance);
         }
         _ if definition.equipment_slot.is_some() => {
             let _ = equip_item_instance(world, player, instance);
@@ -357,12 +345,7 @@ pub(super) fn drop_instance_quantity(
     instance: ItemInstanceId,
     quantity: u32,
 ) {
-    let item = world
-        .get::<PlayerInventory>(player)
-        .and_then(|inventory| inventory.entry(instance))
-        .map(|entry| entry.item);
-    if let Some(item) = item {
-        let _ = drop_item(world, player, item, quantity);
+    if drop_item_instance(world, player, instance, quantity).is_ok() {
         if world
             .get::<PlayerInventory>(player)
             .and_then(|inventory| inventory.entry(instance))

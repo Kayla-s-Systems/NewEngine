@@ -89,14 +89,14 @@ pub const UI_THEME_ASSET_NORTHSTAR_EDITOR: &str = "ui/themes/northstar_editor.ne
 
 /// Canonical font asset references used by first-party editor surfaces.
 ///
-/// `.neftd` belongs to the NEF8/ListFile family and describes font families,
+/// `.yfd` belongs to the NEF8/ListFile family and describes font families,
 /// faces, source files and atlas policy. The engine stores references here;
 /// concrete font binaries are imported by tooling and must not be hardcoded in
 /// the UI provider.
-pub const UI_FONT_ASSET_EDITOR_SANS: &str = "ui/fonts/editor.neftd@fselliotpro";
-pub const UI_FONT_ASSET_EDITOR_DISPLAY: &str = "ui/fonts/editor.neftd@intro-black";
-pub const UI_FONT_ASSET_EDITOR_BOLD: &str = "ui/fonts/editor.neftd@fselliotpro";
-pub const UI_FONT_ASSET_BRAND: &str = "ui/fonts/editor.neftd@intro-black";
+pub const UI_FONT_ASSET_EDITOR_SANS: &str = "ui/fonts/editor.yfd@fselliotpro";
+pub const UI_FONT_ASSET_EDITOR_DISPLAY: &str = "ui/fonts/editor.yfd@intro-black";
+pub const UI_FONT_ASSET_EDITOR_BOLD: &str = "ui/fonts/editor.yfd@fselliotpro";
+pub const UI_FONT_ASSET_BRAND: &str = "ui/fonts/editor.yfd@intro-black";
 
 /// Generic component primitives. These are not screen types: every interface is
 /// the same retained `UiSurfaceNode` tree and may compose the same primitives.

@@ -327,10 +327,10 @@ pub(super) fn prepare_player_animation_binding(
             &animation_runtime,
         )?,
         ready_sample_phase: None,
+        ..EquipmentPoseSet::default()
     };
-    // Family ids are authored data, not an engine enum. Discover every
-    // `equipment.<family>.<ready|aim|reload>` capability. Classified families are isolated:
-    // missing stances remain absent rather than inheriting an unrelated generic pose.
+    // Family ids remain authored opaque data. Any recognized `equipment.<family>.*` capability
+    // admits that family; runtime interprets only the universal stance/direction/layer grammar.
     let mut equipment_pose_families = std::collections::BTreeSet::new();
     for slot in assignment.animation_slots.keys() {
         let normalized = slot.trim().to_ascii_lowercase();
@@ -338,21 +338,30 @@ pub(super) fn prepare_player_animation_binding(
         if segments.next() != Some("equipment") {
             continue;
         }
-        let (Some(family), Some(stance)) = (segments.next(), segments.next()) else {
+        let Some(family) = segments.next().filter(|family| !family.is_empty()) else {
             continue;
         };
-        if segments.next().is_some()
-            || family.is_empty()
-            || !matches!(stance, "ready" | "aim" | "reload")
-        {
-            continue;
+        if segments.next().is_some() {
+            equipment_pose_families.insert(family.to_owned());
         }
-        equipment_pose_families.insert(family.to_owned());
     }
     let mut equipment_pose_sets = std::collections::BTreeMap::new();
     for family in equipment_pose_families {
+        let load_family_clip =
+            |semantic: &str| -> Result<Option<PlayerAnimationRuntimeClip>, String> {
+                let slot = format!("equipment.{family}.{semantic}");
+                let role = format!("equipment_{}_{}", family, semantic.replace('.', "_"));
+                load_authored_presentation_clip(
+                    &role,
+                    assignment.animation_for_slot(&slot),
+                    assignment,
+                    skeleton,
+                    &animation_runtime,
+                )
+            };
+
         // A classified weapon never inherits another class's generic pose. Missing authored
-        // stances remain absent and fail closed; generic slots exist only for unclassified legacy items.
+        // layers remain absent and fail closed; compatibility fields are family-local only.
         let mut set = EquipmentPoseSet::default();
         set.ready_sample_phase = assignment
             .presentation
@@ -361,27 +370,45 @@ pub(super) fn prepare_player_animation_binding(
             .copied()
             .filter(|phase| phase.is_finite())
             .map(|phase| phase.clamp(0.0, 1.0));
-        for stance in ["ready", "aim", "reload"] {
-            let slot = format!("equipment.{family}.{stance}");
-            let Some(reference) = assignment.animation_for_slot(&slot) else {
-                continue;
+        set.ready = load_family_clip("ready")?;
+        set.aim = load_family_clip("aim")?;
+        set.reload = load_family_clip("reload")?;
+        set.transitions.ready_to_aim = load_family_clip("transition.ready_to_aim")?;
+        set.transitions.aim_to_ready = load_family_clip("transition.aim_to_ready")?;
+
+        for stance in [
+            EquipmentPoseBodyStance::Stand,
+            EquipmentPoseBodyStance::Crouch,
+            EquipmentPoseBodyStance::Prone,
+        ] {
+            let stance_name = match stance {
+                EquipmentPoseBodyStance::Stand => "stand",
+                EquipmentPoseBodyStance::Crouch => "crouch",
+                EquipmentPoseBodyStance::Prone => "prone",
             };
-            let role = format!("equipment_{family}_{stance}");
-            let clip = load_authored_presentation_clip(
-                &role,
-                Some(reference),
-                assignment,
-                skeleton,
-                &animation_runtime,
-            )?;
-            match stance {
-                "ready" => set.ready = clip,
-                "aim" => set.aim = clip,
-                "reload" => set.reload = clip,
-                _ => unreachable!("equipment stance filter is exhaustive"),
+            let grip_prefix = format!("grip.{stance_name}");
+            let aim_prefix = format!("{}aim", stance.semantic_prefix());
+            let pose_space = set.pose_space_mut(stance);
+            pose_space.grip.reference = load_family_clip(&format!("{grip_prefix}.ref"))?;
+            pose_space.grip.arms = load_family_clip(&format!("{grip_prefix}.arms"))?;
+            pose_space.grip.hands = load_family_clip(&format!("{grip_prefix}.hands"))?;
+            pose_space.grip.fingers = load_family_clip(&format!("{grip_prefix}.fingers"))?;
+            pose_space.grip.additive = load_family_clip(&format!("{grip_prefix}.add"))?;
+            pose_space.idle = load_family_clip(&format!("{aim_prefix}.idle"))?;
+            pose_space.blocked_additive = load_family_clip(&format!("{aim_prefix}.blocked.add"))?;
+            pose_space.blocked_subtractive =
+                load_family_clip(&format!("{aim_prefix}.blocked.sub"))?;
+            for direction in EquipmentAimDirection::ALL {
+                if let Some(clip) =
+                    load_family_clip(&format!("{aim_prefix}.move.{}", direction.semantic()))?
+                {
+                    pose_space.movement.insert(direction, clip);
+                }
             }
         }
-        equipment_pose_sets.insert(family, set);
+        if set.any() {
+            equipment_pose_sets.insert(family, set);
+        }
     }
     let unarmed_ready_pose = load_authored_presentation_clip(
         "unarmed_ready",
@@ -750,9 +777,15 @@ pub(super) fn prepare_player_animation_binding(
             .join(",");
         newengine_ulog_api::ulog::info!(
             "game-ready: character equipment presentation prepared generic_ready='{}' generic_aim='{}' generic_reload='{}' families='{}' arm_ik={} ready_weights={} aim_weights={} reload_weights={} policy='equipped weapon class selects isolated authored pose family; generic slots apply only to unclassified legacy items; IK requires weapon presentation contract'",
-            assignment.animation_for_slot("equipment.ready").unwrap_or("none"),
-            assignment.animation_for_slot("equipment.aim").unwrap_or("none"),
-            assignment.animation_for_slot("equipment.reload").unwrap_or("none"),
+            assignment
+                .animation_for_slot("equipment.ready")
+                .unwrap_or("none"),
+            assignment
+                .animation_for_slot("equipment.aim")
+                .unwrap_or("none"),
+            assignment
+                .animation_for_slot("equipment.reload")
+                .unwrap_or("none"),
             families,
             equipment_ik.is_some(),
             equipment_ready_rotation_weights.len(),
@@ -826,13 +859,16 @@ pub(super) fn prepare_player_animation_binding(
         equipment_ready_sample_phase,
         equipment_time_seconds: 0.0,
         equipment_reload_active: false,
+        equipment_previous_stance: EquipmentPresentationStance::None,
+        equipment_transition: None,
         equipment_trace_active: false,
         equipment_trace_family: None,
         equipment_trace_stance: EquipmentPresentationStance::None,
         equipment_ready_rotation_weights,
         equipment_aim_rotation_weights,
         equipment_reload_rotation_weights,
-        equipment_overlay_locals: bind_locals,
+        equipment_overlay_locals: bind_locals.clone(),
+        equipment_overlay_locals_b: bind_locals,
         equipment_ik,
         equipment_ik_residual_diag_cooldown: 0.0,
         equipment_resolved_weapon_root: None,

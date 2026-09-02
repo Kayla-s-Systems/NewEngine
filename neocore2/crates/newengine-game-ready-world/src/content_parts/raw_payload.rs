@@ -60,6 +60,34 @@ struct RawPlayerSpec {
     pub(super) sprint_speed: Option<f32>,
     #[serde(default)]
     pub(super) crouch_speed: Option<f32>,
+    #[serde(default)]
+    pub(super) combat_team: Option<u32>,
+    #[serde(default)]
+    pub(super) health_maximum: Option<f32>,
+    #[serde(default)]
+    pub(super) stamina_maximum: Option<f32>,
+    #[serde(default)]
+    pub(super) stamina_sprint_drain_per_second: Option<f32>,
+    #[serde(default)]
+    pub(super) stamina_regen_per_second: Option<f32>,
+    #[serde(default)]
+    pub(super) stamina_regen_delay_seconds: Option<f32>,
+    #[serde(default)]
+    pub(super) stamina_exhausted_resume_fraction: Option<f32>,
+    #[serde(default)]
+    pub(super) damage_stagger_damage_fraction: Option<f32>,
+    #[serde(default)]
+    pub(super) damage_stagger_impulse_threshold: Option<f32>,
+    #[serde(default)]
+    pub(super) damage_flinch_duration_seconds: Option<f32>,
+    #[serde(default)]
+    pub(super) damage_stagger_duration_seconds: Option<f32>,
+    #[serde(default)]
+    pub(super) injured_health_fraction: Option<f32>,
+    #[serde(default)]
+    pub(super) drop_active_weapon_on_death: Option<bool>,
+    #[serde(default)]
+    pub(super) death_presentation: Option<String>,
     #[serde(default = "default_look_sens")]
     pub(super) look_sens: f32,
     #[serde(default)]
@@ -359,11 +387,51 @@ struct RawMissionTargetSpec {
     #[serde(default)]
     pub(super) id: String,
     #[serde(default)]
+    pub(super) character_ref: Option<String>,
+    #[serde(default)]
     pub(super) position: [f32; 3],
     #[serde(default)]
     pub(super) health: f32,
     #[serde(default)]
     pub(super) scale: [f32; 3],
+    #[serde(default)]
+    pub(super) ai_enabled: bool,
+    #[serde(default)]
+    pub(super) combat_team: Option<u32>,
+    #[serde(default)]
+    pub(super) sight_range: Option<f32>,
+    #[serde(default)]
+    pub(super) field_of_view_degrees: Option<f32>,
+    #[serde(default)]
+    pub(super) memory_seconds: Option<f32>,
+    #[serde(default)]
+    pub(super) decision_interval_seconds: Option<f32>,
+    #[serde(default)]
+    pub(super) move_speed: Option<f32>,
+    #[serde(default)]
+    pub(super) patrol_route: Option<String>,
+    #[serde(default)]
+    pub(super) patrol_looping: Option<bool>,
+    #[serde(default)]
+    pub(super) investigate_arrival_distance: Option<f32>,
+    #[serde(default)]
+    pub(super) engage_standoff_distance: Option<f32>,
+    #[serde(default)]
+    pub(super) waypoint_arrival_distance: Option<f32>,
+    #[serde(default)]
+    pub(super) repath_interval_seconds: Option<f32>,
+    #[serde(default)]
+    pub(super) view_turn_speed_degrees_per_second: Option<f32>,
+    #[serde(default)]
+    pub(super) fire_distance: Option<f32>,
+    #[serde(default)]
+    pub(super) aim_tolerance_degrees: Option<f32>,
+    #[serde(default)]
+    pub(super) weapon_muzzle_offset: Option<[f32; 3]>,
+    #[serde(default)]
+    pub(super) weapon_muzzle_forward: Option<[f32; 3]>,
+    #[serde(default)]
+    pub(super) loadout: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -192,7 +192,7 @@ fn aurelia_asset_preview_embedded_fixture_xml() -> String {
 
   <TextureRef ref="assets/textures/ui/icons/builtin_icons.ytd@folder" />
 
-  <FontRef ref="assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold" />
+  <FontRef ref="assets/ui/fonts/editor.yfd@tt_lakes_neue_trial_bold" />
 
   <Surface name="engine.ui.aurelia_asset_preview_stand" kind="devtools" root="preview.root" theme="assets/ui/themes/northstar_editor.neui@editor_light" />
 
@@ -200,13 +200,13 @@ fn aurelia_asset_preview_embedded_fixture_xml() -> String {
 
     <Panel id="preview.root">
 
-      <Text id="preview.title" value="AureliaUI asset preview stand" font="assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold" />
+      <Text id="preview.title" value="AureliaUI asset preview stand" font="assets/ui/fonts/editor.yfd@tt_lakes_neue_trial_bold" />
 
       <Image id="preview.logo" texture="assets/textures/ui/loading/loading_ui.ytd@newengine_logo" />
 
       <Icon id="preview.folder" icon="assets/textures/ui/icons/builtin_icons.ytd@folder" />
 
-      <Text id="preview.caption" value="Preview caption" font="assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold" />
+      <Text id="preview.caption" value="Preview caption" font="assets/ui/fonts/editor.yfd@tt_lakes_neue_trial_bold" />
 
     </Panel>
 
@@ -251,7 +251,7 @@ fn compiles_aurelia_asset_preview_stand_with_font_texture_and_binding_refs() {
 
     assert!(dependencies
         .iter()
-        .any(|dep| dep == "assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold"));
+        .any(|dep| dep == "assets/ui/fonts/editor.yfd@tt_lakes_neue_trial_bold"));
 
     let surface = parse_surface(&xml).expect("preview stand must declare a surface");
 
@@ -285,7 +285,7 @@ fn compiles_aurelia_asset_preview_stand_with_font_texture_and_binding_refs() {
 
     assert_eq!(
         title.font_token.as_deref(),
-        Some("assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold")
+        Some("assets/ui/fonts/editor.yfd@tt_lakes_neue_trial_bold")
     );
 
     assert_eq!(title.text, "AureliaUI asset preview stand");
@@ -312,7 +312,7 @@ fn compiles_aurelia_asset_preview_stand_with_font_texture_and_binding_refs() {
 
     assert_eq!(
         caption.font_token.as_deref(),
-        Some("assets/ui/fonts/editor.neftd@tt_lakes_neue_trial_bold")
+        Some("assets/ui/fonts/editor.yfd@tt_lakes_neue_trial_bold")
     );
 
     let binding_plan = parse_binding_plan(&xml, document_ref, &surface.name);

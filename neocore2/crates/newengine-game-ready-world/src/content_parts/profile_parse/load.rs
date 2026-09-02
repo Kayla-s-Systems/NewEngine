@@ -128,7 +128,14 @@ fn load_profile_asset(
         ));
     }
     if ymap_schema(&payload, logical_path)?.as_str() == "newengine.map.definition.v2" {
-        return load_discrete_map_profile(logical_path);
+        let value = parse_ymap_xml_payload(&payload, logical_path)?;
+        log_ymap_value_summary(logical_path, &value);
+        let authored_profile = if value.pointer("/map/profile").is_some() {
+            Some(parse_map_definition_payload(value, logical_path)?)
+        } else {
+            None
+        };
+        return load_discrete_map_profile(logical_path, authored_profile);
     }
     let value = parse_ymap_xml_payload(&payload, logical_path)?;
     log_ymap_value_summary(logical_path, &value);
@@ -380,10 +387,8 @@ fn definition_surface_binding(definition: &ResolvedMapDefinitionEntry) -> Defini
         else {
             continue;
         };
-        for namespace in ["newengine.physics.surface", "engine.physics.surface"] {
-            if let Some(binding) = root.get(namespace).and_then(parse) {
-                return binding;
-            }
+        if let Some(binding) = root.get("engine.physics.surface").and_then(parse) {
+            return binding;
         }
     }
     DefinitionSurfaceBinding::default()
@@ -632,7 +637,10 @@ fn apply_discrete_placement(
     Ok(())
 }
 
-fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, String> {
+fn load_discrete_map_profile(
+    logical_path: &str,
+    authored_profile: Option<GameReadyMapProfile>,
+) -> Result<GameReadyMapProfile, String> {
     let map_ref =
         newengine_assets_api::map_entry_ref(logical_path, newengine_assets_api::MAP_INDEX_ENTRY);
     let request = serde_json::to_vec(&newengine_assets_api::MapRefRequestV1 {
@@ -653,25 +661,42 @@ fn load_discrete_map_profile(logical_path: &str) -> Result<GameReadyMapProfile, 
             format!("engine.assets.maps returned invalid MapIndexV1 map='{map_ref}' err='{e}'")
         })?;
 
-    let mut profile = parse_payload(
-        serde_json::json!({}),
-        "game-ready.mode-defaults",
-        logical_path,
-    )?;
-    profile.title = index.map_id.clone();
-    profile.objective = format!("Explore {}", index.map_id);
+    let authored_profile_present = authored_profile.is_some();
+    let mut profile = if let Some(profile) = authored_profile {
+        profile
+    } else {
+        parse_payload(
+            serde_json::json!({}),
+            "game-ready.mode-defaults",
+            logical_path,
+        )?
+    };
+    if profile.title.trim().is_empty() {
+        profile.title = index.map_id.clone();
+    }
+    if profile.objective.trim().is_empty() {
+        profile.objective = format!("Explore {}", index.map_id);
+    }
     profile.terrain.enabled = false;
     profile.terrain.streaming.enabled = false;
     profile.foliage.enabled = false;
     profile.foliage.max_count = 0;
-    profile.prefabs.clear();
-    profile.definitions.clear();
+    if !authored_profile_present {
+        profile.prefabs.clear();
+        profile.definitions.clear();
+    }
 
     // Camera identity is declared by an explicit YMAP player_camera placement.
     // No map-level camera scalar or hidden engine camera selection is accepted here.
 
     let mode_sky_definition = profile.sky.definition_ref.trim().to_owned();
-    if !mode_sky_definition.is_empty() {
+    if !mode_sky_definition.is_empty()
+        && !profile.definitions.iter().any(|definition| {
+            definition
+                .definition_ref
+                .eq_ignore_ascii_case(&mode_sky_definition)
+        })
+    {
         profile.definitions.push(GameReadyDefinitionInstanceSpec {
             definition_ref: mode_sky_definition,
             position: Vec3::ZERO,

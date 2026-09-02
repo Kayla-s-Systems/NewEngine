@@ -193,11 +193,26 @@ fn clear_player_model_binding(
             ..Default::default()
         };
     }
-    set_player_fallback_visibility(
-        world,
-        player,
-        newengine_engine_runtime::gameplay::DisplayMode::GameOnly,
-    );
+    if world
+        .get::<newengine_engine_runtime::gameplay::PlayerActor>(player)
+        .is_some()
+    {
+        set_player_fallback_visibility(
+            world,
+            player,
+            newengine_engine_runtime::gameplay::DisplayMode::GameOnly,
+        );
+    } else if world
+        .get::<newengine_engine_runtime::gameplay::DisplayVisibility>(player)
+        .is_some()
+    {
+        let _ = world.insert(
+            player,
+            newengine_engine_runtime::gameplay::DisplayVisibility {
+                mode: newengine_engine_runtime::gameplay::DisplayMode::GameOnly,
+            },
+        );
+    }
 }
 
 fn joint_is_descendant_of(
@@ -335,6 +350,9 @@ fn bind_player_model_assignment(
     assignment: &newengine_engine_runtime::gameplay::PlayerModelAssignment,
     capsule_ground_offset_y: f32,
 ) -> Result<bool, String> {
+    let possessed_player = world
+        .get::<newengine_engine_runtime::gameplay::PlayerActor>(player)
+        .is_some();
     if !assignment.enabled || assignment.source.trim().is_empty() {
         clear_player_model_binding(world, player, assignment.revision);
         return Ok(false);
@@ -393,7 +411,7 @@ fn bind_player_model_assignment(
         }
     };
     if let Some(hair) = prepared_hair.as_mut() {
-        hair.hide_in_first_person = true;
+        hair.hide_in_first_person = possessed_player;
     }
 
     clear_player_runtime_model_visuals(world, player);
@@ -432,14 +450,19 @@ fn bind_player_model_assignment(
     // Character remains one world-space skinned entity in every gameplay camera mode. First person
     // keeps torso, arms, hands, legs and equipment visible; only camera-near head/face/neck shells
     // are suppressed or replaced by sealed FPP topology. Hair source meshes stay live until replacement binds.
-    let first_person_active = world
-        .resource::<newengine_engine_runtime::gameplay::PlayerViewState>()
-        .copied()
-        .unwrap_or_default()
-        .first_person_active;
+    let first_person_active = possessed_player
+        && world
+            .resource::<newengine_engine_runtime::gameplay::PlayerViewState>()
+            .copied()
+            .unwrap_or_default()
+            .first_person_active;
     let mut hair_source_entities = Vec::new();
     for (part_index, part) in parts.iter().enumerate() {
-        let visibility_policy = runtime_part_visibility_policy(part, skeleton.as_ref());
+        let visibility_policy = if possessed_player {
+            runtime_part_visibility_policy(part, skeleton.as_ref())
+        } else {
+            newengine_engine_runtime::gameplay::PlayerViewVisibilityPolicy::AlwaysVisible
+        };
         let entity = spawn_named(
             world,
             format!("{visual_root_name}/Part{part_index}:{}", part.material_slot),
@@ -642,22 +665,34 @@ fn bind_player_model_assignment(
             .unwrap_or(assignment.target_height * assignment.eye_height_ratio);
     }
 
-    hide_player_fallback_visuals(world, player);
-    newengine_engine_runtime::gameplay::emit_player_event(
-        world,
-        player,
-        newengine_engine_runtime::gameplay::PlayerEventKind::ModelBound,
-        format!(
-            "revision={} model='{}' skeleton='{}' parts={}",
-            assignment.revision,
-            model_source,
-            skeleton
-                .as_ref()
-                .map(|metadata| metadata.source.as_str())
-                .unwrap_or("none"),
-            parts.len() as u32 + sidecar_part_count
-        ),
-    );
+    if possessed_player {
+        hide_player_fallback_visuals(world, player);
+        newengine_engine_runtime::gameplay::emit_player_event(
+            world,
+            player,
+            newengine_engine_runtime::gameplay::PlayerEventKind::ModelBound,
+            format!(
+                "revision={} model='{}' skeleton='{}' parts={}",
+                assignment.revision,
+                model_source,
+                skeleton
+                    .as_ref()
+                    .map(|metadata| metadata.source.as_str())
+                    .unwrap_or("none"),
+                parts.len() as u32 + sidecar_part_count
+            ),
+        );
+    } else if world
+        .get::<newengine_engine_runtime::gameplay::DisplayVisibility>(player)
+        .is_some()
+    {
+        let _ = world.insert(
+            player,
+            newengine_engine_runtime::gameplay::DisplayVisibility {
+                mode: newengine_engine_runtime::gameplay::DisplayMode::RuntimeHidden,
+            },
+        );
+    }
     Ok(true)
 }
 

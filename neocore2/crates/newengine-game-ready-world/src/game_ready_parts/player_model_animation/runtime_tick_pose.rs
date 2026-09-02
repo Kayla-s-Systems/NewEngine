@@ -103,13 +103,26 @@ fn finalize_player_pose_and_palette(
     timing.continuity_eye_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
 
     let phase_started = std::time::Instant::now();
-    let equipment_ready_pose_present = select_equipment_pose_set(
+    let selected_equipment_pose_set = select_equipment_pose_set(
         &binding.equipment_default_pose_set,
         &binding.equipment_pose_sets,
         frame.equipment_pose_family.as_deref(),
-    )
-    .and_then(|set| set.ready.as_ref())
-    .is_some();
+    );
+    let equipment_hand_contact_pose_present =
+        selected_equipment_pose_set.is_some_and(|set| match equipment_stance {
+            EquipmentPresentationStance::Ready => set.ready.is_some(),
+            EquipmentPresentationStance::Aim => set.has_aim(),
+            EquipmentPresentationStance::Reload | EquipmentPresentationStance::None => false,
+        });
+    let equipment_prop_socket_authority_present = equipment_presentation_active
+        && equipment_stance == EquipmentPresentationStance::Aim
+        && rifle_aim_alpha > 0.001
+        && binding.equipment_transition.is_none()
+        && selected_equipment_pose_set.is_some_and(|set| {
+            set.pose_space(equipment_pose_body_stance(active_state, look_context))
+                .grip
+                .has_prop_socket_contract()
+        });
     if equipment_presentation_active {
         // Support IK is valid only when both sides of the authored binding resolved:
         // a sanitized weapon presentation and a skeleton-resolved arm IK rig. Poses may
@@ -133,8 +146,8 @@ fn finalize_player_pose_and_palette(
                 rifle_recoil_yaw_radians,
                 rifle_obstruction_alpha,
                 rifle_secondary_rotation_offset_local,
-                equipment_stance != EquipmentPresentationStance::Reload
-                    && equipment_ready_pose_present,
+                equipment_hand_contact_pose_present,
+                equipment_prop_socket_authority_present,
                 rifle_reload_progress
                     .map(|progress| progress <= 0.08 || progress >= 0.92)
                     .unwrap_or(true),
@@ -144,16 +157,21 @@ fn finalize_player_pose_and_palette(
             ) {
                 Ok(Some(result)) => {
                     binding.equipment_resolved_weapon_root = Some(result.base_root);
-                    if result.error_m > EQUIPMENT_SUPPORT_IK_RESIDUAL_WARN_THRESHOLD_M
+                    if (result.error_m > EQUIPMENT_SUPPORT_IK_RESIDUAL_WARN_THRESHOLD_M
+                        || result.socket_angular_error_deg
+                            > EQUIPMENT_SOCKET_ANGULAR_WARN_THRESHOLD_DEG)
                         && binding.equipment_ik_residual_diag_cooldown <= 0.0
                     {
                         newengine_ulog_api::ulog::warn!(
-                            "game-ready: authored equipment support IK residual player={} error_m={:.5} right_error_m={:.5} left_error_m={:.5} threshold_m={:.5} diagnostic_interval_s={:.1}",
+                            "game-ready: authored equipment support IK residual player={} error_m={:.5} right_error_m={:.5} left_error_m={:.5} socket_position_error_m={:.5} socket_angular_error_deg={:.4} threshold_m={:.5} angular_threshold_deg={:.3} diagnostic_interval_s={:.1}",
                             player.stable_u64(),
                             result.error_m,
                             result.right_error_m,
                             result.left_error_m,
+                            result.socket_position_error_m,
+                            result.socket_angular_error_deg,
                             EQUIPMENT_SUPPORT_IK_RESIDUAL_WARN_THRESHOLD_M,
+                            EQUIPMENT_SOCKET_ANGULAR_WARN_THRESHOLD_DEG,
                             EQUIPMENT_SUPPORT_IK_RESIDUAL_DIAG_INTERVAL_SECONDS,
                         );
                         binding.equipment_ik_residual_diag_cooldown =
@@ -176,6 +194,13 @@ fn finalize_player_pose_and_palette(
         }
     }
     timing.support_ik_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
+
+    // Weapon contact IK is a terminal writer for shoulder/elbow/wrist. Abby's deformation rig has
+    // parallel *_helper / finger-roll branches that share skin weights with the anatomical hand.
+    // They were synchronized before IK, so leaving them there makes the final palette contain two
+    // different wrist/finger frames and visibly stretches the fingers. Re-project authored helper
+    // copies after all weapon contact mutations and before palette construction.
+    synchronize_helper_pose(&binding.helper_pose_copies, &mut binding.current_locals);
 
     let phase_started = std::time::Instant::now();
     if let Err(error) = stabilize_eye_locals(
@@ -347,72 +372,4 @@ fn finalize_player_pose_and_palette(
         foot_pose,
         timing,
     ))
-}
-
-/// Phase 4: publish the evaluated frame back to ECS/resources only after all mutable binding work
-/// has completed. This keeps side-effect ordering explicit and prevents nested world borrows.
-fn commit_player_animation_frame(
-    world: &mut newengine_ecs::World,
-    player: newengine_ecs::EntityId,
-    dt: f32,
-    output: PlayerAnimationFrameOutput,
-) {
-    let PlayerAnimationFrameOutput {
-        palette,
-        clip_ref,
-        active_state,
-        foot_pose,
-        turn_step_request,
-        model_to_world,
-        timeline_events,
-        presentation_core_ms: _,
-        finalize_ms: _,
-        finalize_timing: _,
-    } = output;
-    if let Some(foot_pose) = foot_pose {
-        let _ = world.insert(player, foot_pose);
-    }
-
-    let recycled_palette = if let Some(pose) =
-        world.get_mut::<newengine_engine_runtime::gameplay::PlayerSkinPose>(player)
-    {
-        let recycled = std::mem::replace(&mut pose.palette, palette);
-        pose.revision = pose.revision.saturating_add(1).max(1);
-        Some(recycled)
-    } else {
-        let _ = world.insert(
-            player,
-            newengine_engine_runtime::gameplay::PlayerSkinPose {
-                palette,
-                revision: 1,
-            },
-        );
-        None
-    };
-    if let Some(recycled_palette) = recycled_palette {
-        if let Some(binding) = world.get_mut::<PlayerAnimationRuntimeBinding>(player) {
-            binding.palette_scratch = recycled_palette;
-        }
-    }
-    if let Some(yaw_delta) = turn_step_request {
-        let _ = world.insert(
-            player,
-            newengine_sim::CharacterFacingTurnStepRequest { yaw_delta },
-        );
-    }
-    crate::player_hair::publish_player_hair_pose(world, player, model_to_world);
-    crate::animation_events::publish_timeline_events(world, timeline_events);
-
-    if dt > 0.0
-        && world
-            .get::<newengine_engine_runtime::gameplay::PlayerSkinPose>(player)
-            .is_some_and(|pose| pose.revision == 2)
-    {
-        newengine_ulog_api::ulog::info!(
-            "game-ready: first animated player palette committed player={} state='{}' clip='{}'",
-            player.stable_u64(),
-            active_state.clip_hint(),
-            clip_ref
-        );
-    }
 }

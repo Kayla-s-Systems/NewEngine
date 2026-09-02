@@ -191,6 +191,128 @@ mod tests {
     }
 
     #[test]
+    fn ai_engage_uses_shared_weapon_hitscan_pipeline_without_direct_damage() {
+        let mut world = World::new();
+        let content = embedded_test_content_provider();
+        GameplayContentProvider::install(&content, &mut world).expect("install FPS content");
+
+        let actor = world.spawn();
+        let target = world.spawn();
+        let _ = world.insert(
+            actor,
+            Transform {
+                position: Vec3::ZERO,
+                rotation: Quat::IDENTITY,
+                scale: Vec3::ONE,
+            },
+        );
+        let _ = world.insert(actor, CharacterBody::default());
+        let _ = world.insert(actor, CharacterMotor::default());
+        let _ = world.insert(actor, AIController::default());
+        let _ = world.insert(actor, CharacterControlState::enabled());
+        let _ = world.insert(actor, CharacterLifeState::Alive);
+        let _ = world.insert(actor, Health::new(100.0));
+        let _ = world.insert(
+            actor,
+            PerceptionState {
+                candidate_target: Some(target),
+                visible_target: Some(target),
+                candidate_distance: 5.0,
+                observation_revision: 1,
+            },
+        );
+        let _ = world.insert(
+            actor,
+            CombatIntent {
+                kind: CombatIntentKind::Engage,
+                target: Some(target),
+                target_position: Vec3::new(0.0, 0.0, -5.0),
+                revision: 1,
+            },
+        );
+        let _ = world.insert(
+            actor,
+            FpsAiCombatTuning {
+                fire_distance: 20.0,
+                aim_tolerance_radians: 4.0_f32.to_radians(),
+            },
+        );
+        let _ = world.insert(
+            actor,
+            EquippedWeaponMuzzle::new(
+                Vec3::new(0.18, 1.20, -0.62),
+                Vec3::new(0.0, 0.0, -1.0),
+            )
+            .expect("AI test muzzle"),
+        );
+        newengine_engine_runtime::gameplay::apply_loadout(
+            &mut world,
+            actor,
+            ItemId::from_name("loadout.fps.default").expect("test loadout id"),
+        )
+        .expect("apply authored AI test loadout");
+
+        let _ = world.insert(
+            target,
+            Transform {
+                position: Vec3::new(0.0, 0.0, -5.0),
+                rotation: Quat::IDENTITY,
+                scale: Vec3::ONE,
+            },
+        );
+        let _ = world.insert(target, CharacterBody::default());
+        let _ = world.insert(target, Health::new(100.0));
+        let _ = world.insert(
+            target,
+            newengine_engine_runtime::gameplay::DamageReceiver::character(),
+        );
+
+        assert!(world.get::<PlayerController>(actor).is_none());
+        step_ai_combat_actuation(&mut world, 41);
+        let actuation = world
+            .get::<CombatActuationState>(actor)
+            .copied()
+            .expect("AI combat actuation");
+        assert!(actuation.aim);
+        assert!(actuation.trigger_pressed);
+        assert!(actuation.trigger_held);
+        assert_eq!(world.get::<Health>(target).unwrap().current, 100.0);
+
+        step_actor_combat(&mut world, 1.0 / 60.0, 41);
+        let pending = world
+            .get::<PendingHitscan>(actor)
+            .copied()
+            .expect("AI must enter the ordinary pending hitscan pipeline");
+        assert_eq!(world.get::<Health>(target).unwrap().current, 100.0);
+
+        let map = BTreeMap::from([
+            (actor.stable_u64(), actor),
+            (target.stable_u64(), target),
+        ]);
+        resolve_combat_queries(
+            &mut world,
+            41,
+            &[PhysicsQueryHitDto {
+                subshape_id: 0,
+                hit_index: 0,
+                back_face: false,
+                seq: pending.query_seq,
+                entity: target.stable_u64(),
+                position: [0.0, 0.9, -5.0],
+                normal: [0.0, 0.0, 1.0],
+                distance: 5.0,
+            }],
+            &map,
+            newengine_fps_content_runtime::embedded_test_policy_provider().as_ref(),
+            &GameplayCommandExecutor::default(),
+        );
+        assert!(
+            world.get::<Health>(target).unwrap().current < 100.0,
+            "damage must occur only after ordinary combat query resolution"
+        );
+    }
+
+    #[test]
     fn weapon_fires_reloads_and_applies_typed_damage() {
         let mut world = World::new();
         let shooter = spawn_fps_player(&mut world, "shooter", Vec3::ZERO);
@@ -472,6 +594,7 @@ mod tests {
                 weapon_instance_id: binding.instance_id,
                 clip_duration_seconds: 0.6,
                 marker_mask: newengine_engine_runtime::gameplay::WEAPON_RELOAD_ANIMATION_REQUIRED_MARKER_MASK,
+                required_marker_mask: newengine_engine_runtime::gameplay::WEAPON_RELOAD_ANIMATION_REQUIRED_MARKER_MASK,
             },
         );
 
@@ -495,7 +618,11 @@ mod tests {
             action.timing_source,
             WeaponActionTimingSource::AnimationMarkers
         );
-        assert!((action.duration_seconds - 0.6).abs() < 1.0e-6);
+        assert!(
+            (action.duration_seconds - firearm.profiles.handling.reload_duration_seconds).abs()
+                < 1.0e-6,
+            "marker authority owns semantic phase commits, not the gameplay action clock"
+        );
 
         for tick in 2..=12 {
             step_player_combat(&mut world, 0.1, tick);

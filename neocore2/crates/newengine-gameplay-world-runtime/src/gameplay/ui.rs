@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use newengine_ecs::EntityId;
 use newengine_ui_api::{UiEventDispatchFrame, UiStatePatch};
 
 use super::execution::GameplayWorld;
@@ -240,6 +241,71 @@ pub fn gameplay_input_capture(world: &GameplayWorld) -> GameplayInputCapture {
     gameplay_modal_state(world).capture
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CharacterVitalsHudModel {
+    pub entity: u64,
+    pub alive: bool,
+    pub control_enabled: bool,
+    pub health_current: f32,
+    pub health_maximum: f32,
+    pub health_normalized: f32,
+    pub stamina_available: bool,
+    pub stamina_current: f32,
+    pub stamina_maximum: f32,
+    pub stamina_normalized: f32,
+    pub stamina_exhausted: bool,
+    pub injured: bool,
+    pub hit_reaction: super::CharacterHitReactionKind,
+    pub damage_flash: bool,
+    pub death_phase: Option<super::CharacterDeathPhase>,
+}
+
+/// Read-only projection of authoritative character ECS state for HUD providers.
+/// No UI surface owns or mutates health/stamina/life-state through this contract.
+pub fn character_vitals_hud_model(
+    world: &GameplayWorld,
+    entity: EntityId,
+) -> Option<CharacterVitalsHudModel> {
+    let health = world.get::<super::Health>(entity).copied()?;
+    let stamina = world.get::<super::Stamina>(entity).copied();
+    let life_state = world
+        .get::<super::CharacterLifeState>(entity)
+        .copied()
+        .unwrap_or_default();
+    let control_enabled = world
+        .get::<super::CharacterControlState>(entity)
+        .map(|control| control.enabled)
+        .unwrap_or(true);
+    let injury = world
+        .get::<super::CharacterInjuryState>(entity)
+        .copied()
+        .unwrap_or_default();
+    let reaction = world.get::<super::CharacterHitReactionState>(entity);
+    let death_phase = world
+        .get::<super::CharacterDeathTransitionState>(entity)
+        .map(|death| death.phase);
+
+    Some(CharacterVitalsHudModel {
+        entity: entity.stable_u64(),
+        alive: life_state.alive(),
+        control_enabled,
+        health_current: health.current,
+        health_maximum: health.maximum,
+        health_normalized: health.normalized(),
+        stamina_available: stamina.is_some(),
+        stamina_current: stamina.map_or(0.0, |stamina| stamina.current),
+        stamina_maximum: stamina.map_or(0.0, |stamina| stamina.maximum),
+        stamina_normalized: stamina.map_or(0.0, |stamina| stamina.normalized()),
+        stamina_exhausted: stamina.is_some_and(|stamina| stamina.exhausted),
+        injured: injury.injured,
+        hit_reaction: reaction
+            .map(|reaction| reaction.kind)
+            .unwrap_or(super::CharacterHitReactionKind::None),
+        damage_flash: reaction.is_some_and(super::CharacterHitReactionState::active),
+        death_phase,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -257,6 +323,65 @@ mod tests {
         fn input_capture(&self, _world: &GameplayWorld) -> GameplayInputCapture {
             self.capture
         }
+    }
+
+    #[test]
+    fn character_vitals_hud_projection_is_read_only_and_reflects_authoritative_state() {
+        let mut world = GameplayWorld::new();
+        let entity = world.spawn();
+        let mut stamina = super::super::Stamina::new(100.0);
+        stamina.current = 25.0;
+        stamina.exhausted = true;
+        let _ = world.insert(
+            entity,
+            super::super::Health {
+                current: 40.0,
+                maximum: 100.0,
+            },
+        );
+        let _ = world.insert(entity, stamina);
+        let _ = world.insert(entity, super::super::CharacterLifeState::Alive);
+        let _ = world.insert(entity, super::super::CharacterControlState::enabled());
+        let _ = world.insert(
+            entity,
+            super::super::CharacterInjuryState {
+                injured: true,
+                revision: 2,
+            },
+        );
+        let _ = world.insert(
+            entity,
+            super::super::CharacterHitReactionState {
+                kind: super::super::CharacterHitReactionKind::Flinch,
+                remaining_seconds: 0.1,
+                sequence: 7,
+                source: 8,
+                hit_zone: Some("torso".to_owned()),
+                point: newengine_math::Vec3::ZERO,
+                impulse: newengine_math::Vec3::ZERO,
+                applied_damage: 10.0,
+                health_fraction: 0.4,
+                revision: 3,
+            },
+        );
+
+        let before_health = world.get::<super::super::Health>(entity).copied().unwrap();
+        let model = character_vitals_hud_model(&world, entity).expect("HUD vitals model");
+        assert_eq!(model.health_current, 40.0);
+        assert_eq!(model.health_normalized, 0.4);
+        assert_eq!(model.stamina_current, 25.0);
+        assert_eq!(model.stamina_normalized, 0.25);
+        assert!(model.stamina_exhausted);
+        assert!(model.injured);
+        assert!(model.damage_flash);
+        assert_eq!(
+            model.hit_reaction,
+            super::super::CharacterHitReactionKind::Flinch
+        );
+        assert_eq!(
+            world.get::<super::super::Health>(entity).copied(),
+            Some(before_health)
+        );
     }
 
     #[test]

@@ -1,3 +1,5 @@
+include!("runtime_tick_presentation_special.rs");
+
 /// Phase 2: evaluate locomotion and authored presentation layers. This phase owns animation
 /// cursors/state machines, but delegates final look/IK/continuity/palette construction to phase 3.
 fn evaluate_player_animation_presentation(
@@ -10,52 +12,19 @@ fn evaluate_player_animation_presentation(
     let semantic = frame.semantic;
     let animation_state = semantic.animation_state;
     let look_context = semantic.look_context;
-    let noclip_enabled = semantic.noclip_enabled;
-    let fall_presentation_requested = frame.fall_presentation_requested;
     let unarmed_active = frame.unarmed_active;
     let unarmed_attack_sequence = frame.unarmed_attack_sequence;
     let rifle_aim_alpha = semantic.aim_alpha;
     let equipment_stance = semantic.equipment_stance;
     let equipment_pose_family = frame.equipment_pose_family.as_deref();
     let equipment_presentation_active = frame.equipment_presentation_active;
-    let equipment_trace_changed = binding.equipment_trace_active != equipment_presentation_active
-        || binding.equipment_trace_stance != equipment_stance
-        || binding.equipment_trace_family.as_deref() != equipment_pose_family;
-    if equipment_trace_changed {
-        let selected_clip = equipment_presentation_active
-            .then(|| {
-                select_equipment_pose_set(
-                    &binding.equipment_default_pose_set,
-                    &binding.equipment_pose_sets,
-                    equipment_pose_family,
-                )
-                .and_then(|set| match equipment_stance {
-                    EquipmentPresentationStance::Ready => set.ready.as_ref(),
-                    EquipmentPresentationStance::Aim => set.aim.as_ref(),
-                    EquipmentPresentationStance::Reload => set.reload.as_ref(),
-                    EquipmentPresentationStance::None => None,
-                })
-                .map(|clip| clip.clip_ref.clone())
-            })
-            .flatten();
-        let stance = match equipment_stance {
-            EquipmentPresentationStance::None => "none",
-            EquipmentPresentationStance::Ready => "ready",
-            EquipmentPresentationStance::Aim => "aim",
-            EquipmentPresentationStance::Reload => "reload",
-        };
-        newengine_ulog_api::ulog::info!(
-            "game-ready: equipment pose selected player={} active={} family='{}' stance='{}' clip='{}' policy='weapon class selects character-owned authored capability; no cross-family fallback'",
-            player.stable_u64(),
-            equipment_presentation_active,
-            equipment_pose_family.unwrap_or("<generic>"),
-            stance,
-            selected_clip.as_deref().unwrap_or("<none>"),
-        );
-        binding.equipment_trace_active = equipment_presentation_active;
-        binding.equipment_trace_family = equipment_pose_family.map(str::to_owned);
-        binding.equipment_trace_stance = equipment_stance;
-    }
+    trace_equipment_pose_selection(
+        player,
+        binding,
+        equipment_presentation_active,
+        equipment_pose_family,
+        equipment_stance,
+    );
     let rifle_reload_progress = semantic.reload_progress;
     let body_yaw = frame.body_yaw;
     let view_body_yaw_delta = frame.view_body_yaw_delta;
@@ -71,6 +40,12 @@ fn evaluate_player_animation_presentation(
     }
     let mut event_occurrences = Vec::new();
     binding.equipment_time_seconds += dt;
+    if equipment_presentation_active {
+        begin_or_advance_equipment_transition(binding, equipment_pose_family, equipment_stance, dt);
+    } else {
+        binding.equipment_previous_stance = EquipmentPresentationStance::None;
+        binding.equipment_transition = None;
+    }
     binding.equipment_ik_residual_diag_cooldown =
         (binding.equipment_ik_residual_diag_cooldown - dt).max(0.0);
     binding.equipment_resolved_weapon_root = None;
@@ -583,62 +558,125 @@ fn evaluate_player_animation_presentation(
                 );
             }
             if aim_timeline_active {
-                let aim_phase = select_equipment_pose_set(
-                    &binding.equipment_default_pose_set,
-                    &binding.equipment_pose_sets,
-                    equipment_pose_family,
-                )
-                .and_then(|set| set.aim.as_ref())
-                .map(|clip| {
-                    let duration = clip.clip.duration_seconds.max(1.0 / 30.0);
-                    (binding.equipment_time_seconds.rem_euclid(duration) / duration).clamp(0.0, 1.0)
-                })
-                .unwrap_or(0.0);
-                if let Err(error) = apply_equipment_rotation_overlay(
-                    select_equipment_pose_set(
+                let mut transition_applied = false;
+                if let Some(transition) = binding.equipment_transition {
+                    let transition_clip = select_equipment_pose_set(
                         &binding.equipment_default_pose_set,
                         &binding.equipment_pose_sets,
                         equipment_pose_family,
                     )
-                    .and_then(|set| set.aim.as_ref()),
-                    &binding.animation_runtime,
-                    &mut binding.equipment_overlay_locals,
-                    &mut binding.sampled_target_locals,
-                    aim_phase,
-                    binding.equipment_aim_rotation_weights.as_slice(),
-                    rifle_aim_alpha,
-                ) {
-                    newengine_ulog_api::ulog::warn!(
-                        "game-ready: authored equipment aim overlay failed player={} phase={:.3} alpha={:.3}: {}",
-                        player.stable_u64(),
-                        aim_phase,
-                        rifle_aim_alpha,
-                        error,
-                    );
+                    .and_then(|set| equipment_transition_clip(set, transition.kind));
+                    if let Some(clip) = transition_clip {
+                        let duration = clip.clip.duration_seconds.max(1.0 / 30.0);
+                        let phase = (transition.elapsed_seconds / duration).clamp(0.0, 1.0);
+                        if let Err(error) = apply_equipment_rotation_overlay(
+                            Some(clip),
+                            &binding.animation_runtime,
+                            &mut binding.equipment_overlay_locals,
+                            &mut binding.sampled_target_locals,
+                            phase,
+                            binding.equipment_aim_rotation_weights.as_slice(),
+                            1.0,
+                        ) {
+                            newengine_ulog_api::ulog::warn!(
+                                "game-ready: authored equipment aim transition failed player={} phase={:.3}: {}",
+                                player.stable_u64(), phase, error,
+                            );
+                        }
+                        transition_applied = true;
+                    }
                 }
-                if let Some(aim) = select_equipment_pose_set_mut(
-                    &mut binding.equipment_default_pose_set,
-                    &mut binding.equipment_pose_sets,
-                    equipment_pose_family,
-                )
-                .and_then(|set| set.aim.as_mut())
-                {
-                    if let Err(error) = crate::animation_events::collect_timeline_events(
-                        player,
-                        &aim.clip_ref,
-                        "character.equipment.aim",
-                        &aim.clip,
-                        &mut aim.event_cursor,
-                        binding.equipment_time_seconds,
-                        &mut event_occurrences,
-                        &mut timeline_events,
+                if !transition_applied {
+                    let body_stance = equipment_pose_body_stance(active_state, look_context);
+                    let layered_result = if let Some(pose_set) = select_equipment_pose_set(
+                        &binding.equipment_default_pose_set,
+                        &binding.equipment_pose_sets,
+                        equipment_pose_family,
                     ) {
-                        newengine_ulog_api::ulog::warn!(
-                            "game-ready: equipment aim timeline event evaluation failed player={} clip='{}': {}",
-                            player.stable_u64(),
-                            aim.clip_ref,
-                            error,
-                        );
+                        apply_layered_equipment_aim_pose(
+                            pose_set,
+                            body_stance,
+                            frame.aim_velocity_local,
+                            binding.equipment_time_seconds,
+                            rifle_aim_alpha,
+                            semantic.obstruction_alpha,
+                            &binding.animation_runtime,
+                            &mut binding.equipment_overlay_locals,
+                            &mut binding.equipment_overlay_locals_b,
+                            &mut binding.sampled_target_locals,
+                            binding.turn_root_joint,
+                            binding.equipment_aim_rotation_weights.as_slice(),
+                        )
+                    } else {
+                        Ok(false)
+                    };
+                    let layered_applied = match layered_result {
+                        Ok(applied) => applied,
+                        Err(error) => {
+                            newengine_ulog_api::ulog::warn!(
+                                "game-ready: layered equipment aim evaluation failed player={}: {}",
+                                player.stable_u64(),
+                                error,
+                            );
+                            false
+                        }
+                    };
+                    if !layered_applied {
+                        let aim_phase = select_equipment_pose_set(
+                            &binding.equipment_default_pose_set,
+                            &binding.equipment_pose_sets,
+                            equipment_pose_family,
+                        )
+                        .and_then(|set| set.aim.as_ref())
+                        .map(|clip| {
+                            equipment_loop_phase(
+                                clip.clip.duration_seconds,
+                                binding.equipment_time_seconds,
+                            )
+                        })
+                        .unwrap_or(0.0);
+                        if let Err(error) = apply_equipment_rotation_overlay(
+                            select_equipment_pose_set(
+                                &binding.equipment_default_pose_set,
+                                &binding.equipment_pose_sets,
+                                equipment_pose_family,
+                            )
+                            .and_then(|set| set.aim.as_ref()),
+                            &binding.animation_runtime,
+                            &mut binding.equipment_overlay_locals,
+                            &mut binding.sampled_target_locals,
+                            aim_phase,
+                            binding.equipment_aim_rotation_weights.as_slice(),
+                            rifle_aim_alpha,
+                        ) {
+                            newengine_ulog_api::ulog::warn!(
+                                "game-ready: authored equipment aim overlay failed player={} phase={:.3} alpha={:.3}: {}",
+                                player.stable_u64(), aim_phase, rifle_aim_alpha, error,
+                            );
+                        }
+                        if let Some(aim) = select_equipment_pose_set_mut(
+                            &mut binding.equipment_default_pose_set,
+                            &mut binding.equipment_pose_sets,
+                            equipment_pose_family,
+                        )
+                        .and_then(|set| set.aim.as_mut())
+                        {
+                            if let Err(error) = crate::animation_events::collect_timeline_events(
+                                player,
+                                &aim.clip_ref,
+                                "character.equipment.aim",
+                                &aim.clip,
+                                &mut aim.event_cursor,
+                                binding.equipment_time_seconds,
+                                &mut event_occurrences,
+                                &mut timeline_events,
+                            ) {
+                                newengine_ulog_api::ulog::warn!(
+                                    "game-ready: equipment aim timeline event evaluation failed player={} clip='{}': {}",
+                                    player.stable_u64(), aim.clip_ref, error,
+                                );
+                            }
+                        }
                     }
                 }
             }
@@ -656,223 +694,15 @@ fn evaluate_player_animation_presentation(
         }
     }
 
-    let requested_fall_band = if fall_presentation_requested {
-        select_fall_presentation_band(
-            semantic.fall_distance,
-            binding.fall_low_pose.is_some(),
-            binding.fall_medium_pose.is_some(),
-            binding.fall_high_pose.is_some(),
-            binding.fall_medium_min_distance,
-            binding.fall_high_min_distance,
-        )
-    } else {
-        None
-    };
-    if requested_fall_band != binding.fall_active_band {
-        binding.fall_active_band = requested_fall_band;
-        binding.fall_time_seconds = 0.0;
-        let selected = match requested_fall_band {
-            Some(FallPresentationBand::Low) => binding.fall_low_pose.as_mut(),
-            Some(FallPresentationBand::Medium) => binding.fall_medium_pose.as_mut(),
-            Some(FallPresentationBand::High) => binding.fall_high_pose.as_mut(),
-            None => None,
-        };
-        if let Some(clip) = selected {
-            clip.event_cursor.restart();
-            newengine_ulog_api::ulog::info!(
-                "game-ready: fall presentation selected player={} band={:?} distance_m={:.3} clip='{}'",
-                player.stable_u64(),
-                requested_fall_band.expect("selected fall band"),
-                semantic.fall_distance,
-                clip.clip_ref,
-            );
-        }
-    } else if requested_fall_band.is_some() {
-        binding.fall_time_seconds += dt;
-    }
-
-    if let Some(band) = requested_fall_band {
-        let animation_runtime = &binding.animation_runtime;
-        let clip = match band {
-            FallPresentationBand::Low => binding.fall_low_pose.as_mut(),
-            FallPresentationBand::Medium => binding.fall_medium_pose.as_mut(),
-            FallPresentationBand::High => binding.fall_high_pose.as_mut(),
-        };
-        if let Some(clip) = clip {
-            let _ = binding
-                .pose_continuity
-                .restore_last_visible_pose(&mut binding.sampled_target_locals);
-            if let Err(error) = clip.clip.sample_local_pose_bound_preserve_untracked(
-                binding.fall_time_seconds,
-                animation_runtime,
-                &clip.binding,
-                &mut binding.sampled_target_locals,
-            ) {
-                newengine_ulog_api::ulog::warn!(
-                    "game-ready: height-aware fall pose sampling failed player={} band={:?} distance_m={:.3} clip='{}': {}",
-                    player.stable_u64(),
-                    band,
-                    semantic.fall_distance,
-                    clip.clip_ref,
-                    error,
-                );
-            } else {
-                clip_ref = clip.clip_ref.clone();
-            }
-        }
-        // Height-aware fall presentation is a full-body override. Locomotion/equipment
-        // timeline events from the underlying graph must not leak through this frame.
-        timeline_events.clear();
-        event_occurrences.clear();
-    } else if binding.fall_active_band.is_some() {
-        binding.fall_active_band = None;
-        binding.fall_time_seconds = 0.0;
-    }
-
-    // Landing is a non-retained semantic pulse. A hot-reloaded animation subscriber never
-    // replays historical impacts, and presentation never polls PlayerLandingState directly.
-    if let Some(landing) = semantic.landing {
-        let band = select_fall_presentation_band(
-            landing.distance,
-            binding.landing_soft_pose.is_some(),
-            binding.landing_medium_pose.is_some(),
-            binding.landing_hard_pose.is_some() || binding.landing_hard_run_pose.is_some(),
-            binding.fall_medium_min_distance,
-            binding.fall_high_min_distance,
-        );
-        binding.landing_active_band = band;
-        binding.landing_active_run = matches!(band, Some(FallPresentationBand::High))
-            && binding.landing_hard_run_pose.is_some()
-            && landing.horizontal_speed > 1.5;
-        binding.landing_time_seconds = 0.0;
-        binding.landing_active_distance = landing.distance;
-        binding.landing_active_downward_speed = landing.downward_speed;
-        binding.landing_active_horizontal_speed = landing.horizontal_speed;
-        let selected = match (band, binding.landing_active_run) {
-            (Some(FallPresentationBand::Low), _) => binding.landing_soft_pose.as_mut(),
-            (Some(FallPresentationBand::Medium), _) => binding.landing_medium_pose.as_mut(),
-            (Some(FallPresentationBand::High), true) => binding.landing_hard_run_pose.as_mut(),
-            (Some(FallPresentationBand::High), false) => binding.landing_hard_pose.as_mut(),
-            (None, _) => None,
-        };
-        if let Some(clip) = selected {
-            clip.event_cursor.restart();
-            newengine_ulog_api::ulog::info!(
-                "game-ready: landing presentation selected player={} band={:?} distance_m={:.3} downward_speed={:.3} horizontal_speed={:.3} clip='{}' source=animation-semantic-pulse",
-                player.stable_u64(),
-                band.expect("selected landing band"),
-                landing.distance,
-                landing.downward_speed,
-                landing.horizontal_speed,
-                clip.clip_ref,
-            );
-        }
-    }
-    if fall_presentation_requested || noclip_enabled {
-        binding.landing_active_band = None;
-        binding.landing_time_seconds = 0.0;
-        binding.landing_active_run = false;
-    } else if let Some(band) = binding.landing_active_band {
-        let time = binding.landing_time_seconds;
-        let run_variant = binding.landing_active_run;
-        let finished;
-        {
-            let clip = match (band, run_variant) {
-                (FallPresentationBand::Low, _) => binding.landing_soft_pose.as_mut(),
-                (FallPresentationBand::Medium, _) => binding.landing_medium_pose.as_mut(),
-                (FallPresentationBand::High, true) => binding.landing_hard_run_pose.as_mut(),
-                (FallPresentationBand::High, false) => binding.landing_hard_pose.as_mut(),
-            };
-            if let Some(clip) = clip {
-                let _ = binding
-                    .pose_continuity
-                    .restore_last_visible_pose(&mut binding.sampled_target_locals);
-                let duration = clip.clip.duration_seconds.max(1.0 / 30.0);
-                let sample_time = time.min(duration);
-                if let Err(error) = clip.clip.sample_local_pose_bound_preserve_untracked(
-                    sample_time,
-                    &binding.animation_runtime,
-                    &clip.binding,
-                    &mut binding.sampled_target_locals,
-                ) {
-                    newengine_ulog_api::ulog::warn!(
-                        "game-ready: landing pose sampling failed player={} band={:?} distance_m={:.3} clip='{}': {}",
-                        player.stable_u64(),
-                        band,
-                        binding.landing_active_distance,
-                        clip.clip_ref,
-                        error,
-                    );
-                    finished = true;
-                } else {
-                    clip_ref = clip.clip_ref.clone();
-                    finished = time + dt >= duration;
-                }
-            } else {
-                finished = true;
-            }
-        }
-        timeline_events.clear();
-        event_occurrences.clear();
-        binding.landing_time_seconds += dt;
-        if finished {
-            binding.landing_active_band = None;
-            binding.landing_time_seconds = 0.0;
-            binding.landing_active_run = false;
-        }
-    }
-
-    if noclip_enabled {
-        if !binding.noclip_active {
-            binding.noclip_time_seconds = 0.0;
-            binding.noclip_active = true;
-            if let Some(noclip) = binding.noclip_pose.as_mut() {
-                noclip.event_cursor.restart();
-            }
-            newengine_ulog_api::ulog::info!(
-                "game-ready: NoClip presentation entered player={} clip='{}' overlays=off foot_contact=off",
-                player.stable_u64(),
-                binding
-                    .noclip_pose
-                    .as_ref()
-                    .map(|clip| clip.clip_ref.as_str())
-                    .unwrap_or("none")
-            );
-        } else {
-            binding.noclip_time_seconds += dt;
-        }
-        if let Some(noclip) = binding.noclip_pose.as_mut() {
-            let _ = binding
-                .pose_continuity
-                .restore_last_visible_pose(&mut binding.sampled_target_locals);
-            let duration = noclip.clip.duration_seconds.max(1.0 / 30.0);
-            let sample_time = binding.noclip_time_seconds.rem_euclid(duration);
-            if let Err(error) = noclip.clip.sample_local_pose_bound_preserve_untracked(
-                sample_time,
-                &binding.animation_runtime,
-                &noclip.binding,
-                &mut binding.sampled_target_locals,
-            ) {
-                newengine_ulog_api::ulog::warn!(
-                    "game-ready: NoClip full-body pose sampling failed player={} clip='{}': {}",
-                    player.stable_u64(),
-                    noclip.clip_ref,
-                    error
-                );
-            } else {
-                clip_ref = noclip.clip_ref.clone();
-            }
-        }
-        timeline_events.clear();
-        event_occurrences.clear();
-    } else if binding.noclip_active {
-        binding.noclip_active = false;
-        binding.noclip_time_seconds = 0.0;
-        newengine_ulog_api::ulog::info!(
-            "game-ready: NoClip presentation exited player={} locomotion_restored=true",
-            player.stable_u64()
-        );
-    }
+    apply_special_full_body_overrides(
+        player,
+        binding,
+        dt,
+        frame,
+        &mut clip_ref,
+        &mut timeline_events,
+        &mut event_occurrences,
+    );
 
     let presentation_core_ms = presentation_started.elapsed().as_secs_f32() * 1000.0;
     let finalize_started = std::time::Instant::now();

@@ -1,9 +1,0 @@
-[package]
-name = "newengine-lod-runtime"
-version = "0.1.0"
-edition = "2021"
-description = "Engine-owned hierarchical LOD and significance control plane for North Star"
-license = "Proprietary"
-
-[dependencies]
-newengine-visibility-runtime = { path = "../newengine-visibility-runtime" }

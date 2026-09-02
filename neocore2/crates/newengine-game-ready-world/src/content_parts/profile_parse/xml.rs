@@ -199,3 +199,86 @@ fn ymap_insert_child(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ymap_enemy_ai_block_projects_into_typed_target_policy() {
+        let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<YmapMapDefinition schema="newengine.map.definition.v2">
+  <map id="ai-test">
+    <profile title="AI test" objective="Observe target">
+      <gameplay>
+        <mission target_material="materials/test.nemat@target">
+          <targets>
+            <Target id="dummy" character_ref="definitions/fps/player_joel.ytyp@player_joel"
+                    position="0,0,3" health="100" scale="0.55,1.05,0.55"
+                    ai_enabled="true" combat_team="2" sight_range="24"
+                    field_of_view_degrees="110" memory_seconds="3"
+                    decision_interval_seconds="0.1" move_speed="2.4"
+                    patrol_route="-2,0,-4;2,0,-4" patrol_looping="true"
+                    investigate_arrival_distance="0.8" engage_standoff_distance="8.0"
+                    waypoint_arrival_distance="0.35" repath_interval_seconds="0.35"
+                    view_turn_speed_degrees_per_second="240" fire_distance="22"
+                    aim_tolerance_degrees="3" weapon_muzzle_offset="0.20,1.20,-0.45"
+                    weapon_muzzle_forward="0,0,-1" loadout="loadout.fps.default" />
+          </targets>
+        </mission>
+      </gameplay>
+    </profile>
+  </map>
+</YmapMapDefinition>"#;
+        let value = parse_ymap_xml_payload(xml.as_bytes(), "maps/ai-test.ymap")
+            .expect("parse authored YMAP XML");
+        let profile = parse_map_definition_payload(value, "maps/ai-test.ymap")
+            .expect("project typed YMAP profile");
+        let target = profile
+            .gameplay
+            .mission
+            .targets
+            .first()
+            .expect("authored target");
+        assert_eq!(
+            target.character_ref.as_deref(),
+            Some("definitions/fps/player_joel.ytyp@player_joel")
+        );
+        let ai = target.ai.as_ref().expect("authored AI policy");
+        assert_eq!(ai.combat_team, 2);
+        assert_eq!(ai.sight_range, 24.0);
+        assert_eq!(ai.field_of_view_degrees, 110.0);
+        assert_eq!(ai.memory_seconds, 3.0);
+        assert_eq!(ai.decision_interval_seconds, 0.1);
+        assert_eq!(ai.navigation.move_speed, 2.4);
+        assert_eq!(ai.patrol_route.len(), 2);
+        assert_eq!(ai.patrol_route[0], Vec3::new(-2.0, 0.0, -4.0));
+        assert!(ai.patrol_looping);
+        assert_eq!(ai.navigation.engage_standoff_distance, 8.0);
+        assert_eq!(ai.navigation.repath_interval_seconds, 0.35);
+        assert!(
+            (ai.navigation.view_turn_speed_radians_per_second - 240.0_f32.to_radians()).abs()
+                < 1.0e-6
+        );
+        assert_eq!(ai.combat.fire_distance, 22.0);
+        assert!((ai.combat.aim_tolerance_radians - 3.0_f32.to_radians()).abs() < 1.0e-6);
+        assert_eq!(ai.weapon_mount.local_offset, [0.20, 1.20, -0.45]);
+        assert_eq!(ai.weapon_mount.local_forward, [0.0, 0.0, -1.0]);
+        assert_eq!(ai.loadout, "loadout.fps.default");
+    }
+
+    #[test]
+    fn incomplete_enabled_enemy_ai_block_fails_closed() {
+        let xml = r#"<YmapMapDefinition schema="newengine.map.definition.v2">
+  <map id="ai-test"><profile><gameplay><mission><targets>
+    <Target id="dummy" position="0,0,3" health="100" scale="1,1,1"
+            ai_enabled="true" combat_team="2" />
+  </targets></mission></gameplay></profile></map>
+</YmapMapDefinition>"#;
+        let value = parse_ymap_xml_payload(xml.as_bytes(), "maps/ai-invalid.ymap")
+            .expect("parse authored XML envelope");
+        let profile = parse_map_definition_payload(value, "maps/ai-invalid.ymap")
+            .expect("malformed AI target is sanitized out rather than defaulted");
+        assert!(profile.gameplay.mission.targets.is_empty());
+    }
+}

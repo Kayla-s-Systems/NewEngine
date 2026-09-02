@@ -1,5 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+mod ai;
+mod ai_navigation;
 mod animation_events;
 mod capabilities;
 mod combat;
@@ -16,7 +18,18 @@ mod player;
 mod schedule;
 mod snapshot;
 mod ui;
+mod vitals;
 
+pub use ai::{
+    apply_ai_frame_output, build_ai_frame_input, collect_ai_perception_queries,
+    prepare_ai_perception, resolve_ai_perception_query_hits, step_ai_decisions, AIController,
+    AIPerceptionProbe, CombatIntent, CombatIntentKind, CombatTeam, PerceptionState,
+    PerceptionTuning, TargetMemory,
+};
+pub use ai_navigation::{
+    step_ai_navigation_actuation, AINavigationState, AINavigationTuning, AIPatrolRoute,
+    AIPatrolState,
+};
 pub use animation_events::{
     drain_animation_semantic_events, emit_animation_pulse, emit_animation_state,
     publish_animation_semantic_event, retained_animation_states, AnimationSemanticEventBus,
@@ -30,16 +43,16 @@ pub use capabilities::{
 };
 pub use combat::{
     drain_interaction_events, drain_weapon_events, drain_weapon_reload_animation_markers,
-    queue_weapon_reload_animation_marker, BallisticShotProfile, Health, HitscanWeaponTuning,
-    Interactable, InteractionEvent, InteractionEventBus, PendingHitscan, PendingInteraction,
-    PlayerInteractionTuning, PlayerWeaponState, WeaponAccuracyModifiers, WeaponAccuracyState,
-    WeaponActionKind, WeaponActionRuntime, WeaponActionTimingSource, WeaponAttackKind, WeaponEvent,
-    WeaponEventBus, WeaponEventKind, WeaponFireControllerState, WeaponObstructionState,
-    WeaponReloadAnimationAuthority, WeaponReloadAnimationMarker, WeaponReloadAnimationMarkerInbox,
-    WeaponReloadPhase, WEAPON_RELOAD_ANIMATION_REQUIRED_MARKER_MASK,
-    WEAPON_RELOAD_MARKER_AMMO_COMMITTED, WEAPON_RELOAD_MARKER_CHAMBERED,
-    WEAPON_RELOAD_MARKER_COMPLETE, WEAPON_RELOAD_MARKER_MAGAZINE_DETACHED,
-    WEAPON_RELOAD_MARKER_MAGAZINE_INSERTED,
+    queue_weapon_reload_animation_marker, BallisticShotProfile, CombatActuationState,
+    HitscanWeaponTuning, Interactable, InteractionEvent, InteractionEventBus, PendingHitscan,
+    PendingInteraction, PlayerInteractionTuning, PlayerWeaponState, WeaponAccuracyModifiers,
+    WeaponAccuracyState, WeaponActionKind, WeaponActionRuntime, WeaponActionTimingSource,
+    WeaponAttackKind, WeaponEvent, WeaponEventBus, WeaponEventKind, WeaponFireControllerState,
+    WeaponObstructionState, WeaponReloadAnimationAuthority, WeaponReloadAnimationMarker,
+    WeaponReloadAnimationMarkerInbox, WeaponReloadPhase,
+    WEAPON_RELOAD_ANIMATION_REQUIRED_MARKER_MASK, WEAPON_RELOAD_MARKER_AMMO_COMMITTED,
+    WEAPON_RELOAD_MARKER_CHAMBERED, WEAPON_RELOAD_MARKER_COMPLETE,
+    WEAPON_RELOAD_MARKER_MAGAZINE_DETACHED, WEAPON_RELOAD_MARKER_MAGAZINE_INSERTED,
 };
 pub use components::{
     attach_scene_element_core, attach_scene_object_core, scene_entity_by_role,
@@ -67,18 +80,27 @@ pub use components::{
 };
 pub use content::{GameplayContentProvider, GameplayContentProviderRegistry};
 pub use damage::{
-    resolve_weapon_impact, BallisticMaterialResponse, DamageHitZone, DamageHitZoneMap,
-    DamageReceiver, DamageReceiverKind, DamageResolution, PendingPhysicsImpulse, WeaponImpact,
+    mark_character_corpse, reconcile_character_injury_state, resolve_weapon_impact,
+    update_character_damage_states, BallisticMaterialResponse, CharacterDamageResponseTuning,
+    CharacterDeathPhase, CharacterDeathPolicy, CharacterDeathPresentation,
+    CharacterDeathTransitionState, CharacterHitReactionKind, CharacterHitReactionState,
+    CharacterInjuryState, DamageHitZone, DamageHitZoneMap, DamageReceiver, DamageReceiverKind,
+    DamageResolution, PendingPhysicsImpulse, WeaponImpact,
 };
 pub use events::{
     drain_gameplay_events, emit_gameplay_event, publish_gameplay_event, GameplayEvent,
-    GameplayEventBus, GAMEPLAY_EVENT_WEAPON_EMPTY, GAMEPLAY_EVENT_WEAPON_EQUIPPED,
-    GAMEPLAY_EVENT_WEAPON_FIRED, GAMEPLAY_EVENT_WEAPON_HIT,
-    GAMEPLAY_EVENT_WEAPON_IMPACT_DEBRIS_CONTACT, GAMEPLAY_EVENT_WEAPON_MELEE_ATTACKED,
-    GAMEPLAY_EVENT_WEAPON_PENETRATED, GAMEPLAY_EVENT_WEAPON_RELOAD_COMPLETED,
-    GAMEPLAY_EVENT_WEAPON_RELOAD_PHASE, GAMEPLAY_EVENT_WEAPON_RELOAD_STARTED,
-    GAMEPLAY_EVENT_WEAPON_SHELL_CONTACT, GAMEPLAY_EVENT_WEAPON_SHELL_EJECTED,
-    GAMEPLAY_EVENT_WEAPON_SHELL_ROLLING, GAMEPLAY_EVENT_WEAPON_UNEQUIPPED,
+    GameplayEventBus, GAMEPLAY_EVENT_CHARACTER_CORPSE, GAMEPLAY_EVENT_CHARACTER_DAMAGED,
+    GAMEPLAY_EVENT_CHARACTER_DEATH_PRESENTATION_REQUESTED, GAMEPLAY_EVENT_CHARACTER_DIED,
+    GAMEPLAY_EVENT_CHARACTER_HEALED, GAMEPLAY_EVENT_CHARACTER_HIT_REACTION,
+    GAMEPLAY_EVENT_CHARACTER_INJURED, GAMEPLAY_EVENT_CHARACTER_INJURY_RECOVERED,
+    GAMEPLAY_EVENT_CHARACTER_STAMINA_EXHAUSTED, GAMEPLAY_EVENT_CHARACTER_STAMINA_RECOVERED,
+    GAMEPLAY_EVENT_WEAPON_EMPTY, GAMEPLAY_EVENT_WEAPON_EQUIPPED, GAMEPLAY_EVENT_WEAPON_FIRED,
+    GAMEPLAY_EVENT_WEAPON_HIT, GAMEPLAY_EVENT_WEAPON_IMPACT_DEBRIS_CONTACT,
+    GAMEPLAY_EVENT_WEAPON_MELEE_ATTACKED, GAMEPLAY_EVENT_WEAPON_PENETRATED,
+    GAMEPLAY_EVENT_WEAPON_RELOAD_COMPLETED, GAMEPLAY_EVENT_WEAPON_RELOAD_PHASE,
+    GAMEPLAY_EVENT_WEAPON_RELOAD_STARTED, GAMEPLAY_EVENT_WEAPON_SHELL_CONTACT,
+    GAMEPLAY_EVENT_WEAPON_SHELL_EJECTED, GAMEPLAY_EVENT_WEAPON_SHELL_ROLLING,
+    GAMEPLAY_EVENT_WEAPON_UNEQUIPPED,
 };
 pub use execution::{
     GameplayExecutionPhase, GameplayFrame, GameplaySystemProvider, GameplaySystemProviderRegistry,
@@ -89,25 +111,27 @@ pub use inventory::{
     active_equipped_weapon_can_fire, active_equipped_weapon_can_melee,
     active_equipped_weapon_component_modifiers, active_equipped_weapon_component_overrides,
     active_equipped_weapon_component_stat_modifiers, active_equipped_weapon_muzzle, apply_loadout,
-    consume_equipped_ammo, drain_inventory_events, drop_item, ensure_inventory_runtime,
-    ensure_player_inventory, equip_first_item, equip_item_instance, equipped_reserve_ammo,
-    give_item, install_weapon_component, inventory_quantity, persist_equipped_weapon_state,
+    consume_equipped_ammo, drain_inventory_events, drop_item, drop_item_instance,
+    ensure_inventory_runtime, ensure_player_inventory, equip_first_item, equip_item_instance,
+    equipped_reserve_ammo, give_item, install_weapon_component, inventory_capacity_state,
+    inventory_quantity, merge_inventory_stacks, persist_equipped_weapon_state,
     play_equipped_weapon_audio, play_weapon_item_audio, preload_weapon_audio_definition,
-    remove_item, remove_weapon_component, select_equipment_slot,
+    remove_item, remove_weapon_component, reorder_inventory_instance, select_equipment_slot,
     select_highest_ranked_equipped_weapon, spawn_item_pickup, spawn_persistent_item_pickup,
-    step_world_items, sync_equipped_weapon_runtime, try_collect_item_pickup, unequip_slot,
-    use_item, AmmoDefinition, AmmoProjectileType, EquipmentSlot, EquippedWeaponBinding,
-    EquippedWeaponEntity, EquippedWeaponMuzzle, FirearmWeaponDefinition, FiringPatternDefinition,
-    FiringPatternKind, InventoryEntry, InventoryEvent, InventoryEventBus, InventoryEventKind,
-    InventoryLoadout, InventoryLoadoutCatalog, InventoryLoadoutEntry, InventoryMutation,
-    ItemCatalog, ItemDefinition, ItemId, ItemInstanceId, ItemKind, ItemPickup, ItemUseEffect,
-    MeleeWeaponTuning, PlayerInventory, ResolvedWeaponStats, WeaponAdsProfile,
-    WeaponAnimationDefinition, WeaponAudioAction, WeaponAudioDefinition, WeaponCapabilities,
-    WeaponCasingDefinition, WeaponComponentDefinition, WeaponComponentGraphDefinition,
-    WeaponComponentInstance, WeaponComponentModifiers, WeaponComponentPointDefinition,
-    WeaponEntityRuntime, WeaponEntitySockets, WeaponFireMode, WeaponHandlingProfile,
-    WeaponItemDefinition, WeaponPresentationDefinition, WeaponRecoilProfile,
-    WeaponRecoilStateProfile, WeaponReloadTimelineProfile, WeaponRuntimeProfiles, WeaponSocketPose,
+    split_inventory_stack, step_world_items, sync_equipped_weapon_runtime, try_collect_item_pickup,
+    unequip_slot, use_item, use_item_instance, AmmoDefinition, AmmoProjectileType, EquipmentSlot,
+    EquippedWeaponBinding, EquippedWeaponEntity, EquippedWeaponMuzzle, FirearmWeaponDefinition,
+    FiringPatternDefinition, FiringPatternKind, InventoryCapacityState, InventoryEntry,
+    InventoryEvent, InventoryEventBus, InventoryEventKind, InventoryLoadout,
+    InventoryLoadoutCatalog, InventoryLoadoutEntry, InventoryMutation, ItemCatalog, ItemDefinition,
+    ItemId, ItemInstanceId, ItemKind, ItemPickup, ItemUseEffect, MeleeWeaponTuning,
+    PlayerInventory, ResolvedWeaponStats, WeaponAdsProfile, WeaponAnimationDefinition,
+    WeaponAudioAction, WeaponAudioDefinition, WeaponCapabilities, WeaponCasingDefinition,
+    WeaponComponentDefinition, WeaponComponentGraphDefinition, WeaponComponentInstance,
+    WeaponComponentModifiers, WeaponComponentPointDefinition, WeaponEntityRuntime,
+    WeaponEntitySockets, WeaponFireMode, WeaponHandlingProfile, WeaponItemDefinition,
+    WeaponPresentationDefinition, WeaponRecoilProfile, WeaponRecoilStateProfile,
+    WeaponReloadTimelineProfile, WeaponReloadTopology, WeaponRuntimeProfiles, WeaponSocketPose,
     WeaponSpreadDistribution, WeaponSpreadProfile, WeaponSpreadStateProfile, WeaponStatId,
     WeaponStatModifier, WeaponStatModifierOp, WeaponStatModifierStack, WeaponSwayProfile,
     WeaponType, WeaponVfxDefinition, WorldItemDefinition, WorldItemPresentation, WorldItemRuntime,
@@ -128,7 +152,8 @@ pub use player::{
     display_visible_in_mode, ensure_physics_body, first_player, is_player_controller_enabled,
     player_fall_is_confirmed, player_render_model_matrix, publish_player_render_poses,
     remove_physics_body, set_player_model_assignment, spawn_default_player,
-    spawn_player_controller, update_player_animation_states, update_player_stance_camera,
+    spawn_player_controller, update_character_animation_states, update_player_animation_states,
+    update_player_stance_camera,
 };
 pub use schedule::{
     default_sim_schedule, run_schedule, run_schedule_with_physics_mode,
@@ -141,7 +166,12 @@ pub use snapshot::{
     RuntimeWorldSnapshot,
 };
 pub use ui::{
-    gameplay_input_capture, gameplay_modal_state, GameplayInputCapture, GameplayModalState,
-    GameplayUiFrameOutput, GameplayUiProvider, GameplayUiProviderRegistry, GameplayUiStatePatch,
+    character_vitals_hud_model, gameplay_input_capture, gameplay_modal_state,
+    CharacterVitalsHudModel, GameplayInputCapture, GameplayModalState, GameplayUiFrameOutput,
+    GameplayUiProvider, GameplayUiProviderRegistry, GameplayUiStatePatch,
     GameplayUiSurfaceVisibility,
+};
+pub use vitals::{
+    reconcile_character_life_state, update_character_vitals, CharacterControlState,
+    CharacterExertionState, CharacterLifeState, Health, Stamina, StaminaTuning,
 };

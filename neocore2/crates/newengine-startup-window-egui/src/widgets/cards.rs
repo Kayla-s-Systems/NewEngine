@@ -13,7 +13,7 @@ pub(crate) fn sidebar_card(
     let style = north_star_bootstrap_ui_style();
     egui::Frame::none()
         .fill(color32(style.palette.panel))
-        .stroke(egui::Stroke::new(1.0, color32(style.palette.edge_soft)))
+        .stroke(egui::Stroke::new(1.0_f32, color32(style.palette.edge_soft)))
         .rounding(egui::Rounding::same(9.0))
         .inner_margin(egui::Margin::same(12.0))
         .show(ui, |ui| {
@@ -37,7 +37,7 @@ pub(crate) fn section_card(
     let style = north_star_bootstrap_ui_style();
     egui::Frame::none()
         .fill(color32(style.palette.panel))
-        .stroke(egui::Stroke::new(1.0, color32(style.palette.edge_soft)))
+        .stroke(egui::Stroke::new(1.0_f32, color32(style.palette.edge_soft)))
         .rounding(egui::Rounding::same(11.0))
         .inner_margin(egui::Margin::same(18.0))
         .show(ui, |ui| {
@@ -65,7 +65,7 @@ pub(crate) fn status_pill(ui: &mut egui::Ui, label: &str, accent: egui::Color32)
             accent.b(),
             24,
         ))
-        .stroke(egui::Stroke::new(1.0, accent))
+        .stroke(egui::Stroke::new(1.0_f32, accent))
         .rounding(egui::Rounding::same(999.0))
         .inner_margin(egui::Margin::symmetric(9.0, 4.0))
         .show(ui, |ui| {

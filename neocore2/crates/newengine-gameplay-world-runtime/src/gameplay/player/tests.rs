@@ -90,6 +90,68 @@ mod tests {
     }
 
     #[test]
+    fn dead_player_cannot_apply_movement_or_exertion() {
+        let mut world = World::new();
+        let player = spawn_default_player(&mut world, None, "dead-player", Vec3::ZERO);
+        let _ = world.insert(player, CharacterLifeState::Dead);
+
+        apply_player_input(
+            &mut world,
+            player,
+            input_move::FORWARD | input_move::SPRINT,
+            Vec2::new(4.0, 2.0),
+            true,
+        );
+
+        let input = world.get::<MotorInput>(player).expect("motor input");
+        assert_eq!(input.move_axis, Vec3::ZERO);
+        assert_eq!(input.look_delta, Vec2::ZERO);
+        assert!(!world.get::<CharacterExertionState>(player).unwrap().sprinting);
+    }
+
+    #[test]
+    fn exhausted_stamina_blocks_sprint_until_resume_threshold() {
+        let mut world = World::new();
+        let player = spawn_default_player(&mut world, None, "stamina-player", Vec3::ZERO);
+        let tuning = world.get::<StaminaTuning>(player).copied().expect("stamina tuning");
+        {
+            let stamina = world.get_mut::<Stamina>(player).expect("stamina");
+            stamina.spend(stamina.maximum, tuning);
+        }
+
+        apply_player_input(
+            &mut world,
+            player,
+            input_move::FORWARD | input_move::SPRINT,
+            Vec2::ZERO,
+            false,
+        );
+        assert_eq!(world.get::<MotorInput>(player).unwrap().speed_mul, 1.0);
+        assert!(!world.get::<CharacterExertionState>(player).unwrap().sprinting);
+
+        {
+            let stamina = world.get_mut::<Stamina>(player).expect("stamina");
+            stamina.restore(stamina.maximum * tuning.exhausted_resume_fraction, tuning);
+        }
+        apply_player_input(
+            &mut world,
+            player,
+            input_move::FORWARD | input_move::SPRINT,
+            Vec2::ZERO,
+            false,
+        );
+        assert_eq!(
+            world.get::<MotorInput>(player).unwrap().speed_mul,
+            world
+                .get::<PlayerMovementSpeeds>(player)
+                .copied()
+                .unwrap_or_default()
+                .sprint_multiplier()
+        );
+        assert!(world.get::<CharacterExertionState>(player).unwrap().sprinting);
+    }
+
+    #[test]
     fn character_spawn_projects_generic_body_into_capsule_and_stance() {
         let mut world = World::new();
         let body = CharacterBody {

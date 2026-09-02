@@ -8,12 +8,13 @@ mod game_data;
 
 use newengine_ecs::{EntityId, World};
 use newengine_engine_runtime::gameplay::{
-    drop_item, equip_first_item, equip_item_instance, first_player, give_item,
-    select_equipment_slot, sync_equipped_weapon_runtime, use_item, EquipmentSlot,
-    EquippedWeaponBinding, GameplayInputCapture, GameplayUiFrameOutput, GameplayUiProvider,
-    GameplayWorld, Interactable, ItemCatalog, ItemId, ItemInstanceId, ItemKind, ItemPickup,
-    PlayerCommandFrame, PlayerController, PlayerInventory, PlayerWeaponState,
-    SHARED_UNARMED_WEAPON_ITEM_NAME,
+    character_vitals_hud_model, drop_item_instance, equip_first_item, equip_item_instance,
+    first_player, give_item, merge_inventory_stacks, reorder_inventory_instance,
+    select_equipment_slot, sync_equipped_weapon_runtime, use_item_instance,
+    CharacterVitalsHudModel, EquipmentSlot, EquippedWeaponBinding, GameplayInputCapture,
+    GameplayUiFrameOutput, GameplayUiProvider, GameplayWorld, Interactable, ItemCatalog, ItemId,
+    ItemInstanceId, ItemKind, ItemPickup, PlayerCommandFrame, PlayerController, PlayerInventory,
+    PlayerWeaponState, SHARED_UNARMED_WEAPON_ITEM_NAME,
 };
 #[cfg(test)]
 use newengine_gameplay_fps_api::action as fps_action;
@@ -47,7 +48,6 @@ pub use character_menu_policy::{
     ensure_character_menu_policy, ScriptFpsCharacterMenuPolicyProvider,
     SCRIPT_FPS_CHARACTER_MENU_PROVIDER_ID,
 };
-pub(crate) use character_variants::reconcile_existing_player_assignments_with_policy;
 pub use commands::step_inventory_commands;
 pub use provider::FpsInventoryHudProvider;
 pub use state::character_select_is_open;

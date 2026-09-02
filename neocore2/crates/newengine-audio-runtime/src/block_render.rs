@@ -1,4 +1,3 @@
-use std::cmp::Ordering as CmpOrdering;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -7,6 +6,11 @@ use crossbeam_channel::{bounded, Receiver, Sender, TrySendError};
 use rodio::source::{SeekError, Source, UniformSourceIterator};
 use rodio::Sample;
 use rodio::{ChannelCount, SampleRate};
+
+#[path = "block_render/commands.rs"]
+mod commands;
+
+use commands::{render_command_node_id, RenderCommand, RenderCommandKind};
 
 pub(crate) const NATIVE_BLOCK_FRAMES: usize = 256;
 const MAX_BLOCK_NODES: usize = 256;
@@ -313,89 +317,6 @@ pub(crate) fn native_block_render_graph(
     (handle, source)
 }
 
-struct RenderCommand {
-    at_sample: Option<u64>,
-    sequence: u64,
-    schedule_id: Option<u64>,
-    kind: RenderCommandKind,
-}
-
-impl RenderCommand {
-    fn resolved_sample(&self, current_sample: u64) -> u64 {
-        self.at_sample.unwrap_or(current_sample).max(current_sample)
-    }
-}
-
-impl PartialEq for RenderCommand {
-    fn eq(&self, other: &Self) -> bool {
-        self.sequence == other.sequence && self.at_sample == other.at_sample
-    }
-}
-
-impl Eq for RenderCommand {}
-
-impl PartialOrd for RenderCommand {
-    fn partial_cmp(&self, other: &Self) -> Option<CmpOrdering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for RenderCommand {
-    fn cmp(&self, other: &Self) -> CmpOrdering {
-        self.at_sample
-            .unwrap_or(0)
-            .cmp(&other.at_sample.unwrap_or(0))
-            .then_with(|| self.sequence.cmp(&other.sequence))
-    }
-}
-
-enum RenderCommandKind {
-    Add {
-        node: BlockVoiceNode,
-    },
-    Remove {
-        node_id: u64,
-    },
-    SetGain {
-        node_id: u64,
-        gain: f32,
-    },
-    RampGain {
-        node_id: u64,
-        target: f32,
-        duration_samples: u64,
-    },
-    SetSpeed {
-        node_id: u64,
-        speed: f32,
-    },
-    SetPaused {
-        node_id: u64,
-        paused: bool,
-    },
-    Seek {
-        node_id: u64,
-        position: Duration,
-    },
-    CancelScheduled {
-        node_id: u64,
-        schedule_id: u64,
-    },
-}
-
-fn render_command_node_id(kind: &RenderCommandKind) -> Option<u64> {
-    match kind {
-        RenderCommandKind::Add { node } => Some(node.id),
-        RenderCommandKind::Remove { node_id }
-        | RenderCommandKind::SetGain { node_id, .. }
-        | RenderCommandKind::RampGain { node_id, .. }
-        | RenderCommandKind::SetSpeed { node_id, .. }
-        | RenderCommandKind::SetPaused { node_id, .. }
-        | RenderCommandKind::Seek { node_id, .. }
-        | RenderCommandKind::CancelScheduled { node_id, .. } => Some(*node_id),
-    }
-}
-
 struct GainRamp {
     from: f32,
     target: f32,
@@ -610,7 +531,6 @@ pub(crate) struct NativeBlockRenderSource {
     stats: Arc<SharedRenderStats>,
     nodes: Vec<Option<BlockVoiceNode>>,
     scheduled: Vec<RenderCommand>,
-    due_scratch: Vec<RenderCommand>,
     block: Vec<Sample>,
     block_cursor: usize,
     output_sample: u64,
@@ -633,7 +553,6 @@ impl NativeBlockRenderSource {
             stats,
             nodes,
             scheduled: Vec::with_capacity(MAX_RENDER_COMMANDS),
-            due_scratch: Vec::with_capacity(MAX_RENDER_COMMANDS),
             block: vec![0.0; NATIVE_BLOCK_FRAMES * usize::from(channels.get())],
             block_cursor: NATIVE_BLOCK_FRAMES * usize::from(channels.get()),
             output_sample: 0,
@@ -641,6 +560,7 @@ impl NativeBlockRenderSource {
     }
 
     fn drain_commands(&mut self) {
+        let mut inserted = false;
         while let Ok(mut command) = self.command_rx.try_recv() {
             command.at_sample = Some(command.resolved_sample(self.output_sample));
             if self.scheduled.len() >= MAX_RENDER_COMMANDS {
@@ -651,8 +571,14 @@ impl NativeBlockRenderSource {
                 continue;
             }
             self.scheduled.push(command);
+            inserted = true;
         }
-        self.scheduled.sort_unstable();
+        if inserted {
+            // Keep the earliest command at the end so the audio callback consumes due
+            // work with O(1) pop() instead of draining the front and shifting the tail.
+            self.scheduled
+                .sort_unstable_by(|left, right| right.cmp(left));
+        }
     }
 
     fn render_next_block(&mut self) {
@@ -667,7 +593,7 @@ impl NativeBlockRenderSource {
             self.apply_due_commands(cursor_sample);
             let next_boundary = self
                 .scheduled
-                .first()
+                .last()
                 .and_then(|command| command.at_sample)
                 .filter(|sample| *sample < block_end)
                 .unwrap_or(block_end)
@@ -700,18 +626,15 @@ impl NativeBlockRenderSource {
     }
 
     fn apply_due_commands(&mut self, sample: u64) {
-        let due_count = self
+        while self
             .scheduled
-            .iter()
-            .take_while(|command| command.at_sample.unwrap_or(sample) <= sample)
-            .count();
-        if due_count == 0 {
-            return;
-        }
-        self.due_scratch.clear();
-        self.due_scratch.extend(self.scheduled.drain(..due_count));
-        self.due_scratch.reverse();
-        while let Some(command) = self.due_scratch.pop() {
+            .last()
+            .is_some_and(|command| command.at_sample.unwrap_or(sample) <= sample)
+        {
+            let command = self
+                .scheduled
+                .pop()
+                .expect("scheduled command checked by last()");
             self.apply_command(command, sample);
             self.stats.applied_commands.fetch_add(1, Ordering::Relaxed);
         }
@@ -869,124 +792,5 @@ fn finite_speed(value: f32) -> f32 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use rodio::buffer::SamplesBuffer;
-
-    fn mono(samples: &[f32]) -> SamplesBuffer {
-        SamplesBuffer::new(
-            ChannelCount::new(1).unwrap(),
-            SampleRate::new(48_000).unwrap(),
-            samples.to_vec(),
-        )
-    }
-
-    #[test]
-    fn master_source_mixes_multiple_nodes_inside_one_preallocated_block() {
-        let (graph, mut source) = native_block_render_graph(
-            ChannelCount::new(1).unwrap(),
-            SampleRate::new(48_000).unwrap(),
-        );
-        graph
-            .add_source(mono(&[1.0, 1.0, 1.0]), 0.5, 1.0, false, Duration::ZERO)
-            .unwrap();
-        graph
-            .add_source(mono(&[0.25, 0.25, 0.25]), 1.0, 1.0, false, Duration::ZERO)
-            .unwrap();
-        assert!((source.next().unwrap() - 0.75).abs() < 1.0e-6);
-        assert!((source.next().unwrap() - 0.75).abs() < 1.0e-6);
-    }
-
-    #[test]
-    fn scheduled_gain_command_splits_block_at_exact_output_sample() {
-        let (graph, mut source) = native_block_render_graph(
-            ChannelCount::new(1).unwrap(),
-            SampleRate::new(48_000).unwrap(),
-        );
-        let handle = graph
-            .add_source(mono(&vec![1.0; 512]), 1.0, 1.0, false, Duration::ZERO)
-            .unwrap();
-        handle.schedule_gain_at(32, 0.0, 0, 1).unwrap();
-        let rendered = (0..64).map(|_| source.next().unwrap()).collect::<Vec<_>>();
-        assert!(rendered[..32]
-            .iter()
-            .all(|sample| (*sample - 1.0).abs() < 1.0e-6));
-        assert!(rendered[32..].iter().all(|sample| sample.abs() < 1.0e-6));
-        assert!(graph.stats().split_segments >= 1);
-    }
-
-    #[test]
-    fn scheduled_add_starts_source_on_exact_frame_boundary() {
-        let (graph, mut source) = native_block_render_graph(
-            ChannelCount::new(1).unwrap(),
-            SampleRate::new(48_000).unwrap(),
-        );
-        graph
-            .add_boxed_source(
-                Box::new(mono(&vec![1.0; 32])),
-                1.0,
-                1.0,
-                false,
-                Duration::ZERO,
-                Some(17),
-            )
-            .unwrap();
-        let rendered = (0..32).map(|_| source.next().unwrap()).collect::<Vec<_>>();
-        assert!(rendered[..17].iter().all(|sample| sample.abs() < 1.0e-6));
-        assert!(rendered[17..]
-            .iter()
-            .all(|sample| (*sample - 1.0).abs() < 1.0e-6));
-    }
-
-    #[test]
-    fn cancelled_future_add_never_becomes_audible() {
-        let (graph, mut source) = native_block_render_graph(
-            ChannelCount::new(1).unwrap(),
-            SampleRate::new(48_000).unwrap(),
-        );
-        let handle = graph
-            .add_boxed_source(
-                Box::new(mono(&vec![1.0; 64])),
-                1.0,
-                1.0,
-                false,
-                Duration::ZERO,
-                Some(24),
-            )
-            .unwrap();
-        handle.stop();
-        let rendered = (0..48).map(|_| source.next().unwrap()).collect::<Vec<_>>();
-        assert!(rendered.iter().all(|sample| sample.abs() < 1.0e-6));
-        assert!(handle.empty());
-    }
-
-    #[test]
-    fn cancelled_scheduled_gain_does_not_fire() {
-        let (graph, mut source) = native_block_render_graph(
-            ChannelCount::new(1).unwrap(),
-            SampleRate::new(48_000).unwrap(),
-        );
-        let handle = graph
-            .add_source(mono(&vec![1.0; 128]), 1.0, 1.0, false, Duration::ZERO)
-            .unwrap();
-        handle.schedule_gain_at(32, 0.0, 0, 77).unwrap();
-        handle.cancel_scheduled(77).unwrap();
-        let rendered = (0..64).map(|_| source.next().unwrap()).collect::<Vec<_>>();
-        assert!(rendered.iter().all(|sample| (*sample - 1.0).abs() < 1.0e-6));
-    }
-
-    #[test]
-    fn paused_node_does_not_advance_source_clock() {
-        let (graph, mut source) = native_block_render_graph(
-            ChannelCount::new(1).unwrap(),
-            SampleRate::new(48_000).unwrap(),
-        );
-        let handle = graph
-            .add_source(mono(&vec![1.0; 512]), 1.0, 1.0, true, Duration::ZERO)
-            .unwrap();
-        for _ in 0..64 {
-            let _ = source.next();
-        }
-        assert_eq!(handle.get_pos(), Duration::ZERO);
-    }
-}
+#[path = "block_render/tests.rs"]
+mod tests;

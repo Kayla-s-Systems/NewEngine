@@ -7,6 +7,34 @@ pub enum WeaponSpreadDistribution {
     EvenJitter,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum WeaponReloadTopology {
+    #[default]
+    DetachableMagazine,
+    InternalMagazine,
+    SingleRound,
+}
+
+impl WeaponReloadTopology {
+    #[inline]
+    pub const fn required_animation_marker_mask(self) -> u8 {
+        const MAG_DETACH: u8 = 1 << 0;
+        const AMMO_COMMIT: u8 = 1 << 1;
+        const MAG_INSERT: u8 = 1 << 2;
+        const CHAMBER: u8 = 1 << 3;
+        const COMPLETE: u8 = 1 << 4;
+        match self {
+            Self::DetachableMagazine => MAG_DETACH | AMMO_COMMIT | MAG_INSERT | CHAMBER | COMPLETE,
+            Self::InternalMagazine | Self::SingleRound => AMMO_COMMIT | CHAMBER | COMPLETE,
+        }
+    }
+
+    #[inline]
+    pub const fn uses_detachable_magazine(self) -> bool {
+        matches!(self, Self::DetachableMagazine)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct WeaponReloadTimelineProfile {
     pub magazine_detach_fraction: f32,
@@ -44,6 +72,7 @@ impl Default for WeaponReloadTimelineProfile {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct WeaponHandlingProfile {
     pub reload_duration_seconds: f32,
+    pub reload_topology: WeaponReloadTopology,
     pub equip_duration_seconds: f32,
     pub unequip_duration_seconds: f32,
     pub aim_in_duration_seconds: f32,
@@ -56,6 +85,7 @@ impl WeaponHandlingProfile {
     pub fn sanitized(self) -> Self {
         Self {
             reload_duration_seconds: finite_or(self.reload_duration_seconds, 1.8).clamp(0.0, 120.0),
+            reload_topology: self.reload_topology,
             equip_duration_seconds: finite_or(self.equip_duration_seconds, 0.3).clamp(0.0, 30.0),
             unequip_duration_seconds: finite_or(self.unequip_duration_seconds, 0.25)
                 .clamp(0.0, 30.0),
@@ -72,6 +102,7 @@ impl Default for WeaponHandlingProfile {
     fn default() -> Self {
         Self {
             reload_duration_seconds: 1.8,
+            reload_topology: WeaponReloadTopology::DetachableMagazine,
             equip_duration_seconds: 0.3,
             unequip_duration_seconds: 0.25,
             aim_in_duration_seconds: 0.15,

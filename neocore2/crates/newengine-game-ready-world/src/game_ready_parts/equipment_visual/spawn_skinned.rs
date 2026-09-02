@@ -204,6 +204,11 @@ fn spawn_skinned_equipped_weapon_visual(
         );
     }
 
+    let reload_topology = definition
+        .weapon
+        .and_then(|weapon| weapon.firearm)
+        .map(|firearm| firearm.profiles.handling.reload_topology)
+        .unwrap_or_default();
     if let Err(error) = crate::weapon_animation::bind_equipped_weapon_animation(
         world,
         root,
@@ -212,6 +217,7 @@ fn spawn_skinned_equipped_weapon_visual(
         skeleton,
         source_to_model,
         &definition.weapon_animation,
+        reload_topology,
         definition.weapon_casing.ejection_joint.as_deref(),
         last_shot_sequence,
     ) {

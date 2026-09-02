@@ -18,6 +18,17 @@ pub const GAMEPLAY_EVENT_WEAPON_SHELL_CONTACT: &str = "gameplay.weapon.shell.con
 pub const GAMEPLAY_EVENT_WEAPON_SHELL_ROLLING: &str = "gameplay.weapon.shell.rolling";
 pub const GAMEPLAY_EVENT_WEAPON_IMPACT_DEBRIS_CONTACT: &str =
     "gameplay.weapon.impact.debris.contact";
+pub const GAMEPLAY_EVENT_CHARACTER_HIT_REACTION: &str = "gameplay.character.hit_reaction";
+pub const GAMEPLAY_EVENT_CHARACTER_INJURED: &str = "gameplay.character.injured";
+pub const GAMEPLAY_EVENT_CHARACTER_INJURY_RECOVERED: &str = "gameplay.character.injury_recovered";
+pub const GAMEPLAY_EVENT_CHARACTER_DEATH_PRESENTATION_REQUESTED: &str =
+    "gameplay.character.death.presentation_requested";
+pub const GAMEPLAY_EVENT_CHARACTER_CORPSE: &str = "gameplay.character.corpse";
+pub const GAMEPLAY_EVENT_CHARACTER_DAMAGED: &str = "gameplay.character.damaged";
+pub const GAMEPLAY_EVENT_CHARACTER_HEALED: &str = "gameplay.character.healed";
+pub const GAMEPLAY_EVENT_CHARACTER_DIED: &str = "gameplay.character.died";
+pub const GAMEPLAY_EVENT_CHARACTER_STAMINA_EXHAUSTED: &str = "gameplay.character.stamina.exhausted";
+pub const GAMEPLAY_EVENT_CHARACTER_STAMINA_RECOVERED: &str = "gameplay.character.stamina.recovered";
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(default)]

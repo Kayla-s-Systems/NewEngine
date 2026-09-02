@@ -108,7 +108,7 @@ impl Default for TextServiceInfo {
                 "cjk-rtl-bidi-declared-v1",
                 "emoji-icon-font-fallback-v1",
                 "glyph-atlas-pages-v1",
-                "font-asset-neftd-v1",
+                "font-asset-yfd-v1",
                 "harfbuzz-provider-implementation-v1",
                 "imported-face-blob-source-v1",
                 "provider-neutral-draw-state-v1",

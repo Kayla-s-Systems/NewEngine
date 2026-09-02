@@ -104,12 +104,17 @@ pub fn spawn_weapon_shot_fx(
     world: &mut World,
     owner: EntityId,
     shot_sequence: u64,
-    origin: Vec3,
-    direction: Vec3,
+    muzzle_position: Vec3,
+    muzzle_forward: Vec3,
+    shot_direction: Vec3,
     range: f32,
 ) {
-    let direction = direction.normalize_or_zero();
-    if !origin.is_finite() || direction.length_squared() <= 1.0e-8 {
+    let muzzle_forward = muzzle_forward.normalize_or_zero();
+    let shot_direction = shot_direction.normalize_or_zero();
+    if !muzzle_position.is_finite()
+        || muzzle_forward.length_squared() <= 1.0e-8
+        || shot_direction.length_squared() <= 1.0e-8
+    {
         return;
     }
     let max_distance = if range.is_finite() && range > 0.0 {
@@ -125,8 +130,10 @@ pub fn spawn_weapon_shot_fx(
                 effect_owner.stable_u64(),
             )),
             correlation_id: shot_sequence,
-            position: vec3_array(origin),
-            direction: vec3_array(direction),
+            // Muzzle-local layers (flash/core/smoke/light) belong to the rendered barrel pose.
+            // The camera-derived convergence direction must never rotate or relocate them.
+            position: vec3_array(muzzle_position),
+            direction: vec3_array(muzzle_forward),
             max_distance,
             seed: effect_owner.stable_u64() ^ shot_sequence.rotate_left(23),
             tags: vec!["weapon".to_owned(), "shot".to_owned()],
@@ -148,8 +155,10 @@ pub fn spawn_weapon_shot_fx(
             tracer,
             shot_sequence,
             0,
-            origin,
-            direction,
+            // Tracers follow the actual ballistic trajectory, but their visible segment starts at
+            // the physical barrel instead of a camera/reticle origin.
+            muzzle_position,
+            shot_direction,
             max_distance,
             "tracer",
         );
@@ -187,8 +196,10 @@ pub fn spawn_weapon_shot_fx(
                 weapon_entity: equipped_weapon_entity(world, owner),
                 shot_sequence,
                 weapon_item_id,
-                shot_origin: origin,
-                shot_direction: direction,
+                // Casing fallback axes are weapon-local as well. A reticle convergence vector is not
+                // a physical ejection frame.
+                shot_origin: muzzle_position,
+                shot_direction: muzzle_forward,
                 remaining_seconds: casing.ejection_delay_seconds,
             },
         );

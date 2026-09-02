@@ -16,6 +16,7 @@ struct PlayerAnimationFrameInput {
     previous_foot_pose: Option<newengine_model_contact_api::ModelFootPoseState>,
     next_foot_pose_revision: u64,
     root_velocity_local: Vec3,
+    aim_velocity_local: Vec3,
     root_position: Vec3,
     root_rotation: Quat,
     body_yaw: f32,
@@ -112,10 +113,13 @@ fn prepare_player_animation_frame(
     };
     let rifle_aim_alpha = semantic.aim_alpha;
     let first_person_active = world
-        .resource::<newengine_engine_runtime::gameplay::PlayerViewState>()
-        .copied()
-        .unwrap_or_default()
-        .first_person_active;
+        .get::<newengine_engine_runtime::gameplay::PlayerActor>(player)
+        .is_some()
+        && world
+            .resource::<newengine_engine_runtime::gameplay::PlayerViewState>()
+            .copied()
+            .unwrap_or_default()
+            .first_person_active;
     // Secondary weapon inertia remains physical presentation state. It never selects an
     // animation; the semantic equipment event above owns Ready/Aim/Reload selection.
     let rifle_secondary_rotation_offset_local = if first_person_active {
@@ -214,6 +218,10 @@ fn prepare_player_animation_frame(
         .map(|pose| pose.revision.saturating_add(1).max(1))
         .unwrap_or(1);
     let root_velocity_local = root_transform.rotation.inverse() * world_velocity;
+    // Weapon aim locomotion is authored relative to the view/aim heading, not the body/world axes.
+    // Rotating body-local velocity by the inverse live view-body delta gives exactly that space.
+    let mut aim_velocity_local = Quat::from_rotation_y(-view_body_yaw_delta) * root_velocity_local;
+    aim_velocity_local.y = 0.0;
     let root_position = root_transform.position;
     let root_rotation = root_transform.rotation;
 
@@ -234,6 +242,7 @@ fn prepare_player_animation_frame(
         previous_foot_pose,
         next_foot_pose_revision,
         root_velocity_local,
+        aim_velocity_local,
         root_position,
         root_rotation,
         body_yaw,

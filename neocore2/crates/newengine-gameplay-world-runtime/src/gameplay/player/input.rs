@@ -25,6 +25,9 @@ pub fn clear_player_input(world: &mut World, player: EntityId) {
     if let Some(input) = world.get_mut::<MotorInput>(player) {
         *input = MotorInput::default();
     }
+    if let Some(exertion) = world.get_mut::<CharacterExertionState>(player) {
+        exertion.sprinting = false;
+    }
 }
 
 #[inline]
@@ -52,7 +55,14 @@ pub fn apply_player_input(
     look_delta_px: Vec2,
     look_active: bool,
 ) {
-    if !is_player_controller_enabled(world, player) {
+    if !is_player_controller_enabled(world, player)
+        || world
+            .get::<CharacterControlState>(player)
+            .is_some_and(|control| !control.enabled)
+        || world
+            .get::<CharacterLifeState>(player)
+            .is_some_and(|state| !state.alive())
+    {
         clear_player_input(world, player);
         return;
     }
@@ -87,6 +97,17 @@ pub fn apply_player_input(
         .get::<PlayerStanceState>(player)
         .is_some_and(|state| matches!(state.current, PlayerStanceKind::Crouched));
 
+    let moving_horizontally = axis.x * axis.x + axis.z * axis.z > 1.0e-6;
+    let sprint_requested = input_mask & input_move::SPRINT != 0 && moving_horizontally && !crouched;
+    let sprint_available = world
+        .get::<Stamina>(player)
+        .map(|stamina| stamina.can_sprint())
+        .unwrap_or(true);
+    let sprinting = sprint_requested && sprint_available;
+    if let Some(exertion) = world.get_mut::<CharacterExertionState>(player) {
+        exertion.sprinting = sprinting;
+    }
+
     let mut applied = false;
     if let Some(input) = world.get_mut::<MotorInput>(player) {
         input.move_axis = axis;
@@ -94,7 +115,7 @@ pub fn apply_player_input(
         input.look_active = look_active;
         input.speed_mul = if crouched {
             movement.crouch_multiplier()
-        } else if input_mask & input_move::SPRINT != 0 {
+        } else if sprinting {
             movement.sprint_multiplier()
         } else {
             1.0

@@ -1,211 +1,18 @@
 use super::operations::emit_inventory_event;
 use super::*;
 use crate::gameplay::{
-    emit_gameplay_event, GAMEPLAY_EVENT_WEAPON_EQUIPPED, GAMEPLAY_EVENT_WEAPON_UNEQUIPPED,
+    emit_gameplay_event, reconcile_character_injury_state, CharacterLifeState,
+    GAMEPLAY_EVENT_CHARACTER_HEALED, GAMEPLAY_EVENT_WEAPON_EQUIPPED,
+    GAMEPLAY_EVENT_WEAPON_UNEQUIPPED,
 };
 
-/// Resolves the active weapon's physical muzzle pose.
-///
-/// `EquippedWeaponEntity -> WeaponEntitySockets` is authoritative. The owner-side
-/// `EquippedWeaponMuzzle` is only a compatibility projection from the same weapon presentation;
-/// camera/body synthesis is deliberately forbidden here.
-pub fn active_equipped_weapon_muzzle(
-    world: &World,
-    owner: EntityId,
-) -> Option<EquippedWeaponMuzzle> {
-    if let Some(binding) = world.get::<EquippedWeaponBinding>(owner).copied() {
-        if let Some(link) = world
-            .get::<EquippedWeaponEntity>(owner)
-            .copied()
-            .filter(|link| link.instance_id == binding.instance_id && link.item == binding.item)
-        {
-            if let Some(socket) = world
-                .get::<WeaponEntitySockets>(link.entity)
-                .and_then(|sockets| sockets.muzzle)
-            {
-                let forward = (socket.rotation * Vec3::Z).normalize_or_zero();
-                if let Some(muzzle) = EquippedWeaponMuzzle::new(socket.position, forward) {
-                    return Some(muzzle);
-                }
-            }
-        }
-    }
-
-    world.get::<EquippedWeaponMuzzle>(owner).copied()
-}
-
-pub fn active_equipped_weapon_component_modifiers(
-    world: &World,
-    owner: EntityId,
-) -> WeaponComponentModifiers {
-    let Some(binding) = world.get::<EquippedWeaponBinding>(owner).copied() else {
-        return WeaponComponentModifiers::default();
-    };
-    let Some(definition) = world
-        .resource::<ItemCatalog>()
-        .and_then(|catalog| catalog.get(binding.item))
-    else {
-        return WeaponComponentModifiers::default();
-    };
-    let Some(installed) = world
-        .get::<PlayerInventory>(owner)
-        .and_then(|inventory| inventory.weapon_components.get(&binding.instance_id))
-    else {
-        return WeaponComponentModifiers::default();
-    };
-    installed.values().filter(|instance| instance.active).fold(
-        WeaponComponentModifiers::default(),
-        |combined, instance| {
-            definition
-                .weapon_components
-                .components
-                .get(&instance.component_id)
-                .map(|component| combined.combine(component.modifiers))
-                .unwrap_or(combined)
-        },
-    )
-}
-
-pub fn active_equipped_weapon_component_stat_modifiers(
-    world: &World,
-    owner: EntityId,
-) -> WeaponStatModifierStack {
-    let Some(binding) = world.get::<EquippedWeaponBinding>(owner).copied() else {
-        return WeaponStatModifierStack::default();
-    };
-    let Some(definition) = world
-        .resource::<ItemCatalog>()
-        .and_then(|catalog| catalog.get(binding.item))
-    else {
-        return WeaponStatModifierStack::default();
-    };
-    let Some(installed) = world
-        .get::<PlayerInventory>(owner)
-        .and_then(|inventory| inventory.weapon_components.get(&binding.instance_id))
-    else {
-        return WeaponStatModifierStack::default();
-    };
-    let mut modifiers = Vec::new();
-    for instance in installed.values().filter(|instance| instance.active) {
-        if let Some(component) = definition
-            .weapon_components
-            .components
-            .get(&instance.component_id)
-        {
-            modifiers.extend(component.stat_modifiers.modifiers.iter().copied());
-        }
-    }
-    WeaponStatModifierStack { modifiers }.sanitized()
-}
-
-pub fn active_equipped_weapon_component_overrides(
-    world: &World,
-    owner: EntityId,
-) -> (Option<String>, Option<String>, Option<String>) {
-    let Some(binding) = world.get::<EquippedWeaponBinding>(owner).copied() else {
-        return (None, None, None);
-    };
-    let Some(definition) = world
-        .resource::<ItemCatalog>()
-        .and_then(|catalog| catalog.get(binding.item))
-    else {
-        return (None, None, None);
-    };
-    let Some(installed) = world
-        .get::<PlayerInventory>(owner)
-        .and_then(|inventory| inventory.weapon_components.get(&binding.instance_id))
-    else {
-        return (None, None, None);
-    };
-    let mut audio = None;
-    let mut muzzle = None;
-    let mut tracer = None;
-    for instance in installed.values().filter(|instance| instance.active) {
-        let Some(component) = definition
-            .weapon_components
-            .components
-            .get(&instance.component_id)
-        else {
-            continue;
-        };
-        if component.audio_override.is_some() {
-            audio = component.audio_override.clone();
-        }
-        if component.muzzle_vfx_override.is_some() {
-            muzzle = component.muzzle_vfx_override.clone();
-        }
-        if component.tracer_vfx_override.is_some() {
-            tracer = component.tracer_vfx_override.clone();
-        }
-    }
-    (audio, muzzle, tracer)
-}
-
-pub fn install_weapon_component(
-    world: &mut World,
-    owner: EntityId,
-    weapon_instance: ItemInstanceId,
-    slot: &str,
-    component_id: &str,
-) -> Result<(), String> {
-    let slot = slot.trim().to_ascii_lowercase();
-    let component_id = component_id.trim().to_ascii_lowercase();
-    let item = world
-        .get::<PlayerInventory>(owner)
-        .and_then(|inventory| inventory.entry(weapon_instance))
-        .map(|entry| entry.item)
-        .ok_or_else(|| "weapon instance is not present in inventory".to_owned())?;
-    let graph = world
-        .resource::<ItemCatalog>()
-        .and_then(|catalog| catalog.get(item))
-        .map(|definition| definition.weapon_components.clone().sanitized())
-        .ok_or_else(|| "weapon definition is unavailable".to_owned())?;
-    let point = graph
-        .points
-        .iter()
-        .find(|point| point.id == slot)
-        .ok_or_else(|| format!("unknown weapon component slot '{slot}'"))?;
-    let component = graph
-        .components
-        .get(&component_id)
-        .ok_or_else(|| format!("unknown weapon component '{component_id}'"))?;
-    if component.slot != slot
-        || (!point.allowed_components.is_empty()
-            && !point.allowed_components.contains(&component_id))
-    {
-        return Err(format!(
-            "component '{component_id}' is not allowed in slot '{slot}'"
-        ));
-    }
-    let inventory = world
-        .get_mut::<PlayerInventory>(owner)
-        .ok_or_else(|| "owner has no inventory".to_owned())?;
-    inventory
-        .weapon_components
-        .entry(weapon_instance)
-        .or_default()
-        .insert(
-            slot,
-            WeaponComponentInstance {
-                component_id,
-                active: true,
-            },
-        );
-    Ok(())
-}
-
-pub fn remove_weapon_component(
-    world: &mut World,
-    owner: EntityId,
-    weapon_instance: ItemInstanceId,
-    slot: &str,
-) -> Option<WeaponComponentInstance> {
-    world
-        .get_mut::<PlayerInventory>(owner)?
-        .weapon_components
-        .get_mut(&weapon_instance)?
-        .remove(&slot.trim().to_ascii_lowercase())
-}
+#[path = "inventory_equipment/components.rs"]
+mod components;
+pub use components::{
+    active_equipped_weapon_component_modifiers, active_equipped_weapon_component_overrides,
+    active_equipped_weapon_component_stat_modifiers, active_equipped_weapon_muzzle,
+    install_weapon_component, remove_weapon_component,
+};
 
 fn publish_weapon_equipment_event(
     world: &mut World,
@@ -249,183 +56,11 @@ fn publish_weapon_equipment_event(
     }
 }
 
-/// Legacy audio helpers are kept as a compatibility API for external clients. The engine
-/// equipment/combat path no longer calls them directly; projects subscribe to semantic
-/// gameplay events and choose their own cues/actions.
-pub fn preload_weapon_audio_definition(audio: &WeaponAudioDefinition) {
-    for action in [
-        WeaponAudioAction::Fire,
-        WeaponAudioAction::ReloadStart,
-        WeaponAudioAction::ReloadComplete,
-        WeaponAudioAction::Equip,
-        WeaponAudioAction::Unequip,
-        WeaponAudioAction::Empty,
-        WeaponAudioAction::ShellEject,
-    ] {
-        let Some(reference) = audio.clip(action) else {
-            continue;
-        };
-        let result = if is_yscd_cue_reference(reference) {
-            newengine_audio_client::preload_audio_cue(
-                &newengine_audio_api::AudioCuePreloadRequest {
-                    cue: newengine_audio_api::SoundCueRef::new(reference.to_owned()),
-                },
-            )
-        } else {
-            newengine_audio_client::preload_audio_clip(&newengine_audio_api::AudioPreloadRequest {
-                clip: newengine_audio_api::AudioClipRef::new(reference.to_owned()),
-            })
-        };
-        match result {
-            Ok(Some(ack)) if ack.accepted => {
-                newengine_ulog_api::ulog::info!(
-                    "weapon audio preload: action={:?} ref='{}' kind='{}' provider='{}' bytes={} cached={} status='ready'",
-                    action,
-                    reference,
-                    if is_yscd_cue_reference(reference) { "yscd-cue" } else { "clip" },
-                    ack.provider,
-                    ack.bytes,
-                    ack.cached,
-                );
-                for diagnostic in &ack.diagnostics {
-                    newengine_ulog_api::ulog::info!("{}", diagnostic);
-                }
-            }
-            Ok(Some(ack)) => newengine_ulog_api::ulog::warn!(
-                "weapon audio preload rejected: action={:?} ref='{}' provider='{}'",
-                action,
-                reference,
-                ack.provider,
-            ),
-            Ok(None) => newengine_ulog_api::ulog::warn!(
-                "weapon audio preload unavailable: action={:?} ref='{}' reason='engine.audio returned no provider response'",
-                action,
-                reference,
-            ),
-            Err(error) => newengine_ulog_api::ulog::warn!(
-                "weapon audio preload failed: action={:?} ref='{}' err='{}'",
-                action,
-                reference,
-                error,
-            ),
-        }
-    }
-}
-
-#[inline]
-fn is_yscd_cue_reference(reference: &str) -> bool {
-    newengine_assets_api::parse_asset_reference(reference)
-        .map(|reference| {
-            reference.has_extension("yscd")
-                && reference
-                    .entry
-                    .as_deref()
-                    .is_some_and(|entry| !entry.trim().is_empty())
-        })
-        .unwrap_or(false)
-}
-
-pub fn play_weapon_item_audio(
-    world: &World,
-    owner: EntityId,
-    item: ItemId,
-    action: WeaponAudioAction,
-) {
-    let component_audio_override = world
-        .get::<EquippedWeaponBinding>(owner)
-        .copied()
-        .filter(|binding| binding.item == item)
-        .and_then(|_| active_equipped_weapon_component_overrides(world, owner).0);
-    let Some(reference) = component_audio_override.or_else(|| {
-        world
-            .resource::<ItemCatalog>()
-            .and_then(|catalog| catalog.get(item))
-            .and_then(|definition| definition.weapon_audio.clip(action))
-            .map(ToOwned::to_owned)
-    }) else {
-        return;
-    };
-    let component_gain = world
-        .get::<EquippedWeaponBinding>(owner)
-        .copied()
-        .filter(|binding| binding.item == item)
-        .map(|_| active_equipped_weapon_component_modifiers(world, owner).audio_gain_multiplier)
-        .unwrap_or(1.0);
-    let spatial_position = match action {
-        WeaponAudioAction::Fire | WeaponAudioAction::ShellEject => world
-            .get::<EquippedWeaponMuzzle>(owner)
-            .map(|muzzle| muzzle.position)
-            .or_else(|| {
-                world
-                    .get::<Transform>(owner)
-                    .map(|transform| transform.position)
-            }),
-        _ => world
-            .get::<Transform>(owner)
-            .map(|transform| transform.position),
-    };
-
-    let is_cue = is_yscd_cue_reference(&reference);
-    let result = if is_cue {
-        let mut request = newengine_audio_api::AudioCuePlayRequest::new(reference.clone());
-        request.gain = component_gain;
-        request.position = spatial_position.map(|position| [position.x, position.y, position.z]);
-        request.scope_id = Some(owner.stable_u64());
-        newengine_audio_client::play_audio_cue(&request)
-    } else {
-        let mut request = newengine_audio_api::AudioPlayRequest::new(reference.clone());
-        request.gain = component_gain;
-        request.spatial =
-            spatial_position.map(|position| newengine_audio_api::AudioSpatialParams {
-                position: [position.x, position.y, position.z],
-            });
-        newengine_audio_client::play_audio_clip(&request)
-    };
-
-    match result {
-        Ok(Some(ack)) if ack.accepted => {
-            if matches!(action, WeaponAudioAction::Fire | WeaponAudioAction::Empty) {
-                newengine_ulog_api::ulog::info!(
-                    "weapon audio play: action={:?} ref='{}' kind='{}' provider='{}' voice_id={:?} virtualized={} status='accepted'",
-                    action,
-                    reference,
-                    if is_cue { "yscd-cue" } else { "clip" },
-                    ack.provider,
-                    ack.voice_id,
-                    ack.virtualized,
-                );
-            }
-            for diagnostic in &ack.diagnostics {
-                newengine_ulog_api::ulog::info!("{}", diagnostic);
-            }
-        }
-        Ok(Some(ack)) => newengine_ulog_api::ulog::warn!(
-            "weapon audio play rejected: action={:?} ref='{}' provider='{}' message='{}'",
-            action,
-            reference,
-            ack.provider,
-            ack.message,
-        ),
-        Ok(None) => newengine_ulog_api::ulog::warn!(
-            "weapon audio play unavailable: action={:?} ref='{}' reason='engine.audio returned no provider response'",
-            action,
-            reference,
-        ),
-        Err(error) => newengine_ulog_api::ulog::warn!(
-            "weapon audio play failed: action={:?} ref='{}' err='{}'",
-            action,
-            reference,
-            error,
-        ),
-    }
-}
-
-pub fn play_equipped_weapon_audio(world: &World, owner: EntityId, action: WeaponAudioAction) {
-    let Some(binding) = world.get::<EquippedWeaponBinding>(owner) else {
-        return;
-    };
-    play_weapon_item_audio(world, owner, binding.item, action);
-}
+#[path = "inventory_equipment/audio_compat.rs"]
+mod audio_compat;
+pub use audio_compat::{
+    play_equipped_weapon_audio, play_weapon_item_audio, preload_weapon_audio_definition,
+};
 
 pub fn equip_first_item(world: &mut World, owner: EntityId, item: ItemId) -> Result<(), String> {
     let instance = world
@@ -821,31 +456,87 @@ pub fn consume_equipped_ammo(world: &mut World, owner: EntityId, requested: u32)
 }
 
 pub fn use_item(world: &mut World, owner: EntityId, item: ItemId) -> Result<(), String> {
+    use_item_internal(world, owner, item, None)
+}
+
+pub fn use_item_instance(
+    world: &mut World,
+    owner: EntityId,
+    instance: ItemInstanceId,
+) -> Result<(), String> {
+    let item = world
+        .get::<PlayerInventory>(owner)
+        .and_then(|inventory| inventory.entry(instance))
+        .map(|entry| entry.item)
+        .ok_or_else(|| "inventory instance is not present".to_owned())?;
+    use_item_internal(world, owner, item, Some(instance))
+}
+
+fn use_item_internal(
+    world: &mut World,
+    owner: EntityId,
+    item: ItemId,
+    exact_instance: Option<ItemInstanceId>,
+) -> Result<(), String> {
     let definition = world
         .resource::<ItemCatalog>()
         .and_then(|catalog| catalog.get(item))
         .cloned()
         .ok_or_else(|| "item definition is unavailable".to_owned())?;
-    if inventory_quantity(world, owner, item) == 0 {
+    let present = match exact_instance {
+        Some(instance) => world
+            .get::<PlayerInventory>(owner)
+            .and_then(|inventory| inventory.entry(instance))
+            .is_some_and(|entry| entry.item == item && entry.quantity > 0),
+        None => inventory_quantity(world, owner, item) > 0,
+    };
+    if !present {
         return Err("item is not present in inventory".to_owned());
     }
 
     match definition.use_effect {
         ItemUseEffect::None => return Err("item has no usable effect".to_owned()),
         ItemUseEffect::Heal { amount } => {
-            let health = world
-                .get_mut::<Health>(owner)
-                .ok_or_else(|| "owner has no health component".to_owned())?;
-            if health.current >= health.maximum || amount <= 0.0 {
-                return Err("healing item would have no effect".to_owned());
+            if world
+                .get::<CharacterLifeState>(owner)
+                .is_some_and(|state| !state.alive())
+            {
+                return Err("dead character requires an explicit revive mechanic".to_owned());
             }
-            health.current = (health.current + amount).min(health.maximum);
+            let applied = {
+                let health = world
+                    .get_mut::<Health>(owner)
+                    .ok_or_else(|| "owner has no health component".to_owned())?;
+                if health.current >= health.maximum || amount <= 0.0 {
+                    return Err("healing item would have no effect".to_owned());
+                }
+                health.heal(amount)
+            };
+            if applied > 0.0 {
+                let health = world.get::<Health>(owner).copied().unwrap_or_default();
+                let _ = emit_gameplay_event(
+                    world,
+                    GAMEPLAY_EVENT_CHARACTER_HEALED,
+                    Some(owner),
+                    serde_json::json!({
+                        "item": item.0,
+                        "applied_healing": applied,
+                        "health_current": health.current,
+                        "health_maximum": health.maximum,
+                        "health_normalized": health.normalized(),
+                    }),
+                );
+                let _ = reconcile_character_injury_state(world, owner);
+            }
         }
     }
 
     let removed = world
         .get_mut::<PlayerInventory>(owner)
-        .map(|inventory| inventory.remove_quantity(item, 1))
+        .map(|inventory| match exact_instance {
+            Some(instance) => inventory.remove_instance_quantity(instance, 1),
+            None => inventory.remove_quantity(item, 1),
+        })
         .unwrap_or_default();
     if removed.accepted != 1 {
         return Err("failed to consume inventory item".to_owned());
@@ -856,7 +547,7 @@ pub fn use_item(world: &mut World, owner: EntityId, item: ItemId) -> Result<(), 
             kind: InventoryEventKind::ItemUsed,
             owner,
             item,
-            instance_id: removed.touched_instances.last().copied(),
+            instance_id: exact_instance.or_else(|| removed.touched_instances.last().copied()),
             quantity: 1,
             slot: definition.equipment_slot,
             world_entity: None,
@@ -957,120 +648,6 @@ pub fn select_highest_ranked_equipped_weapon(
     }
     selected
 }
-
 #[cfg(test)]
-mod component_graph_tests {
-    use super::*;
-
-    fn component(
-        id: &str,
-        slot: &str,
-        accuracy: f32,
-        recoil: f32,
-        damage: f32,
-    ) -> WeaponComponentDefinition {
-        WeaponComponentDefinition {
-            id: id.to_owned(),
-            slot: slot.to_owned(),
-            model_ref: None,
-            audio_override: None,
-            muzzle_vfx_override: None,
-            tracer_vfx_override: None,
-            stat_modifiers: WeaponStatModifierStack::default(),
-            modifiers: WeaponComponentModifiers {
-                accuracy_multiplier: accuracy,
-                recoil_multiplier: recoil,
-                damage_multiplier: damage,
-                ..WeaponComponentModifiers::default()
-            },
-        }
-    }
-
-    #[test]
-    fn component_install_validates_slot_and_aggregates_active_instance_modifiers() {
-        let mut world = World::new();
-        let owner = world.spawn();
-        let ammo = ItemId::from_name("ammo.component.test").expect("ammo id");
-        let weapon_id = ItemId::from_name("weapon.component.test").expect("weapon id");
-
-        let graph = WeaponComponentGraphDefinition {
-            points: vec![
-                WeaponComponentPointDefinition {
-                    id: "muzzle".to_owned(),
-                    attach_joint: "muzzle".to_owned(),
-                    allowed_components: vec![
-                        "muzzle.standard".to_owned(),
-                        "muzzle.brake".to_owned(),
-                    ],
-                },
-                WeaponComponentPointDefinition {
-                    id: "optic".to_owned(),
-                    attach_joint: "optic".to_owned(),
-                    allowed_components: vec!["optic.basic".to_owned()],
-                },
-            ],
-            components: [
-                (
-                    "muzzle.standard".to_owned(),
-                    component("muzzle.standard", "muzzle", 1.0, 1.0, 1.0),
-                ),
-                (
-                    "muzzle.brake".to_owned(),
-                    component("muzzle.brake", "muzzle", 0.9, 0.7, 1.05),
-                ),
-                (
-                    "optic.basic".to_owned(),
-                    component("optic.basic", "optic", 0.8, 1.0, 1.0),
-                ),
-            ]
-            .into_iter()
-            .collect(),
-            default_installed: [("muzzle".to_owned(), "muzzle.standard".to_owned())]
-                .into_iter()
-                .collect(),
-        };
-
-        let weapon = ItemDefinition::weapon(
-            "weapon.component.test",
-            "Component Test Weapon",
-            EquipmentSlot::Primary,
-            HitscanWeaponTuning::default(),
-            ammo,
-            WeaponFireMode::SemiAuto,
-            2.5,
-        )
-        .expect("weapon")
-        .with_weapon_components(graph)
-        .expect("component graph");
-        let mut catalog = ItemCatalog::default();
-        catalog.register(weapon).expect("register weapon");
-        world.insert_resource(catalog);
-
-        let mutation = give_item(&mut world, owner, weapon_id, 1).expect("give weapon");
-        let instance = *mutation.touched_instances.first().expect("weapon instance");
-        equip_item_instance(&mut world, owner, instance).expect("equip weapon");
-
-        let defaults = active_equipped_weapon_component_modifiers(&world, owner);
-        assert!((defaults.recoil_multiplier - 1.0).abs() < 1.0e-6);
-
-        assert!(
-            install_weapon_component(&mut world, owner, instance, "muzzle", "optic.basic").is_err(),
-            "component from another slot must be rejected"
-        );
-        install_weapon_component(&mut world, owner, instance, "muzzle", "muzzle.brake")
-            .expect("install muzzle brake");
-
-        let modified = active_equipped_weapon_component_modifiers(&world, owner);
-        assert!((modified.accuracy_multiplier - 0.9).abs() < 1.0e-6);
-        assert!((modified.recoil_multiplier - 0.7).abs() < 1.0e-6);
-        assert!((modified.damage_multiplier - 1.05).abs() < 1.0e-6);
-
-        let removed = remove_weapon_component(&mut world, owner, instance, "muzzle")
-            .expect("remove component");
-        assert_eq!(removed.component_id, "muzzle.brake");
-        assert_eq!(
-            active_equipped_weapon_component_modifiers(&world, owner),
-            WeaponComponentModifiers::default()
-        );
-    }
-}
+#[path = "inventory_equipment/tests.rs"]
+mod component_graph_tests;

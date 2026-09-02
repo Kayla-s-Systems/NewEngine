@@ -97,15 +97,158 @@ pub(in super::super) fn sanitize_mission_pickup_spec(
     })
 }
 
+fn parse_patrol_route(raw: Option<&str>) -> Option<Vec<Vec3>> {
+    let Some(raw) = raw.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Some(Vec::new());
+    };
+    let mut points = Vec::new();
+    for point in raw
+        .split(';')
+        .map(str::trim)
+        .filter(|point| !point.is_empty())
+    {
+        let values = point
+            .split(',')
+            .map(str::trim)
+            .map(str::parse::<f32>)
+            .collect::<Result<Vec<_>, _>>()
+            .ok()?;
+        if values.len() != 3 || values.iter().any(|value| !value.is_finite()) {
+            return None;
+        }
+        points.push(Vec3::new(values[0], values[1], values[2]));
+    }
+    (points.len() >= 2).then_some(points)
+}
+
 pub(in super::super) fn sanitize_mission_target_spec(
     raw: RawMissionTargetSpec,
 ) -> Option<GameReadyMissionTargetSpec> {
     let id = sanitized_required_id(&raw.id)?;
+    let character_ref = raw
+        .character_ref
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.replace('\\', "/"));
+    if character_ref
+        .as_deref()
+        .is_some_and(|value| !value.to_ascii_lowercase().contains(".ytyp@"))
+    {
+        return None;
+    }
+    let ai = if raw.ai_enabled {
+        let combat_team = raw
+            .combat_team
+            .filter(|value| (1..=65_535).contains(value))?;
+        let sight_range = raw
+            .sight_range
+            .filter(|value| value.is_finite() && *value > 0.0)?
+            .clamp(0.1, 10_000.0);
+        let field_of_view_degrees = raw
+            .field_of_view_degrees
+            .filter(|value| value.is_finite() && *value > 0.0)?
+            .clamp(1.0, 360.0);
+        let memory_seconds = raw
+            .memory_seconds
+            .filter(|value| value.is_finite() && *value >= 0.0)?
+            .clamp(0.0, 300.0);
+        let decision_interval_seconds = raw
+            .decision_interval_seconds
+            .filter(|value| value.is_finite() && *value > 0.0)?
+            .clamp(0.016, 10.0);
+        let move_speed = raw
+            .move_speed
+            .filter(|value| value.is_finite() && *value >= 0.0)?
+            .clamp(0.0, 30.0);
+        let patrol_route = parse_patrol_route(raw.patrol_route.as_deref())?;
+        let patrol_looping = raw.patrol_looping.unwrap_or(true);
+        let investigate_arrival_distance = raw
+            .investigate_arrival_distance
+            .filter(|value| value.is_finite() && *value > 0.0)?
+            .clamp(0.05, 25.0);
+        let engage_standoff_distance = raw
+            .engage_standoff_distance
+            .filter(|value| value.is_finite() && *value > 0.0)?
+            .clamp(0.05, 250.0);
+        let waypoint_arrival_distance = raw
+            .waypoint_arrival_distance
+            .filter(|value| value.is_finite() && *value > 0.0)?
+            .clamp(0.02, 10.0);
+        let repath_interval_seconds = raw
+            .repath_interval_seconds
+            .filter(|value| value.is_finite() && *value > 0.0)?
+            .clamp(0.05, 30.0);
+        let view_turn_speed_degrees_per_second = raw
+            .view_turn_speed_degrees_per_second
+            .filter(|value| value.is_finite() && *value > 0.0)?
+            .clamp(1.0, 1440.0);
+        let fire_distance = raw
+            .fire_distance
+            .filter(|value| value.is_finite() && *value > 0.0)?
+            .clamp(0.1, 1_000.0);
+        let aim_tolerance_degrees = raw
+            .aim_tolerance_degrees
+            .filter(|value| value.is_finite() && *value > 0.0)?
+            .clamp(0.01, 180.0);
+        let weapon_muzzle_offset = raw
+            .weapon_muzzle_offset
+            .filter(|value| value.iter().all(|component| component.is_finite()))?;
+        let weapon_muzzle_forward = raw
+            .weapon_muzzle_forward
+            .filter(|value| value.iter().all(|component| component.is_finite()))?;
+        let forward_len_sq = weapon_muzzle_forward
+            .iter()
+            .map(|value| value * value)
+            .sum::<f32>();
+        if forward_len_sq <= 1.0e-8 {
+            return None;
+        }
+        let loadout = raw
+            .loadout
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())?
+            .to_owned();
+        Some(GameReadyEnemyAiSpec {
+            combat_team,
+            sight_range,
+            field_of_view_degrees,
+            memory_seconds,
+            decision_interval_seconds,
+            navigation: newengine_engine_runtime::gameplay::AINavigationTuning {
+                move_speed,
+                investigate_arrival_distance,
+                engage_standoff_distance,
+                waypoint_arrival_distance,
+                repath_interval_seconds,
+                view_turn_speed_radians_per_second: view_turn_speed_degrees_per_second.to_radians(),
+            }
+            .sanitized(),
+            patrol_route,
+            patrol_looping,
+            combat: newengine_gameplay_fps_api::FpsAiCombatTuning {
+                fire_distance,
+                aim_tolerance_radians: aim_tolerance_degrees.to_radians(),
+            }
+            .sanitized(),
+            weapon_mount: newengine_gameplay_fps_api::FpsActorWeaponMountTuning {
+                local_offset: weapon_muzzle_offset,
+                local_forward: weapon_muzzle_forward,
+            }
+            .sanitized(),
+            loadout,
+        })
+    } else {
+        None
+    };
     Some(GameReadyMissionTargetSpec {
         id,
+        character_ref,
         position: arr3(sanitize_array3_finite(raw.position, [0.0, 0.0, 0.0])),
         health: positive_clamped(raw.health, 1.0, 100_000.0)?,
         scale: arr3(required_positive_scale(raw.scale)?),
+        ai,
     })
 }
 

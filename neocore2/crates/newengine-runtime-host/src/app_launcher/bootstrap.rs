@@ -13,7 +13,7 @@ use newengine_project_api::{
 use newengine_project_runtime::{
     game_manifest_request_from_environment, load_project_from_request_with_launch,
     project_launch_request_from_environment, project_request_from_environment,
-    register_engine_asset_roots, ProjectRuntimeContext, RuntimeCompositionContext,
+    register_engine_bootstrap_asset_roots, ProjectRuntimeContext, RuntimeCompositionContext,
 };
 
 use crate::engine_factory::build_engine_from_startup_with_host;
@@ -186,7 +186,7 @@ where
         ));
 
         let mut content_mount_registry = ContentMountRegistry::default();
-        register_engine_asset_roots(&mut content_mount_registry, &asset_roots)
+        register_engine_bootstrap_asset_roots(&mut content_mount_registry, &asset_roots)
             .map_err(EngineError::Other)?;
         if let Some(runtime) = runtime_context.as_ref() {
             for mount in runtime.mounts.mounts() {

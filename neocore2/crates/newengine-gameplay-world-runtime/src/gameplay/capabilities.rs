@@ -268,7 +268,7 @@ impl GameplayCapabilityProvider for AudioPlayCapability {
             .map_err(|error| format!("audio gateway failed cue='{cue}' route='{route}': {error}"))?
         {
             Some(ack) if ack.accepted => {
-                newengine_ulog_api::ulog::info!(
+                newengine_ulog_api::ulog::trace!(
                     "gameplay audio play accepted cue='{}' route='{}' provider='{}' voice_id={:?} voice_ids={:?} virtualized={}",
                     cue,
                     route,

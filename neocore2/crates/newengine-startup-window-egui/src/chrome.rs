@@ -191,7 +191,7 @@ impl PreStartGraphicsApp {
         let outer_width = ui.available_width();
         egui::Frame::none()
             .fill(color32(style.palette.panel_active))
-            .stroke(egui::Stroke::new(1.0, color32(style.palette.blue)))
+            .stroke(egui::Stroke::new(1.0_f32, color32(style.palette.blue)))
             .rounding(egui::Rounding::same(10.0))
             .inner_margin(egui::Margin::symmetric(16.0, 12.0))
             .show(ui, |ui| {

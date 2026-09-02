@@ -6,19 +6,181 @@ struct PlayerAnimationRuntimeClip {
     event_cursor: AnimationEventCursor,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum EquipmentAimDirection {
+    Forward,
+    ForwardRight45,
+    Right90,
+    BackRight135,
+    Back180,
+    BackLeft135,
+    Left90,
+    ForwardLeft45,
+}
+
+impl EquipmentAimDirection {
+    const ALL: [Self; 8] = [
+        Self::Forward,
+        Self::ForwardRight45,
+        Self::Right90,
+        Self::BackRight135,
+        Self::Back180,
+        Self::BackLeft135,
+        Self::Left90,
+        Self::ForwardLeft45,
+    ];
+
+    #[inline]
+    const fn semantic(self) -> &'static str {
+        match self {
+            Self::Forward => "fw",
+            Self::ForwardRight45 => "fw45r",
+            Self::Right90 => "r90",
+            Self::BackRight135 => "b135r",
+            Self::Back180 => "b180",
+            Self::BackLeft135 => "b135l",
+            Self::Left90 => "l90",
+            Self::ForwardLeft45 => "fw45l",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EquipmentPoseBodyStance {
+    Stand,
+    Crouch,
+    Prone,
+}
+
+impl EquipmentPoseBodyStance {
+    #[inline]
+    const fn semantic_prefix(self) -> &'static str {
+        match self {
+            Self::Stand => "",
+            Self::Crouch => "crouch.",
+            Self::Prone => "prone.",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct EquipmentGripLayerSet {
+    reference: Option<PlayerAnimationRuntimeClip>,
+    arms: Option<PlayerAnimationRuntimeClip>,
+    /// Authored prop-hand frame layer. Despite the source name `hands`, this owns the
+    /// l/r_hand_prop attachment domain, not anatomical finger articulation.
+    hands: Option<PlayerAnimationRuntimeClip>,
+    /// Anatomical finger articulation projected from the character's compact hand domain.
+    fingers: Option<PlayerAnimationRuntimeClip>,
+    additive: Option<PlayerAnimationRuntimeClip>,
+}
+
+impl EquipmentGripLayerSet {
+    #[inline]
+    fn any(&self) -> bool {
+        self.reference.is_some()
+            || self.arms.is_some()
+            || self.hands.is_some()
+            || self.additive.is_some()
+    }
+
+    /// A character prop socket may own the weapon root only when the complete authored grip
+    /// composition for this stance is present. A generic aim/full-body clip can contain the same
+    /// prop joints, but those channels live in a different authored domain and must never opt in
+    /// to the socket -> handle basis merely by existing.
+    #[inline]
+    fn has_prop_socket_contract(&self) -> bool {
+        self.reference.is_some()
+            && self.arms.is_some()
+            && self.hands.is_some()
+            && self.additive.is_some()
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct EquipmentAimPoseSpace {
+    idle: Option<PlayerAnimationRuntimeClip>,
+    movement: std::collections::BTreeMap<EquipmentAimDirection, PlayerAnimationRuntimeClip>,
+    grip: EquipmentGripLayerSet,
+    blocked_additive: Option<PlayerAnimationRuntimeClip>,
+    blocked_subtractive: Option<PlayerAnimationRuntimeClip>,
+}
+
+impl EquipmentAimPoseSpace {
+    #[inline]
+    fn any(&self) -> bool {
+        self.idle.is_some()
+            || !self.movement.is_empty()
+            || self.grip.any()
+            || self.blocked_additive.is_some()
+            || self.blocked_subtractive.is_some()
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct EquipmentTransitionPoseSet {
+    ready_to_aim: Option<PlayerAnimationRuntimeClip>,
+    aim_to_ready: Option<PlayerAnimationRuntimeClip>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EquipmentTransitionKind {
+    ReadyToAim,
+    AimToReady,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct EquipmentTransitionRuntimeState {
+    kind: EquipmentTransitionKind,
+    elapsed_seconds: f32,
+}
+
 #[derive(Clone, Debug, Default)]
 struct EquipmentPoseSet {
+    /// Legacy/simple family contract retained as a compatibility fallback.
     ready: Option<PlayerAnimationRuntimeClip>,
     aim: Option<PlayerAnimationRuntimeClip>,
     reload: Option<PlayerAnimationRuntimeClip>,
+    /// Layered authored weapon pose spaces. The engine knows only generic stance/direction semantics.
+    stand: EquipmentAimPoseSpace,
+    crouch: EquipmentAimPoseSpace,
+    prone: EquipmentAimPoseSpace,
+    transitions: EquipmentTransitionPoseSet,
     /// Optional class-specific READY sample phase. `None` inherits the character's generic phase.
     ready_sample_phase: Option<f32>,
 }
 
 impl EquipmentPoseSet {
     #[inline]
+    fn pose_space(&self, stance: EquipmentPoseBodyStance) -> &EquipmentAimPoseSpace {
+        match stance {
+            EquipmentPoseBodyStance::Stand => &self.stand,
+            EquipmentPoseBodyStance::Crouch => &self.crouch,
+            EquipmentPoseBodyStance::Prone => &self.prone,
+        }
+    }
+
+    #[inline]
+    fn pose_space_mut(&mut self, stance: EquipmentPoseBodyStance) -> &mut EquipmentAimPoseSpace {
+        match stance {
+            EquipmentPoseBodyStance::Stand => &mut self.stand,
+            EquipmentPoseBodyStance::Crouch => &mut self.crouch,
+            EquipmentPoseBodyStance::Prone => &mut self.prone,
+        }
+    }
+
+    #[inline]
+    fn has_aim(&self) -> bool {
+        self.aim.is_some() || self.stand.any() || self.crouch.any() || self.prone.any()
+    }
+
+    #[inline]
     fn any(&self) -> bool {
-        self.ready.is_some() || self.aim.is_some() || self.reload.is_some()
+        self.ready.is_some()
+            || self.has_aim()
+            || self.reload.is_some()
+            || self.transitions.ready_to_aim.is_some()
+            || self.transitions.aim_to_ready.is_some()
     }
 }
 
@@ -577,6 +739,8 @@ pub(super) struct PlayerAnimationRuntimeBinding {
     equipment_ready_sample_phase: f32,
     equipment_time_seconds: f32,
     equipment_reload_active: bool,
+    equipment_previous_stance: EquipmentPresentationStance,
+    equipment_transition: Option<EquipmentTransitionRuntimeState>,
     /// Last published equipment selection diagnostic. This is transition state only; it never
     /// participates in pose selection and exists to make live capability routing auditable.
     equipment_trace_active: bool,
@@ -586,6 +750,7 @@ pub(super) struct PlayerAnimationRuntimeBinding {
     equipment_aim_rotation_weights: Vec<ResolvedJointBlendRule>,
     equipment_reload_rotation_weights: Vec<ResolvedJointBlendRule>,
     equipment_overlay_locals: Vec<JointLocalPose>,
+    equipment_overlay_locals_b: Vec<JointLocalPose>,
     equipment_ik: Option<WeaponArmIkRig>,
     /// Cooldown for significant support-IK residual diagnostics. The solve still runs every frame,
     /// but a persistent authored-contact problem must not flood the runtime log.
@@ -698,11 +863,11 @@ impl PlayerAnimationRuntimeBinding {
                     .equipment_pose_sets
                     .values()
                     .any(|set| set.ready.is_some()),
-            equipment_aim: self.equipment_default_pose_set.aim.is_some()
+            equipment_aim: self.equipment_default_pose_set.has_aim()
                 || self
                     .equipment_pose_sets
                     .values()
-                    .any(|set| set.aim.is_some()),
+                    .any(EquipmentPoseSet::has_aim),
             equipment_reload: self.equipment_default_pose_set.reload.is_some()
                 || self
                     .equipment_pose_sets
@@ -794,183 +959,8 @@ impl PlayerAnimationRuntimeBinding {
     }
 }
 
-#[inline]
-fn blend_joint_translation_only(dst: &mut JointLocalPose, src: &JointLocalPose, weight: f32) {
-    let weight = if weight.is_finite() {
-        weight.clamp(0.0, 1.0)
-    } else {
-        1.0
-    };
-    let from = Vec3::new(dst.translation[0], dst.translation[1], dst.translation[2]);
-    let to = Vec3::new(src.translation[0], src.translation[1], src.translation[2]);
-    let translation = from.lerp(to, weight);
-    dst.translation = [translation.x, translation.y, translation.z];
-}
-
-#[inline]
-fn blend_joint_rotation_only(dst: &mut JointLocalPose, src: &JointLocalPose, weight: f32) {
-    let weight = if weight.is_finite() {
-        weight.clamp(0.0, 1.0)
-    } else {
-        1.0
-    };
-    let from = Quat::from_xyzw(
-        dst.rotation[0],
-        dst.rotation[1],
-        dst.rotation[2],
-        dst.rotation[3],
-    )
-    .normalize_or_identity();
-    let mut to = Quat::from_xyzw(
-        src.rotation[0],
-        src.rotation[1],
-        src.rotation[2],
-        src.rotation[3],
-    )
-    .normalize_or_identity();
-    if from.dot(to) < 0.0 {
-        to = Quat::from_xyzw(-to.x, -to.y, -to.z, -to.w);
-    }
-    let rotation = from.slerp(to, weight).normalize_or_identity();
-    dst.rotation = [rotation.x, rotation.y, rotation.z, rotation.w];
-}
-
-#[inline]
-fn blend_joint_scale_only(dst: &mut JointLocalPose, src: &JointLocalPose, weight: f32) {
-    let weight = if weight.is_finite() {
-        weight.clamp(0.0, 1.0)
-    } else {
-        1.0
-    };
-    let from = dst.scale.unwrap_or([1.0, 1.0, 1.0]);
-    let to = src.scale.unwrap_or([1.0, 1.0, 1.0]);
-    dst.scale = Some([
-        from[0] + (to[0] - from[0]) * weight,
-        from[1] + (to[1] - from[1]) * weight,
-        from[2] + (to[2] - from[2]) * weight,
-    ]);
-}
-
-fn apply_character_rotation_overlay(
-    clip: Option<&PlayerAnimationRuntimeClip>,
-    skeleton: &ModelSkeletonMetadata,
-    animation_runtime: &AnimationSkeletonRuntime,
-    scratch: &mut Vec<JointLocalPose>,
-    target: &mut [JointLocalPose],
-    normalized_phase: f32,
-) -> Result<(), String> {
-    let Some(clip) = clip else {
-        return Ok(());
-    };
-    let phase = if normalized_phase.is_finite() {
-        normalized_phase.clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    let sample_time =
-        (clip.clip.duration_seconds * phase).clamp(0.0, clip.clip.duration_seconds.max(0.0));
-    clip.clip
-        .sample_local_pose_bound(sample_time, animation_runtime, &clip.binding, scratch)?;
-    for (index, (dst, src)) in target.iter_mut().zip(scratch.iter()).enumerate() {
-        let Some(joint) = skeleton.joints.get(index) else {
-            continue;
-        };
-        // Untracked clip channels are bind-pose completion, not authored overlay data. Preserve
-        // the current base locomotion pose unless this clip explicitly owns the joint tag.
-        if clip.clip.joint_tags.contains(&joint.tag) {
-            blend_joint_rotation_only(dst, src, 1.0);
-        }
-    }
-    Ok(())
-}
-
-fn apply_equipment_rotation_overlay(
-    clip: Option<&PlayerAnimationRuntimeClip>,
-    animation_runtime: &AnimationSkeletonRuntime,
-    scratch: &mut Vec<JointLocalPose>,
-    target: &mut [JointLocalPose],
-    normalized_phase: f32,
-    weights: &[ResolvedJointBlendRule],
-    weight_scale: f32,
-) -> Result<(), String> {
-    let Some(clip) = clip else {
-        return Ok(());
-    };
-    let phase = if normalized_phase.is_finite() {
-        normalized_phase.clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    let sample_time =
-        (clip.clip.duration_seconds * phase).clamp(0.0, clip.clip.duration_seconds.max(0.0));
-    clip.clip
-        .sample_local_pose_bound(sample_time, animation_runtime, &clip.binding, scratch)?;
-    for rule in weights {
-        // Sampling returns a complete pose by filling absent clip channels from bind pose. That
-        // fallback is not layer-authored data. A project layer may only modify a joint when the
-        // selected clip explicitly owns that joint tag; otherwise the live base pose is preserved.
-        if !clip.clip.joint_tags.contains(&rule.joint_tag) {
-            continue;
-        }
-        if let (Some(dst), Some(src)) = (
-            target.get_mut(rule.joint_index),
-            scratch.get(rule.joint_index),
-        ) {
-            let effective_weight = (rule.weight * weight_scale).clamp(0.0, 1.0);
-            if rule.channels.translation {
-                blend_joint_translation_only(dst, src, effective_weight);
-            }
-            if rule.channels.rotation {
-                blend_joint_rotation_only(dst, src, effective_weight);
-            }
-            if rule.channels.scale {
-                blend_joint_scale_only(dst, src, effective_weight);
-            }
-        }
-    }
-    Ok(())
-}
+include!("binding/overlays.rs");
 
 #[cfg(test)]
-mod equipment_pose_family_selection_tests {
-    use super::*;
-
-    #[test]
-    fn equipment_family_ready_phase_overrides_generic_phase_only_for_that_family() {
-        let generic = EquipmentPoseSet::default();
-        let mut pistol = EquipmentPoseSet::default();
-        pistol.ready_sample_phase = Some(1.0);
-        let mut families = std::collections::BTreeMap::new();
-        families.insert("pistol".to_owned(), pistol);
-
-        let pistol_set = select_equipment_pose_set(&generic, &families, Some("pistol"));
-        let knife_set = select_equipment_pose_set(&generic, &families, Some("knife"));
-        let unclassified_set = select_equipment_pose_set(&generic, &families, None);
-
-        assert_eq!(
-            equipment_ready_sample_phase_for_pose_set(pistol_set, 0.25),
-            1.0
-        );
-        assert_eq!(
-            equipment_ready_sample_phase_for_pose_set(knife_set, 0.25),
-            0.25
-        );
-        assert_eq!(
-            equipment_ready_sample_phase_for_pose_set(unclassified_set, 0.25),
-            0.25
-        );
-    }
-
-    #[test]
-    fn classified_equipment_family_never_falls_back_to_generic_pose_set() {
-        let generic = EquipmentPoseSet::default();
-        let mut families = std::collections::BTreeMap::new();
-
-        assert!(select_equipment_pose_set(&generic, &families, None).is_some());
-        assert!(select_equipment_pose_set(&generic, &families, Some("knife")).is_none());
-
-        families.insert("knife".to_owned(), EquipmentPoseSet::default());
-        assert!(select_equipment_pose_set(&generic, &families, Some("knife")).is_some());
-        assert!(select_equipment_pose_set(&generic, &families, Some("bow")).is_none());
-    }
-}
+#[path = "binding/tests.rs"]
+mod equipment_pose_family_selection_tests;

@@ -13,19 +13,22 @@ pub(super) fn configure_style(ctx: &egui::Context) {
     visuals.extreme_bg_color = color32(style.palette.bg_deep);
     visuals.faint_bg_color = color32(style.palette.panel);
     visuals.selection.bg_fill = color32(style.palette.blue);
-    visuals.selection.stroke = egui::Stroke::new(1.0, color32(style.palette.blue_bright));
+    visuals.selection.stroke = egui::Stroke::new(1.0_f32, color32(style.palette.blue_bright));
     visuals.widgets.inactive.bg_fill = color32(style.palette.panel);
     visuals.widgets.inactive.weak_bg_fill = color32(style.palette.panel);
-    visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, color32(style.palette.edge_soft));
-    visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, color32(style.palette.text_dim));
+    visuals.widgets.inactive.bg_stroke =
+        egui::Stroke::new(1.0_f32, color32(style.palette.edge_soft));
+    visuals.widgets.inactive.fg_stroke =
+        egui::Stroke::new(1.0_f32, color32(style.palette.text_dim));
     visuals.widgets.hovered.bg_fill = color32(style.palette.panel_active);
     visuals.widgets.hovered.weak_bg_fill = color32(style.palette.panel_active);
-    visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, color32(style.palette.blue));
-    visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.0, color32(style.palette.text));
+    visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0_f32, color32(style.palette.blue));
+    visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.0_f32, color32(style.palette.text));
     visuals.widgets.active.bg_fill = color32(style.palette.panel_active);
     visuals.widgets.active.weak_bg_fill = color32(style.palette.panel_active);
-    visuals.widgets.active.bg_stroke = egui::Stroke::new(1.0, color32(style.palette.blue_bright));
-    visuals.widgets.active.fg_stroke = egui::Stroke::new(1.0, color32(style.palette.text));
+    visuals.widgets.active.bg_stroke =
+        egui::Stroke::new(1.0_f32, color32(style.palette.blue_bright));
+    visuals.widgets.active.fg_stroke = egui::Stroke::new(1.0_f32, color32(style.palette.text));
     ctx.set_visuals(visuals);
 
     let mut style_mut = (*ctx.style()).clone();

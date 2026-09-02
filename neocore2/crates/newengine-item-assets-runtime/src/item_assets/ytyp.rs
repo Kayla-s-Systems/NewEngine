@@ -322,6 +322,9 @@ pub(crate) fn apply_weapon_ytyp_namespace(
         if let Some(value) = f32_value(namespace, "weapon", "reload_duration") {
             weapon.reload_duration = value;
         }
+        if let Some(value) = string(namespace, "weapon", "reload_topology") {
+            weapon.reload_topology = value;
+        }
         if let Some(value) = f32_value(namespace, "weapon", "damage") {
             weapon.damage = value;
         }
@@ -500,11 +503,13 @@ pub(crate) fn apply_weapon_ytyp_namespace(
             v3!(ads_front_sight_from_handle);
             v3!(ads_camera_to_rear_sight);
             v3!(ads_camera_translation_weight);
+            v4!(handle_rotation_from_root);
             v4!(ready_body_to_root_rotation);
             v4!(ready_right_palm_to_weapon);
             v4!(ready_left_palm_to_weapon);
             v4!(right_palm_to_native_rig);
             v4!(native_rig_to_runtime_basis);
+            v4!(authored_socket_to_weapon_handle_basis);
             if let Some(value) = f32_value(namespace, "presentation", "fire_kick_duration_seconds")
             {
                 presentation.fire_kick_duration_seconds = value;
@@ -756,11 +761,13 @@ mod tests {
             "presentation": {
                 "enabled": true,
                 "handle_from_root": [0.0, 0.014, -0.030],
+                "handle_rotation_from_root": [0.0, 0.0, 0.38268343, 0.9238795],
                 "muzzle_from_root": [0.108, 0.041, 0.640],
                 "left_grip_from_handle": [-0.021, 0.043, 0.306],
                 "stock_contact_from_handle": [-0.020, 0.053, -0.341],
                 "ready_body_to_root_rotation": [0.036, 0.608, -0.041, 0.792],
                 "right_palm_to_handle": [0.019, 0.033, -0.083],
+                "authored_socket_to_weapon_handle_basis": [-0.5686547, -0.3117329, -0.3185951, 0.6913404],
                 "first_person_hip_handle_offset": [0.20, -0.20, -0.58],
                 "first_person_full_body_hip_handle_offset": [0.20, -0.20, -0.08],
                 "ads_camera_translation_weight": [1.0, 0.0, 0.75],
@@ -820,12 +827,20 @@ mod tests {
         let presentation = item.weapon_presentation.expect("weapon presentation");
         assert!(presentation.enabled);
         assert_eq!(presentation.handle_from_root, [0.0, 0.014, -0.030]);
+        assert_eq!(
+            presentation.handle_rotation_from_root,
+            [0.0, 0.0, 0.38268343, 0.9238795]
+        );
         assert_eq!(presentation.left_grip_from_handle, [-0.021, 0.043, 0.306]);
         assert_eq!(
             presentation.ready_body_to_root_rotation,
             [0.036, 0.608, -0.041, 0.792]
         );
         assert_eq!(presentation.right_palm_to_handle, [0.019, 0.033, -0.083]);
+        assert_eq!(
+            presentation.authored_socket_to_weapon_handle_basis,
+            [-0.5686547, -0.3117329, -0.3185951, 0.6913404]
+        );
         assert_eq!(
             presentation.first_person_hip_handle_offset,
             [0.20, -0.20, -0.58]

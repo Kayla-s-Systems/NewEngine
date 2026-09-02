@@ -337,6 +337,8 @@ struct WeaponIkSolveResult {
     error_m: f32,
     right_error_m: f32,
     left_error_m: f32,
+    socket_position_error_m: f32,
+    socket_angular_error_deg: f32,
     base_root: crate::weapon_grip::WeaponRootTransform,
 }
 
@@ -494,6 +496,7 @@ fn apply_equipped_weapon_support_ik(
     obstruction_alpha: f32,
     secondary_rotation_offset_local: Vec3,
     authored_hand_contacts: bool,
+    authored_prop_socket_authority: bool,
     support_right_hand: bool,
     support_left_hand: bool,
 ) -> Result<Option<WeaponIkSolveResult>, String> {
@@ -511,46 +514,111 @@ fn apply_equipped_weapon_support_ik(
         .get(rig.left_shoulder)
         .ok_or("weapon ReadyHold left shoulder frame is unavailable")?;
 
-    // Full-body FPP must never stretch the avatar's real arms toward a camera-owned gun. Once an
-    // authored equipment pose exists, the firing hand is the physical grip owner. ADS rotates the
-    // weapon around that fixed handle until the actual rear->front sight axis matches gameplay view;
-    // weapon presentation subsequently resolves an authored ADS camera anchor from that sight. No shoulder/elbow IK is applied
-    // in this branch, so authored limb lengths and silhouette remain untouched.
-    if first_person_active && authored_hand_contacts && support_right_hand {
-        if let Some(view_rotation) = first_person_view_rotation_model {
-            if let Some(root) = crate::weapon_grip::weapon_first_person_hand_anchored_root(
-                presentation,
-                frames[rig.right_palm],
-                view_rotation,
-                aim_alpha,
-                recoil_alpha,
-                recoil_yaw_radians,
-            ) {
-                return Ok(Some(WeaponIkSolveResult {
-                    error_m: 0.0,
-                    right_error_m: 0.0,
-                    left_error_m: 0.0,
-                    base_root: root,
-                }));
-            }
-        }
-    }
+    // Full-body FPP keeps the authored firing hand as the kinematic owner of the weapon handle,
+    // but that does not make the authored arm pose authoritative after the weapon rotates for ADS.
+    // Resolve the hand-owned root first, then run the ordinary bilateral contact solve below so the
+    // support hand and firing-hand orientation follow the final weapon contacts. The previous early
+    // return left the rifle rotated around the right palm while both real arms stayed pre-ADS.
+    let hand_anchored_fpp_root =
+        (first_person_active && authored_hand_contacts && support_right_hand)
+            .then_some(first_person_view_rotation_model)
+            .flatten()
+            .and_then(|view_rotation| {
+                crate::weapon_grip::weapon_first_person_hand_anchored_root(
+                    presentation,
+                    frames[rig.right_palm],
+                    view_rotation,
+                    aim_alpha,
+                    recoil_alpha,
+                    recoil_yaw_radians,
+                )
+            });
+
+    // Prop-socket authority is stricter than generic authored hand contact. The same skeleton
+    // attachment joint can be present in unrelated full-body/aim clips; applying a basis recovered
+    // from a different reference-composition domain to those channels is a cross-domain transform
+    // bug. Only the matching complete grip bundle may opt the prop socket into root ownership.
+    let authored_prop_root =
+        (!first_person_active && authored_hand_contacts && authored_prop_socket_authority)
+            .then_some(rig.right_prop_attachment)
+            .flatten()
+            .and_then(|index| frames.get(index).copied())
+            .and_then(|frame| {
+                crate::weapon_grip::weapon_root_from_authored_prop_frame(presentation, frame)
+            });
 
     // Third-person Ready/Aim is character-authored: the firing hand owns weapon translation and
     // the support hand may only contribute a bounded angular correction around that handle. If the
     // FPP hand-owned path above is unavailable, the existing camera/torso solve remains a guarded
     // compatibility fallback rather than silently dropping the weapon presentation.
-    let handle_anchor = (authored_hand_contacts && support_right_hand && !first_person_active)
+    let handle_anchor = (authored_prop_root.is_none()
+        && authored_hand_contacts
+        && support_right_hand
+        && !first_person_active)
         .then(|| frames[rig.right_palm])
         .and_then(|frame| {
             crate::weapon_grip::weapon_handle_anchor_from_right_palm(presentation, frame)
         });
-    let support_anchor = (authored_hand_contacts && support_left_hand && !first_person_active)
+    let support_anchor = (authored_prop_root.is_none()
+        && authored_hand_contacts
+        && support_left_hand
+        && !first_person_active)
         .then(|| frames[rig.left_palm])
         .and_then(|frame| {
             crate::weapon_grip::weapon_left_grip_anchor_from_left_palm(presentation, frame)
         });
-    let root_contract = if first_person_active {
+    let root_contract = if let Some(root) = hand_anchored_fpp_root {
+        // Keep torso-derived shoulder pocket and elbow poles, but the weapon root itself is already
+        // authoritative: it came from the authored right-palm contact and the real sight axis.
+        // View/recoil are therefore not applied a second time while building auxiliary constraints.
+        crate::weapon_grip::weapon_ready_solve_contract_presented(
+            presentation,
+            chest,
+            right_shoulder,
+            left_shoulder,
+            None,
+            aim_alpha,
+            0.0,
+            0.0,
+        )
+        .map(|mut contract| {
+            contract.root = root;
+            let stock_from_handle = Vec3::new(
+                presentation.stock_contact_from_handle[0],
+                presentation.stock_contact_from_handle[1],
+                presentation.stock_contact_from_handle[2],
+            );
+            contract.stock_contact = crate::weapon_grip::weapon_handle_position(presentation, root)
+                + crate::weapon_grip::weapon_handle_rotation(presentation, root)
+                    * stock_from_handle;
+            contract
+        })
+    } else if let Some(root) = authored_prop_root {
+        // Native third-person equipment clips explicitly author the prop attachment. Preserve that
+        // transform as weapon authority instead of replacing it with a torso-derived approximation.
+        crate::weapon_grip::weapon_ready_solve_contract_presented(
+            presentation,
+            chest,
+            right_shoulder,
+            left_shoulder,
+            None,
+            aim_alpha,
+            0.0,
+            0.0,
+        )
+        .map(|mut contract| {
+            contract.root = root;
+            let stock_from_handle = Vec3::new(
+                presentation.stock_contact_from_handle[0],
+                presentation.stock_contact_from_handle[1],
+                presentation.stock_contact_from_handle[2],
+            );
+            contract.stock_contact = crate::weapon_grip::weapon_handle_position(presentation, root)
+                + crate::weapon_grip::weapon_handle_rotation(presentation, root)
+                    * stock_from_handle;
+            contract
+        })
+    } else if first_person_active {
         first_person_eye_model
             .zip(first_person_view_rotation_model)
             .and_then(|(eye, view_rotation)| {
@@ -591,20 +659,41 @@ fn apply_equipped_weapon_support_ik(
     };
     let base_contract = root_contract
         .and_then(|contract| {
-            crate::weapon_grip::weapon_ready_contract_with_contacts(
-                presentation,
-                contract,
-                handle_anchor,
-                support_anchor,
-                aim_alpha,
-                obstruction_alpha,
-            )
+            if authored_prop_root.is_some() {
+                Some(contract)
+            } else if hand_anchored_fpp_root.is_some() {
+                // Preserve exact hand-owned ADS orientation. With no explicit handle anchor this
+                // helper applies only the obstruction pivot; shoulder/support corrections would
+                // otherwise rotate the sight axis away from the gameplay view.
+                crate::weapon_grip::weapon_ready_contract_with_contacts(
+                    presentation,
+                    contract,
+                    None,
+                    None,
+                    aim_alpha,
+                    obstruction_alpha,
+                )
+            } else {
+                crate::weapon_grip::weapon_ready_contract_with_contacts(
+                    presentation,
+                    contract,
+                    handle_anchor,
+                    support_anchor,
+                    aim_alpha,
+                    obstruction_alpha,
+                )
+            }
         })
         .ok_or("weapon presentation could not resolve camera/torso contact constraint")?;
     // Reach fitting is valid only while torso/camera space owns translation. Once an authored
     // firing hand supplies the handle anchor, moving the root again would break the exact contact
     // and re-introduce the hand/root feedback loop this branch is designed to avoid.
-    let base_contract = if handle_anchor.is_some() {
+    let base_contract = if authored_prop_root.is_some()
+        || handle_anchor.is_some()
+        || hand_anchored_fpp_root.is_some()
+    {
+        // A hand-owned root must never be translated by reach fitting: that would break the exact
+        // right-palm/handle invariant. Residual contact error belongs to the bounded arm solver.
         base_contract
     } else {
         fit_weapon_contract_to_supported_arm_reach(
@@ -624,16 +713,29 @@ fn apply_equipped_weapon_support_ik(
         secondary_rotation_offset_local,
     )
     .ok_or("weapon ReadyHold could not resolve secondary constraint")?;
-    // always has a firing-hand master. Keep the fallback branch only for malformed/incomplete rigs.
+    // The prop socket owns the weapon root, but the physical hands still follow the final weapon
+    // contacts. This is a correction layer, not a search: at the canonical authored pose the solve
+    // is an identity/no-op; recoil, obstruction and secondary motion move the weapon first.
+    let native_prop_owned = authored_prop_root.is_some();
     let solve_right_hand = support_right_hand;
-    let right_target =
-        crate::weapon_grip::weapon_ready_right_palm_position(presentation, contract.root);
+    let solve_left_hand = support_left_hand;
+    let hand_owned_fpp = hand_anchored_fpp_root.is_some();
+    let right_target = if hand_owned_fpp {
+        crate::weapon_grip::weapon_hand_owned_right_palm_position(presentation, contract.root)
+    } else {
+        crate::weapon_grip::weapon_ready_right_palm_position(presentation, contract.root)
+    };
+    let right_rotation = if hand_owned_fpp {
+        crate::weapon_grip::weapon_hand_owned_right_palm_rotation(presentation, contract.root)
+    } else {
+        crate::weapon_grip::weapon_ready_right_palm_rotation(presentation, contract.root)
+    };
     let left_target =
         crate::weapon_grip::weapon_ready_left_palm_position(presentation, contract.root);
     if solve_right_hand && !right_target.is_finite() {
         return Err("weapon ReadyHold authored right-hand target is non-finite".to_owned());
     }
-    if support_left_hand && !left_target.is_finite() {
+    if solve_left_hand && !left_target.is_finite() {
         return Err("weapon ReadyHold authored support-hand target is non-finite".to_owned());
     }
 
@@ -649,11 +751,11 @@ fn apply_equipped_weapon_support_ik(
             rig.right_palm,
             right_target,
             contract.right_elbow_pole,
-            crate::weapon_grip::weapon_ready_right_palm_rotation(presentation, contract.root),
+            right_rotation,
             "right",
         )?;
     }
-    if support_left_hand {
+    if solve_left_hand {
         solve_arm_to_palm_contact(
             skeleton,
             animation_runtime,
@@ -672,74 +774,101 @@ fn apply_equipped_weapon_support_ik(
 
     // Each arm solve incrementally refreshed its affected branch, so the shared frame table is
     // already coherent here; a final full-skeleton FK pass would duplicate work every render frame.
+    let socket_frame_error = native_prop_owned
+        .then_some(rig.right_prop_attachment)
+        .flatten()
+        .and_then(|index| frames.get(index).copied())
+        .and_then(|frame| {
+            crate::weapon_grip::weapon_handle_frame_error_from_authored_socket(
+                presentation,
+                contract.root,
+                frame,
+            )
+        });
+    let socket_position_error = socket_frame_error
+        .map(|error| error.position_m)
+        .unwrap_or(0.0);
+    let socket_angular_error = socket_frame_error
+        .map(|error| error.angular_degrees)
+        .unwrap_or(0.0);
+    let right_error = if solve_right_hand {
+        (frames[rig.right_palm].transform_point3(Vec3::ZERO) - right_target).length()
+    } else {
+        0.0
+    };
+    let left_error = if solve_left_hand {
+        (frames[rig.left_palm].transform_point3(Vec3::ZERO) - left_target).length()
+    } else {
+        0.0
+    };
+
     if crate::env_config::var_os("NORTHSTAR_DEBUG_WEAPON_CONTACT_FRAMES").is_some() {
         static CONTACT_FRAME_SAMPLES: std::sync::atomic::AtomicUsize =
             std::sync::atomic::AtomicUsize::new(0);
         let sample = CONTACT_FRAME_SAMPLES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        if sample < 2 {
+        if sample < 8 {
             let handle = crate::weapon_grip::weapon_handle_position(presentation, contract.root);
+            let handle_rotation =
+                crate::weapon_grip::weapon_handle_rotation(presentation, contract.root);
             let left_grip =
                 crate::weapon_grip::weapon_ready_left_grip_position(presentation, contract.root);
             let right_palm_frame = frames[rig.right_palm];
             let left_palm_frame = frames[rig.left_palm];
             let right_palm = right_palm_frame.transform_point3(Vec3::ZERO);
             let left_palm = left_palm_frame.transform_point3(Vec3::ZERO);
-            let right_contact = crate::weapon_grip::weapon_handle_anchor_from_right_palm(
-                presentation,
-                right_palm_frame,
-            );
-            let left_contact = crate::weapon_grip::weapon_left_grip_anchor_from_left_palm(
-                presentation,
-                left_palm_frame,
-            );
-            let right_prop = rig
+            let (_, right_palm_rotation, _) = right_palm_frame.to_scale_rotation_translation();
+            let (_, left_palm_rotation, _) = left_palm_frame.to_scale_rotation_translation();
+            let right_prop_frame = rig
                 .right_prop_attachment
-                .and_then(|index| frames.get(index).copied())
-                .map(|frame| frame.transform_point3(Vec3::ZERO));
-            let left_prop = rig
+                .and_then(|index| frames.get(index).copied());
+            let left_prop_frame = rig
                 .left_prop_attachment
-                .and_then(|index| frames.get(index).copied())
-                .map(|frame| frame.transform_point3(Vec3::ZERO));
+                .and_then(|index| frames.get(index).copied());
+            let right_prop = right_prop_frame.map(|frame| frame.transform_point3(Vec3::ZERO));
+            let left_prop = left_prop_frame.map(|frame| frame.transform_point3(Vec3::ZERO));
+            let right_prop_rotation =
+                right_prop_frame.map(|frame| frame.to_scale_rotation_translation().1);
+            let left_prop_rotation =
+                left_prop_frame.map(|frame| frame.to_scale_rotation_translation().1);
             newengine_ulog_api::ulog::info!(
-                "WEAPON_CONTACT_FRAMES right_palm={:?} right_palm_to_handle_m={:.5} right_contact={:?} right_contact_error_m={:?} right_prop={:?} right_prop_reference_to_handle_m={:?} handle={:?} left_palm={:?} left_palm_to_grip_m={:.5} left_contact={:?} left_contact_error_m={:?} left_prop={:?} left_prop_reference_to_handle_m={:?} l_grip={:?}",
+                "WEAPON_CONTACT_FRAMES right_handle_error_cm={:.4} left_support_error_cm={:.4} weapon_socket_position_error_cm={:.4} weapon_socket_angular_error_deg={:.4} right_palm={:?} right_palm_rotation={:?} right_prop={:?} right_prop_rotation={:?} handle={:?} handle_rotation={:?} left_palm={:?} left_palm_rotation={:?} left_prop={:?} left_prop_rotation={:?} l_grip={:?} weapon_root_position={:?} weapon_root_rotation={:?} native_rig_to_runtime_basis={:?} authored_socket_to_weapon_handle_basis={:?} handle_from_root={:?} handle_rotation_from_root={:?}",
+                right_error * 100.0,
+                left_error * 100.0,
+                socket_position_error * 100.0,
+                socket_angular_error,
                 right_palm,
-                (right_palm - handle).length(),
-                right_contact,
-                right_contact.map(|value| (value - handle).length()),
+                right_palm_rotation,
                 right_prop,
-                right_prop.map(|value| (value - handle).length()),
+                right_prop_rotation,
                 handle,
+                handle_rotation,
                 left_palm,
-                (left_palm - left_grip).length(),
-                left_contact,
-                left_contact.map(|value| (value - left_grip).length()),
+                left_palm_rotation,
                 left_prop,
-                left_prop.map(|value| (value - handle).length()),
+                left_prop_rotation,
                 left_grip,
+                contract.root.position,
+                contract.root.rotation,
+                presentation.native_rig_to_runtime_basis,
+                presentation.authored_socket_to_weapon_handle_basis,
+                presentation.handle_from_root,
+                presentation.handle_rotation_from_root,
             );
         }
     }
-    let right_error = if solve_right_hand {
-        (frames[rig.right_palm].transform_point3(Vec3::ZERO) - right_target).length()
-    } else {
-        0.0
-    };
-    let left_error = if support_left_hand {
-        (frames[rig.left_palm].transform_point3(Vec3::ZERO) - left_target).length()
-    } else {
-        0.0
-    };
     // Stock/shoulder is intentionally a soft angular constraint. It must not be promoted to a
     // hard IK failure because different authored body proportions legitimately leave a few cm of
-    // stock compression/clearance. Hand contact residual is the hard invariant.
-    let error = right_error.max(left_error);
-    if !error.is_finite() {
+    // stock compression/clearance. Hand and socket/handle residuals are hard invariants.
+    let error = right_error.max(left_error).max(socket_position_error);
+    if !error.is_finite() || !socket_angular_error.is_finite() {
         return Err("weapon ReadyHold IK produced non-finite contact error".to_owned());
     }
     Ok(Some(WeaponIkSolveResult {
         error_m: error,
         right_error_m: right_error,
         left_error_m: left_error,
+        socket_position_error_m: socket_position_error,
+        socket_angular_error_deg: socket_angular_error,
         base_root,
     }))
 }

@@ -184,10 +184,8 @@ fn definition_surface_binding(definition: &ResolvedMapDefinitionEntry) -> Defini
         else {
             continue;
         };
-        for namespace in ["newengine.physics.surface", "engine.physics.surface"] {
-            if let Some(binding) = root.get(namespace).and_then(parse) {
-                return binding;
-            }
+        if let Some(binding) = root.get("engine.physics.surface").and_then(parse) {
+            return binding;
         }
     }
     DefinitionSurfaceBinding::default()
@@ -408,7 +406,7 @@ mod project_surface_metadata_tests {
         entry.arbitrary_metadata.insert(
             "metadata".to_owned(),
             serde_json::json!({
-                "newengine.physics.surface": {
+                "engine.physics.surface": {
                     "id": "project.deck.grating",
                     "events": {
                         "contact": "project.contact.boot_grating",

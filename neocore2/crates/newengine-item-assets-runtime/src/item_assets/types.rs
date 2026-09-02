@@ -285,6 +285,7 @@ pub struct AuthoredWeaponDefinition {
     pub reserve_capacity: u32,
     pub fire_interval: f32,
     pub reload_duration: f32,
+    pub reload_topology: String,
     pub damage: f32,
     pub range: f32,
     pub hip_spread_degrees: f32,
@@ -339,6 +340,7 @@ impl Default for AuthoredWeaponDefinition {
             reserve_capacity: tuning.reserve_capacity,
             fire_interval: tuning.fire_interval,
             reload_duration: tuning.reload_duration,
+            reload_topology: "detachable_magazine".to_owned(),
             damage: tuning.damage,
             range: tuning.range,
             hip_spread_degrees: tuning.hip_spread_radians.to_degrees(),
@@ -457,10 +459,21 @@ impl AuthoredWeaponDefinition {
 
     pub(super) fn runtime_profiles(&self) -> Result<WeaponRuntimeProfiles, String> {
         let tuning = self.tuning();
-        self.profiles
+        let mut profiles = self
+            .profiles
             .as_ref()
             .map(|profiles| profiles.compile(tuning))
-            .unwrap_or_else(|| Ok(WeaponRuntimeProfiles::from_legacy_tuning(tuning)))
+            .unwrap_or_else(|| Ok(WeaponRuntimeProfiles::from_legacy_tuning(tuning)))?;
+        if self
+            .profiles
+            .as_ref()
+            .and_then(|profiles| profiles.handling.reload_topology.as_ref())
+            .is_none()
+        {
+            profiles.handling.reload_topology =
+                crate::weapon_profiles::parse_reload_topology(&self.reload_topology)?;
+        }
+        Ok(profiles.sanitized())
     }
 
     pub(super) fn tuning(&self) -> HitscanWeaponTuning {
@@ -531,6 +544,7 @@ impl AuthoredWeaponAnimationDefinition {
 pub struct AuthoredWeaponPresentationDefinition {
     pub enabled: bool,
     pub handle_from_root: [f32; 3],
+    pub handle_rotation_from_root: [f32; 4],
     pub muzzle_from_root: [f32; 3],
     pub left_grip_from_handle: [f32; 3],
     pub stock_contact_from_handle: [f32; 3],
@@ -550,6 +564,7 @@ pub struct AuthoredWeaponPresentationDefinition {
     pub right_palm_to_native_rig: [f32; 4],
     /// Authored native-rig -> runtime basis correction for weapon-space offsets and orientation.
     pub native_rig_to_runtime_basis: [f32; 4],
+    pub authored_socket_to_weapon_handle_basis: [f32; 4],
     pub first_person_hip_handle_offset: [f32; 3],
     pub first_person_full_body_hip_handle_offset: Option<[f32; 3]>,
     pub ads_rear_sight_from_handle: [f32; 3],
@@ -573,6 +588,7 @@ impl Default for AuthoredWeaponPresentationDefinition {
         Self {
             enabled: runtime.enabled,
             handle_from_root: runtime.handle_from_root,
+            handle_rotation_from_root: runtime.handle_rotation_from_root,
             muzzle_from_root: runtime.muzzle_from_root,
             left_grip_from_handle: runtime.left_grip_from_handle,
             stock_contact_from_handle: runtime.stock_contact_from_handle,
@@ -589,6 +605,7 @@ impl Default for AuthoredWeaponPresentationDefinition {
             right_palm_to_handle: runtime.right_palm_to_handle,
             right_palm_to_native_rig: runtime.right_palm_to_native_rig,
             native_rig_to_runtime_basis: runtime.native_rig_to_runtime_basis,
+            authored_socket_to_weapon_handle_basis: runtime.authored_socket_to_weapon_handle_basis,
             first_person_hip_handle_offset: runtime.first_person_hip_handle_offset,
             first_person_full_body_hip_handle_offset: None,
             ads_rear_sight_from_handle: runtime.ads_rear_sight_from_handle,
@@ -613,6 +630,7 @@ impl AuthoredWeaponPresentationDefinition {
         WeaponPresentationDefinition {
             enabled: self.enabled,
             handle_from_root: self.handle_from_root,
+            handle_rotation_from_root: self.handle_rotation_from_root,
             muzzle_from_root: self.muzzle_from_root,
             left_grip_from_handle: self.left_grip_from_handle,
             stock_contact_from_handle: self.stock_contact_from_handle,
@@ -629,6 +647,7 @@ impl AuthoredWeaponPresentationDefinition {
             right_palm_to_handle: self.right_palm_to_handle,
             right_palm_to_native_rig: self.right_palm_to_native_rig,
             native_rig_to_runtime_basis: self.native_rig_to_runtime_basis,
+            authored_socket_to_weapon_handle_basis: self.authored_socket_to_weapon_handle_basis,
             first_person_hip_handle_offset: self.first_person_hip_handle_offset,
             first_person_full_body_hip_handle_offset: self
                 .first_person_full_body_hip_handle_offset

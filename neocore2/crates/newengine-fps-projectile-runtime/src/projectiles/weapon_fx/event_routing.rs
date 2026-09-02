@@ -99,10 +99,15 @@ pub fn consume_weapon_gameplay_events(world: &mut World, events: &[GameplayEvent
 
         match event.id.as_str() {
             GAMEPLAY_EVENT_WEAPON_FIRED => {
-                let Some(origin) = payload_vec3(&event.payload, "shot_origin") else {
+                // The weapon presentation publishes the physical barrel pose separately from the
+                // converged ballistic ray. Never reconstruct muzzle VFX from shot/camera data.
+                let Some(muzzle_position) = payload_vec3(&event.payload, "muzzle_position") else {
                     continue;
                 };
-                let Some(direction) = payload_vec3(&event.payload, "shot_direction") else {
+                let Some(muzzle_forward) = payload_vec3(&event.payload, "muzzle_forward") else {
+                    continue;
+                };
+                let Some(shot_direction) = payload_vec3(&event.payload, "shot_direction") else {
                     continue;
                 };
                 let range = event
@@ -111,7 +116,15 @@ pub fn consume_weapon_gameplay_events(world: &mut World, events: &[GameplayEvent
                     .and_then(serde_json::Value::as_f64)
                     .map(|value| value as f32)
                     .unwrap_or(0.0);
-                spawn_weapon_shot_fx(world, owner, shot_sequence, origin, direction, range);
+                spawn_weapon_shot_fx(
+                    world,
+                    owner,
+                    shot_sequence,
+                    muzzle_position,
+                    muzzle_forward,
+                    shot_direction,
+                    range,
+                );
             }
             GAMEPLAY_EVENT_WEAPON_HIT => {
                 if event

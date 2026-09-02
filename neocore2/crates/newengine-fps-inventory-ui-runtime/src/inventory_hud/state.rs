@@ -126,15 +126,6 @@ impl InventoryHudState {
         }
     }
 
-    pub(super) fn navigate_character_select(&mut self, delta: isize, count: usize) {
-        if !self.character_select_open || count == 0 || delta == 0 {
-            return;
-        }
-        let current = self.character_nav_index.min(count - 1) as isize;
-        let next = (current + delta).rem_euclid(count as isize) as usize;
-        self.set_character_nav_index(next, count);
-    }
-
     pub(super) fn close_character_select(&mut self) {
         if self.character_select_open {
             self.character_select_open = false;

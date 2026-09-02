@@ -34,6 +34,10 @@ pub struct SimulationScheduleTiming {
     pub derived_ms: f32,
     pub after_derived_ms: f32,
     pub capability_dispatch_ms: f32,
+    pub capability_requested: usize,
+    pub capability_executed: usize,
+    pub capability_missing: usize,
+    pub capability_failed: usize,
     pub animation_state_ms: f32,
     pub total_ms: f32,
 }
@@ -67,6 +71,16 @@ impl SimSystemBatchExecutor for EngineJobsSimSystemExecutor<'_> {
         frame: SimFrame,
         systems: Vec<SimSystemJob>,
     ) -> SimSystemBatchResult {
+        // Controller batches are intentionally small and latency-sensitive. Sending one or two
+        // trivial controller systems through the shared engine worker queue and immediately
+        // waiting for their body-ready barrier turns unrelated worker saturation into simulation
+        // latency (the profiler observed 20..121 ms controller stalls). Keep those tiny batches on
+        // the owner thread; wider batches still use engine.threading where independent work can
+        // amortize scheduling and synchronization overhead.
+        if should_inline_controller_batch(batch, &systems) {
+            return run_inline_sim_system_batch(batch, world.as_ref(), frame, systems);
+        }
+
         const BODY_JOIN_BUDGET: Duration = Duration::from_millis(8);
         const BODY_WAIT_SLICE: Duration = Duration::from_millis(1);
         const STALL_REPORT_INTERVAL: Duration = Duration::from_millis(250);
@@ -209,6 +223,62 @@ impl SimSystemBatchExecutor for EngineJobsSimSystemExecutor<'_> {
     }
 }
 
+fn should_inline_controller_batch(batch: &SimulationJobBatch, systems: &[SimSystemJob]) -> bool {
+    if batch.stage != SimStage::Controllers {
+        return false;
+    }
+    // A singleton batch has no parallelism to exploit, so queueing it can only add latency.
+    if systems.len() <= 1 {
+        return true;
+    }
+    // The stock motor/orbit pair is deliberately tiny. Keep custom two-system batches eligible
+    // for true parallel execution because they may contain materially expensive project work.
+    systems.len() == 2
+        && systems
+            .iter()
+            .any(|system| system.name == "character_motor")
+        && systems.iter().any(|system| system.name == "orbit_camera")
+}
+
+fn run_inline_sim_system_batch(
+    batch: &SimulationJobBatch,
+    world: &World,
+    frame: SimFrame,
+    systems: Vec<SimSystemJob>,
+) -> SimSystemBatchResult {
+    let wall_started = Instant::now();
+    let mut worker_cpu_ns = 0u64;
+    let mut commands = Vec::with_capacity(systems.len());
+
+    for system in systems {
+        let started = Instant::now();
+        let mut command_buffer = CommandBuffer::new();
+        let body_result = catch_unwind(AssertUnwindSafe(|| {
+            (system.function)(world, frame, &mut command_buffer);
+        }));
+        worker_cpu_ns = worker_cpu_ns
+            .saturating_add(started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64);
+        if body_result.is_err() {
+            command_buffer = CommandBuffer::new();
+            newengine_ulog_api::ulog::error!(
+                "simulation inline system body panicked: batch='{}' system='{}' stage='{}' frame={}; command buffer discarded",
+                batch.task_id,
+                system.name,
+                batch.stage.as_str(),
+                frame.fixed_tick,
+            );
+        }
+        commands.push(SimSystemCommandBatch::new(
+            system.system_index,
+            system.name,
+            command_buffer,
+        ));
+    }
+
+    let worker_wall_time_ns = wall_started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64;
+    SimSystemBatchResult::new(commands, worker_wall_time_ns, worker_cpu_ns)
+}
+
 fn run_sim_stage(
     schedule: &mut SimSchedule,
     world: &mut World,
@@ -345,6 +415,11 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
     schedule.run_stage_with_telemetry(world, SimStage::ApplyIntents, frame, telemetry);
     timing.apply_intents_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
 
+    // Character vitals consume semantic controller exertion at the fixed-step boundary.
+    // This keeps local input, remote controllers and future AI on the same stamina contract.
+    crate::gameplay::update_character_vitals(world, frame.dt);
+    crate::gameplay::update_character_damage_states(world, frame.dt);
+
     // Profile-owned authored content is installed explicitly before gameplay execution.
     // Generic engine code never manufactures FPS items/loadouts as a fallback.
     let phase_started = Instant::now();
@@ -409,6 +484,10 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
 
     let phase_started = Instant::now();
     let capability_report = crate::gameplay::dispatch_gameplay_capabilities(world);
+    timing.capability_requested = capability_report.requested;
+    timing.capability_executed = capability_report.executed;
+    timing.capability_missing = capability_report.missing.len();
+    timing.capability_failed = capability_report.failed.len();
     for capability in capability_report.missing {
         newengine_ulog_api::ulog::warn!(
             "gameplay capability provider missing capability='{}'",
@@ -420,10 +499,10 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
     }
     timing.capability_dispatch_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
 
-    // Player locomotion animation state is derived from authoritative post-physics
-    // motion/grounding. The skeletal backend consumes this semantic state separately.
+    // Character locomotion animation state is derived from authoritative post-physics
+    // motion/grounding. Possessed players and AI/NPC actors share the same semantic contract.
     let phase_started = Instant::now();
-    crate::gameplay::update_player_animation_states(world, frame.dt);
+    crate::gameplay::update_character_animation_states(world, frame.dt);
     timing.animation_state_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
     timing.total_ms = schedule_started.elapsed().as_secs_f32() * 1000.0;
     timing
@@ -470,6 +549,41 @@ mod tests {
         if *started < 2 {
             probe.state.timed_out.store(true, Ordering::Release);
         }
+    }
+
+    #[test]
+    fn tiny_stock_controller_batches_stay_inline_but_custom_pairs_remain_parallel_eligible() {
+        use newengine_sim::AccessMask;
+
+        let batch = SimulationJobBatch::new(
+            SimStage::Controllers,
+            SimFrame::new(0.016, 77),
+            0,
+            1,
+            2,
+            "engine.threading",
+        );
+        let system = |system_index, name| SimSystemJob {
+            system_index,
+            order: system_index as i32,
+            seq: system_index as u32,
+            name,
+            access: AccessMask::write(system_index as u32),
+            function: parallel_probe_system,
+        };
+
+        assert!(should_inline_controller_batch(
+            &batch,
+            &[system(0, "character_motor")]
+        ));
+        assert!(should_inline_controller_batch(
+            &batch,
+            &[system(0, "character_motor"), system(1, "orbit_camera")]
+        ));
+        assert!(!should_inline_controller_batch(
+            &batch,
+            &[system(0, "project_ai"), system(1, "project_camera")]
+        ));
     }
 
     #[test]

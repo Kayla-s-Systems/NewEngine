@@ -22,16 +22,10 @@ use crate::{
 
 pub const GAME_READY_UI_SCREEN_PROFILE_ENV: &str =
     "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__profile";
-pub const GAME_READY_UI_ROOT_SURFACE_ENV: &str =
-    "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__game_ui_root_surface_id";
-pub const GAME_READY_UI_DOCUMENT_ENV: &str =
-    "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__game_ui_document_ref";
 pub const GAME_READY_UI_PUBLISH_EDITOR_SHELL_ENV: &str =
     "NEWENGINE_PLUGIN_ENGINE_RUNTIME__ui__screen_profile__publish_editor_shell";
 
 pub const GAME_READY_UI_PROFILE_GAME: &str = "game";
-/// Canonical authored gameplay HUD surface mounted by the shipping FPS profile.
-pub const GAME_READY_UI_ROOT_SURFACE_GAME: &str = "game.hud";
 
 pub const GAME_READY_FPS_BOOT_OPTIONS: &[RuntimeHostBootOption] = &[
     RuntimeHostBootOption::RuntimeBootstrapOverlay,
@@ -69,9 +63,6 @@ pub const GAME_READY_CORE_ENV_POLICY: &[(&str, &str)] = &[
     ("NEWENGINE_SCENE_TEXTURE_GATE_SOFT_TIMEOUT_MS", "90000"),
 ];
 
-/// Backward-compatible name for editor/runtime demo launchers.
-pub const GAME_READY_RUNTIME_ENV_DEFAULTS: &[(&str, &str)] = GAME_READY_CORE_ENV_POLICY;
-
 /// Canonical env policy for the shipping FPS vertical slice.
 pub const GAME_READY_FPS_ENV_POLICY: &[(&str, &str)] = &[
     ("NEWENGINE_GAME_FPS_DEMO", "1"),
@@ -91,9 +82,6 @@ pub const GAME_READY_FPS_ENV_POLICY: &[(&str, &str)] = &[
     ("NEWENGINE_SCENE_TEXTURE_GATE_SOFT_TIMEOUT_MS", "90000"),
     (GAME_READY_UI_SCREEN_PROFILE_ENV, GAME_READY_UI_PROFILE_GAME),
 ];
-
-/// Backward-compatible name for the standalone game viewport policy.
-pub const GAME_READY_GAME_UI_ENV_DEFAULTS: &[(&str, &str)] = GAME_READY_FPS_ENV_POLICY;
 
 /// Applies the shipping GameReady policy before a registered runtime-profile handoff.
 /// Explicit caller/project environment values win; profile defaults fill only missing keys.
@@ -324,8 +312,6 @@ mod tests {
             value(GAME_READY_UI_SCREEN_PROFILE_ENV),
             Some(GAME_READY_UI_PROFILE_GAME)
         );
-        assert_eq!(value(GAME_READY_UI_ROOT_SURFACE_ENV), None);
-        assert_eq!(value(GAME_READY_UI_DOCUMENT_ENV), None);
         assert_eq!(value(GAME_READY_UI_PUBLISH_EDITOR_SHELL_ENV), None);
     }
 

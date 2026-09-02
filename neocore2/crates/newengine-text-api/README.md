@@ -41,7 +41,7 @@ filesystem backend or shaping implementation may be coupled here.
 - Keep `lib.rs` as a facade; put domain contracts in focused modules.
 - Preserve provider neutrality: implementations resolve through `engine.ui.text`.
 - Renderers consume shaped/atlased draw data and do not own localization or layout policy.
-- Runtime assets use `.neftd`/engine-assets references rather than raw font files.
+- Runtime assets use `.yfd`/engine-assets references rather than raw font files.
 - Keep service methods versioned and DTO defaults backward compatible.
 
 <!-- NORTHSTAR-DIR-README:END -->

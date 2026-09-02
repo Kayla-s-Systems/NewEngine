@@ -3,9 +3,11 @@
 //! Data-only FPS gameplay contracts. Engine input/runtime crates do not depend on this crate;
 //! FPS gameplay, profiles and script adapters share it to interpret generic semantic transport.
 
+mod actuation;
 mod policy;
 mod runtime;
 
+pub use actuation::{FpsActorLoadoutRequest, FpsActorWeaponMountTuning, FpsAiCombatTuning};
 pub use policy::{
     FpsCallbackExports, FpsCharacterMenuPolicyProvider, FpsCharacterMenuPolicySnapshot,
     FpsCombatPolicy, FpsGameplayPolicyProvider, FpsGameplayPolicySnapshot, FpsMissionPolicy,

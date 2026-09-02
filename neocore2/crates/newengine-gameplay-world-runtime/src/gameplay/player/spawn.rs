@@ -67,6 +67,11 @@ pub fn spawn_player_controller(
     let _ = world.insert(e, motion);
     let _ = world.insert(e, PlayerMovementSpeeds::default());
     let _ = world.insert(e, Health::default());
+    let _ = world.insert(e, CharacterLifeState::Alive);
+    let _ = world.insert(e, CharacterControlState::enabled());
+    let _ = world.insert(e, Stamina::default());
+    let _ = world.insert(e, StaminaTuning::default());
+    let _ = world.insert(e, CharacterExertionState::default());
     // Inventory storage is generic. Concrete catalogs/loadouts are installed by gameplay providers.
     ensure_player_inventory(world, e);
     let _ = world.insert(e, PlayerGroundState::default());

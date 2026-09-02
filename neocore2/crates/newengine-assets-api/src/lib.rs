@@ -71,8 +71,7 @@ pub mod asset_source_role {
 /// Stable semantic texture domain id used by `.ytd` format descriptors.
 /// Runtime texture bytes are decoded through `engine.assets` `asset.decode_v1`; there is no
 /// standalone `engine.assets.textures` provider or backend capability.
-pub const ENGINE_ASSETS_TEXTURES_SERVICE_ID: &str =
-    newengine_service_api::ENGINE_ASSETS_TEXTURES_GATEWAY_ID;
+pub const ENGINE_ASSETS_TEXTURES_SERVICE_ID: &str = "engine.assets.textures";
 /// Semantic definition/archetype metadata gateway id. File-type descriptors route
 /// `.ytyp` meaning here; scene/world systems may consume definitions later, but
 /// do not own the file type.

@@ -447,6 +447,10 @@ fn emit_simulation_tick_profile(
         "schedule_derived_ms": schedule_timing.derived_ms,
         "schedule_after_derived_ms": schedule_timing.after_derived_ms,
         "schedule_capability_dispatch_ms": schedule_timing.capability_dispatch_ms,
+        "schedule_capability_requested": schedule_timing.capability_requested,
+        "schedule_capability_executed": schedule_timing.capability_executed,
+        "schedule_capability_missing": schedule_timing.capability_missing,
+        "schedule_capability_failed": schedule_timing.capability_failed,
         "schedule_animation_state_ms": schedule_timing.animation_state_ms,
         "capture_fixed_pose_ms": capture_fixed_pose_ms,
     });

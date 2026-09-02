@@ -181,565 +181,189 @@ fn spawn_mission_primitive(
     )
 }
 
-fn rotated_box_half_height(half_extents: Vec3, rotation: Quat) -> f32 {
-    let x = rotation * Vec3::X;
-    let y = rotation * Vec3::Y;
-    let z = rotation * Vec3::Z;
-    (x.y.abs() * half_extents.x + y.y.abs() * half_extents.y + z.y.abs() * half_extents.z).max(0.01)
-}
+#[path = "mission/world_items.rs"]
+mod world_items;
 
-fn decoded_model_bounds(decoded: &[DecodedPrefabMeshPart]) -> Result<(Vec3, Vec3), String> {
-    let mut min = Vec3::splat(f32::INFINITY);
-    let mut max = Vec3::splat(f32::NEG_INFINITY);
-    for part in decoded {
-        for vertex in &part.mesh.vertices {
-            let point = Vec3::new(vertex.pos[0], vertex.pos[1], vertex.pos[2]);
-            min = min.min(point);
-            max = max.max(point);
-        }
-    }
-    let extent = max - min;
-    if !min.is_finite() || !max.is_finite() || extent.x <= 0.0 || extent.y <= 0.0 || extent.z <= 0.0
-    {
-        return Err("world-item YDD produced invalid/non-finite geometry bounds".to_owned());
-    }
-    Ok((min, max))
-}
+#[cfg(test)]
+use world_items::{
+    scaled_world_item_half_extents, world_item_material_asset, world_item_render_options,
+};
+pub(super) use world_items::{tick_deferred_item_pickups, tick_runtime_world_item_visuals};
 
-#[inline]
-fn world_item_material_asset(
-    part_material_ref: Option<&str>,
-    material_slot: &str,
-    fallback_material_library: Option<&str>,
-) -> Option<String> {
-    match part_material_ref {
-        Some(reference) if reference.contains('@') => Some(reference.trim().to_owned()),
-        Some(reference) if !reference.trim().is_empty() => {
-            Some(format!("{}@{}", reference.trim(), material_slot))
-        }
-        _ => fallback_material_library
-            .map(str::trim)
-            .filter(|reference| !reference.is_empty())
-            .map(|reference| {
-                if reference.contains('@') {
-                    reference.to_owned()
-                } else {
-                    format!("{reference}@{material_slot}")
-                }
-            }),
-    }
-}
-
-fn register_world_item_part_material(
-    mats: &MaterialRegistry,
-    pickup_id: &str,
-    part_index: usize,
-    part: &DecodedPrefabMeshPart,
-    fallback_material_library: Option<&str>,
-) -> Result<MaterialId, String> {
-    let material_asset = world_item_material_asset(
-        part.material_ref.as_deref(),
-        &part.material_slot,
-        fallback_material_library,
-    );
-    let spec = GameReadyMaterialSpec {
-        asset: material_asset,
-        base_color_texture: None,
-        normal_texture: None,
-        roughness_texture: None,
-        uv_scale: [1.0, 1.0],
-        uv_offset: [0.0, 0.0],
-        roughness: 0.72,
-        normal_scale: 1.0,
-        occlusion_strength: 1.0,
-    };
-    let diagnostic_color = match part.material_slot.as_str() {
-        "m00" => [0.10, 0.13, 0.10, 1.0], // dark synthetic/polymer furniture
-        "m01" => [0.07, 0.08, 0.09, 1.0], // blued/gunmetal receiver and barrel
-        _ => [0.12, 0.13, 0.13, 1.0],
-    };
-    let logical_name = format!(
-        "WorldItem/{pickup_id}/Part{part_index}:{}",
-        part.material_slot
-    );
-    let material_id = register_required_material(
-        mats,
-        &logical_name,
-        MaterialFlags::CAST_SHADOWS.union(MaterialFlags::RECEIVE_SHADOWS),
-        &spec,
-    )?;
-    let resolved = newengine_materials::api::MaterialRegistryApi::resolve(mats, material_id)
-        .ok_or_else(|| {
-            format!(
-                "required world-item material disappeared after registration name='{logical_name}'"
-            )
-        })?;
-    let mut missing = Vec::new();
-    if resolved.textures.base_color_texture.is_none() {
-        missing.push("base_color");
-    }
-    if resolved.textures.normal_texture.is_none() {
-        missing.push("normal");
-    }
-    if resolved.textures.roughness_texture.is_none() {
-        missing.push("roughness");
-    }
-    if !missing.is_empty() {
-        return Err(format!(
-            "required world-item PBR material is incomplete name='{}' asset={:?} missing={:?}",
-            logical_name, spec.asset, missing
-        ));
-    }
-    let _ = diagnostic_color; // retained as a readable slot-class diagnostic reference.
-    Ok(material_id)
-}
-
-fn world_item_render_options() -> newengine_model_domain_api::MeshRenderOptions {
-    let mut options = newengine_model_domain_api::MeshRenderOptions::world_opaque();
-    options.shadow_policy = newengine_model_domain_api::MeshShadowPolicy::CastAndReceive;
-    options
-}
-
-fn bind_world_item_model_from_decoded(
+fn normalize_character_actor_presentation_basis(
     world: &mut newengine_ecs::World,
-    prims: &mut PrimitiveRegistry,
-    mats: &MaterialRegistry,
-    owner: EntityId,
-    pickup_id: &str,
-    authored_scale: Vec3,
-    decoded: &[DecodedPrefabMeshPart],
-    fallback_material_library: Option<&str>,
-) -> Result<u32, String> {
-    let presentation = world
-        .get::<newengine_engine_runtime::gameplay::WorldItemPresentation>(owner)
-        .cloned()
-        .ok_or_else(|| "world item has no presentation component".to_owned())?;
-    let visual_root = presentation.visual_entity;
-    if !world.exists(visual_root) {
-        return Err("world item visual root no longer exists".to_owned());
-    }
-    let (bounds_min, bounds_max) = decoded_model_bounds(decoded)?;
-    let center = (bounds_min + bounds_max) * 0.5;
-
-    let base_scale = presentation.scale;
-    if let Some(transform) = world.get_mut_tracked::<Transform>(visual_root) {
-        transform.position = Vec3::ZERO;
-        transform.rotation = Quat::IDENTITY;
-        transform.scale = Vec3::new(
-            base_scale.x * authored_scale.x,
-            base_scale.y * authored_scale.y,
-            base_scale.z * authored_scale.z,
-        );
-    }
-
-    // Resolve the complete authored material set before mutating the visual hierarchy. This keeps
-    // late runtime admission atomic: a temporarily unavailable m01 cannot leave a duplicated m00
-    // child behind for the next retry.
-    let material_ids = decoded
-        .iter()
-        .enumerate()
-        .map(|(part_index, part)| {
-            register_world_item_part_material(
-                mats,
-                pickup_id,
-                part_index,
-                part,
-                fallback_material_library,
-            )
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-
-    let mut spawned = 0u32;
-    for ((part_index, part), material_id) in decoded.iter().enumerate().zip(material_ids) {
-        if !prims.is_registered(part.primitive_id) {
-            prims.register_mesh(part.primitive_id, part.name.clone(), part.mesh.clone());
-        }
-        let child = spawn_game_primitive(
-            world,
-            &*prims,
-            mats,
-            PrimitiveSpawnSpec {
-                parent: visual_root,
-                primitive_id: part.primitive_id,
-                material_id,
-                name: &format!("WorldItem/{pickup_id}/{}-{part_index}", part.material_slot),
-                position: -center,
-                scale: Vec3::ONE,
-                color: [1.0, 1.0, 1.0, 1.0],
-                render_options: world_item_render_options(),
-            },
-        );
-        let _ = world.insert(
-            child,
-            newengine_engine_runtime::gameplay::WorldItemVisualPart { owner },
-        );
-        let _ = world.insert(
-            child,
-            newengine_engine_runtime::gameplay::DisplayVisibility::default(),
-        );
-        spawned = spawned.saturating_add(1);
-    }
-
-    if spawned == 0 {
-        return Err("world-item YDD contains no renderable parts".to_owned());
-    }
-    // The primitive created by generic inventory code is a boot-safe fallback only.
-    // Keep it until every authored YDD part has been admitted, then remove it atomically.
-    let _ = world.remove::<Primitive>(visual_root);
-    newengine_ulog_api::ulog::info!(
-        "game-ready world item model bound id='{}' owner={:?} model='{}' parts={} center={:?} policy='ItemPickup -> YDD/NEMAT exact authored visual; fallback primitive removed after admission'",
-        pickup_id,
-        owner,
-        presentation.model_ref.as_deref().unwrap_or(""),
-        spawned,
-        center,
-    );
-    Ok(spawned)
-}
-
-fn try_spawn_deferred_world_item(
-    world: &mut newengine_ecs::World,
-    prims: &mut PrimitiveRegistry,
-    mats: &MaterialRegistry,
-    pending: &DeferredWorldItemPickup,
-) -> Result<EntityId, String> {
-    let item_name = pending
-        .spec
-        .item
-        .as_deref()
-        .ok_or_else(|| "deferred item pickup has no item id".to_owned())?;
-    let item = newengine_engine_runtime::gameplay::ItemId::from_name(item_name)
-        .ok_or_else(|| format!("invalid authored item id '{item_name}'"))?;
-    let definition = world
-        .resource::<newengine_engine_runtime::gameplay::ItemCatalog>()
-        .and_then(|catalog| catalog.get(item))
-        .cloned()
-        .ok_or_else(|| format!("item definition is not installed id='{item_name}'"))?;
-    let world_definition = definition.world.clone().sanitized();
-
-    let decoded = match world_definition.model_ref.as_deref() {
-        Some(model_ref) => {
-            pin_mission_asset(world, model_ref).map_err(|error| {
-                format!("mission model residency pin failed path='{model_ref}': {error}")
-            })?;
-            if let Some(material_ref) = world_definition.material_library_ref.as_deref() {
-                pin_mission_asset(world, material_ref).map_err(|error| {
-                    format!("mission material residency pin failed path='{material_ref}': {error}")
-                })?;
-            }
-            Some(decode_runtime_ydd_prefab(model_ref).map_err(|error| {
-                format!("world-item model decode failed path='{model_ref}': {error}")
-            })?)
-        }
-        None => None,
-    };
-
-    let rotation = Quat::from_euler(
-        EulerRot::YXZ,
-        pending.spec.rotation_ypr.x,
-        pending.spec.rotation_ypr.y,
-        pending.spec.rotation_ypr.z,
-    );
-    let local_half_extents = Vec3::new(
-        world_definition.pickup_half_extents[0] * pending.spec.scale.x.abs(),
-        world_definition.pickup_half_extents[1] * pending.spec.scale.y.abs(),
-        world_definition.pickup_half_extents[2] * pending.spec.scale.z.abs(),
-    );
-    let position = mission_position(
-        world,
-        pending.terrain,
-        pending.spec.position,
-        rotated_box_half_height(local_half_extents, rotation),
-    );
-    let entity = newengine_engine_runtime::gameplay::spawn_persistent_item_pickup(
-        world,
-        Some(pending.parent),
-        item,
-        pending.spec.quantity,
-        position,
-        &pending.spec.id,
-        0.0,
-    )?;
+    entity: EntityId,
+) {
     if let Some(transform) = world.get_mut_tracked::<Transform>(entity) {
-        transform.rotation = rotation;
+        transform.scale = Vec3::ONE;
     }
-    if let Some(pickup) = world.get_mut::<newengine_engine_runtime::gameplay::ItemPickup>(entity) {
-        pickup.auto_equip = pending.spec.auto_equip;
-    }
-
-    if let Some(decoded) = decoded.as_deref() {
-        bind_world_item_model_from_decoded(
-            world,
-            prims,
-            mats,
-            entity,
-            &pending.spec.id,
-            pending.spec.scale,
-            decoded,
-            world_definition.material_library_ref.as_deref(),
-        )?;
-    }
-
-    newengine_ulog_api::ulog::info!(
-        "game-ready inventory pickup spawned id='{}' item='{}' entity={:?} quantity={} auto_equip={} position={:?} rotation_ypr={:?} model={:?}",
-        pending.spec.id,
-        item_name,
-        entity,
-        pending.spec.quantity,
-        pending.spec.auto_equip,
-        position,
-        pending.spec.rotation_ypr,
-        world_definition.model_ref,
-    );
-    Ok(entity)
 }
 
-fn scaled_world_item_half_extents(min: Vec3, max: Vec3, scale: Vec3) -> Result<Vec3, String> {
-    let extent = max - min;
-    if !min.is_finite()
-        || !max.is_finite()
-        || !scale.is_finite()
-        || extent.x <= 0.0
-        || extent.y <= 0.0
-        || extent.z <= 0.0
-    {
-        return Err("world-item physical bounds are invalid".to_owned());
-    }
-    let scale = Vec3::new(scale.x.abs(), scale.y.abs(), scale.z.abs());
-    let local_half = extent * 0.5;
-    Ok(Vec3::new(
-        (local_half.x * scale.x).max(0.01),
-        (local_half.y * scale.y).max(0.01),
-        (local_half.z * scale.z).max(0.01),
-    ))
-}
-
-fn update_dropped_world_item_physics_from_decoded(
+fn attach_enemy_character_foundation(
     world: &mut newengine_ecs::World,
-    owner: EntityId,
-    decoded: &[DecodedPrefabMeshPart],
-) -> Result<Vec3, String> {
-    let runtime = world
-        .get::<newengine_engine_runtime::gameplay::WorldItemRuntime>(owner)
-        .copied()
-        .ok_or_else(|| "world item has no runtime component".to_owned())?;
-    if !runtime.dropped {
-        return Ok(Vec3::ZERO);
-    }
-    let presentation = world
-        .get::<newengine_engine_runtime::gameplay::WorldItemPresentation>(owner)
-        .cloned()
-        .ok_or_else(|| "dropped world item has no presentation".to_owned())?;
-    let (min, max) = decoded_model_bounds(decoded)?;
-    let half_extents = scaled_world_item_half_extents(min, max, presentation.scale)?;
-    let mut body = newengine_engine_runtime::gameplay::PhysicsBodyDesc::dynamic_solid(
-        newengine_engine_runtime::gameplay::CollisionShapeDesc::Box {
-            half_extents: [half_extents.x, half_extents.y, half_extents.z],
-        },
-    );
-    if let Some(existing) = world
-        .get::<newengine_engine_runtime::gameplay::PhysicsBodyDesc>(owner)
-        .copied()
-    {
-        body.material = existing.material;
-    }
-    let _ = world.insert(owner, body);
-    let _ = world.insert(
-        owner,
-        Bounds::from_local_aabb(newengine_bounds::Aabb::from_center_half_extents(
-            Vec3::ZERO,
-            half_extents,
-        )),
-    );
-    Ok(half_extents)
-}
-
-fn try_admit_runtime_world_item_visual(
-    world: &mut newengine_ecs::World,
-    prims: &mut PrimitiveRegistry,
-    mats: &MaterialRegistry,
-    owner: EntityId,
-) -> Result<(), String> {
-    let presentation = world
-        .get::<newengine_engine_runtime::gameplay::WorldItemPresentation>(owner)
-        .cloned()
-        .ok_or_else(|| "runtime world item has no presentation".to_owned())?;
-    let model_ref = presentation
-        .model_ref
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| "runtime world item has no authored model_ref".to_owned())?;
-    let pickup = world
-        .get::<newengine_engine_runtime::gameplay::ItemPickup>(owner)
-        .copied()
-        .ok_or_else(|| "runtime world item has no ItemPickup".to_owned())?;
-    let definition = world
-        .resource::<newengine_engine_runtime::gameplay::ItemCatalog>()
-        .and_then(|catalog| catalog.get(pickup.item))
-        .cloned()
-        .ok_or_else(|| "runtime world item definition is unavailable".to_owned())?;
-    let world_definition = definition.world.clone().sanitized();
-    let decoded = decode_runtime_ydd_prefab(model_ref).map_err(|error| {
-        format!("runtime world-item model decode failed path='{model_ref}': {error}")
-    })?;
-    let runtime = world
-        .get::<newengine_engine_runtime::gameplay::WorldItemRuntime>(owner)
-        .copied()
-        .ok_or_else(|| "runtime world item has no WorldItemRuntime".to_owned())?;
-    let pickup_id = if runtime.dropped {
-        format!("drop-{:016x}", runtime.persistent_id)
-    } else {
-        format!("runtime-{:016x}", runtime.persistent_id)
+    entity: EntityId,
+    target: &crate::content::GameReadyMissionTargetSpec,
+) {
+    let radius = target.scale.x.abs().max(target.scale.z.abs()).max(0.1);
+    let half_height = (target.scale.y.abs() - radius).max(0.1);
+    let shape = newengine_engine_runtime::gameplay::CollisionShapeDesc::Capsule {
+        radius,
+        half_height,
     };
-    let parts = bind_world_item_model_from_decoded(
+    newengine_engine_runtime::gameplay::ensure_physics_body(
         world,
-        prims,
-        mats,
-        owner,
-        &pickup_id,
-        Vec3::ONE,
-        &decoded,
-        world_definition.material_library_ref.as_deref(),
-    )?;
-    let physical_half_extents =
-        update_dropped_world_item_physics_from_decoded(world, owner, &decoded)?;
-    let slots = decoded
-        .iter()
-        .map(|part| part.material_slot.as_str())
-        .collect::<Vec<_>>();
-    let resolved = decoded
-        .iter()
-        .map(|part| {
-            world_item_material_asset(
-                part.material_ref.as_deref(),
-                &part.material_slot,
-                world_definition.material_library_ref.as_deref(),
-            )
-            .unwrap_or_default()
-        })
-        .collect::<Vec<_>>();
-    newengine_ulog_api::ulog::info!(
-        "WORLD_ITEM_VISUAL owner={} item='{}' model='{}' parts={} slots={:?} resolved_materials={:?} textures_required='base+normal+roughness' fallback_used=false",
-        owner.stable_u64(),
-        definition.name,
-        model_ref,
-        parts,
-        slots,
-        resolved,
+        entity,
+        newengine_engine_runtime::gameplay::PhysicsBodyDesc::dynamic_solid(shape),
     );
-    if runtime.dropped {
-        newengine_ulog_api::ulog::info!(
-            "WORLD_ITEM_PHYSICS owner={} item='{}' body_created=true collider_created=true shape='oriented_box_from_ydd_bounds' half_extents={:?} interaction_half_extents={:?} dynamic=true pickup_trigger_separate=true",
-            owner.stable_u64(),
-            definition.name,
-            physical_half_extents,
-            presentation.pickup_half_extents,
+    let _ = world.insert(entity, newengine_engine_runtime::gameplay::GameplayActor);
+    let _ = world.insert(
+        entity,
+        newengine_engine_runtime::gameplay::CharacterBody {
+            radius,
+            standing_half_height: half_height,
+            crouched_half_height: half_height,
+            standing_eye_height: half_height,
+            crouched_eye_height: half_height,
+            visual_radius: radius,
+            visual_half_height: target.scale.y.abs().max(radius),
+        }
+        .sanitized(),
+    );
+    let mut motor = newengine_sim::CharacterMotor::default();
+    if let Some(ai) = target.ai.as_ref() {
+        motor.move_speed = ai.navigation.move_speed;
+    }
+    let _ = world.insert(entity, motor);
+    let _ = world.insert(entity, newengine_sim::MotorInput::default());
+    let _ = world.insert(entity, newengine_sim::Velocity(Vec3::ZERO));
+    let _ = world.insert(
+        entity,
+        newengine_engine_runtime::gameplay::Health::new(target.health),
+    );
+    let _ = world.insert(
+        entity,
+        newengine_engine_runtime::gameplay::CharacterLifeState::Alive,
+    );
+    let _ = world.insert(
+        entity,
+        newengine_engine_runtime::gameplay::CharacterControlState::enabled(),
+    );
+    let _ = world.insert(
+        entity,
+        newengine_engine_runtime::gameplay::DamageReceiver::character(),
+    );
+    let _ = world.insert(
+        entity,
+        newengine_engine_runtime::gameplay::DamageHitZoneMap::default(),
+    );
+    let _ = world.insert(
+        entity,
+        newengine_engine_runtime::gameplay::CharacterDamageResponseTuning::default(),
+    );
+    let _ = world.insert(
+        entity,
+        newengine_engine_runtime::gameplay::CharacterInjuryState::default(),
+    );
+    let _ = world.insert(
+        entity,
+        newengine_engine_runtime::gameplay::CharacterDeathPolicy::default(),
+    );
+    if let Some(character_ref) = target.character_ref.as_deref() {
+        match super::ytyp_metadata::load_character_model_assignment(character_ref) {
+            Ok(assignment) => {
+                let source = assignment.source.clone();
+                // Mission target scale describes the diagnostic/physics capsule dimensions, not
+                // character presentation scale. A skeletal visual is parented to this actor, so
+                // leaving the authored capsule scale on the actor would non-uniformly squash the
+                // complete character hierarchy (for example 0.55x/1.05y/0.55z). Once an authored
+                // character assignment is admitted, keep the actor basis rigid/unit-scale and let
+                // CollisionShapeDesc + CharacterBody remain authoritative for body dimensions.
+                normalize_character_actor_presentation_basis(world, entity);
+                let _ = world.insert(entity, assignment);
+                let _ = world.insert(
+                    entity,
+                    newengine_engine_runtime::gameplay::PlayerModelBinding::default(),
+                );
+                let _ = world.insert(
+                    entity,
+                    newengine_engine_runtime::gameplay::PlayerAnimationState::default(),
+                );
+                newengine_ulog_api::ulog::info!(
+                    "game-ready mission character presentation requested target='{}' definition_ref='{}' model='{}'",
+                    target.id,
+                    character_ref,
+                    source,
+                );
+            }
+            Err(error) => {
+                newengine_ulog_api::ulog::warn!(
+                    "game-ready mission character presentation unavailable target='{}' definition_ref='{}' err='{}' action='keep mission capsule fallback'",
+                    target.id,
+                    character_ref,
+                    error,
+                );
+            }
+        }
+    }
+    if let Some(ai) = target.ai.as_ref() {
+        let _ = world.insert(
+            entity,
+            newengine_engine_runtime::gameplay::CombatTeam::new(ai.combat_team),
         );
-    }
-    Ok(())
-}
-
-pub(super) fn tick_runtime_world_item_visuals(
-    world: &mut newengine_ecs::World,
-    prims: &mut PrimitiveRegistry,
-    mats: &MaterialRegistry,
-) {
-    // Model-backed inventory items use an invisible staging root until their authored
-    // YDD/NEMAT/YTD hierarchy is fully ready. Admission state is explicit; it must not be
-    // inferred from a visible fallback Primitive, because that is exactly how white placeholder
-    // objects leaked into production rendering.
-    let candidates = world
-        .query::<newengine_engine_runtime::gameplay::WorldItemPresentation>()
-        .filter_map(|(owner, presentation)| {
-            let authored_model = presentation
-                .model_ref
-                .as_deref()
-                .is_some_and(|value| !value.trim().is_empty());
-            (authored_model && !presentation.authored_visual_admitted).then_some(owner)
-        })
-        .collect::<Vec<_>>();
-
-    for owner in candidates {
-        match try_admit_runtime_world_item_visual(world, prims, mats, owner) {
-            Ok(()) => {
-                if let Some(presentation) =
-                    world
-                        .get_mut::<newengine_engine_runtime::gameplay::WorldItemPresentation>(owner)
-                {
-                    presentation.authored_visual_admitted = true;
-                }
-                let _ = world.remove::<RuntimeWorldItemAdmissionState>(owner);
+        let _ = world.insert(
+            entity,
+            newengine_engine_runtime::gameplay::AIController {
+                enabled: true,
+                decision_interval_seconds: ai.decision_interval_seconds,
+                decision_cooldown_remaining: 0.0,
             }
-            Err(error) => {
-                let attempts = world
-                    .get::<RuntimeWorldItemAdmissionState>(owner)
-                    .copied()
-                    .unwrap_or_default()
-                    .attempts
-                    .saturating_add(1);
-                let _ = world.insert(owner, RuntimeWorldItemAdmissionState { attempts });
-                if attempts == 1 || attempts.is_multiple_of(60) {
-                    newengine_ulog_api::ulog::warn!(
-                        "game-ready runtime world-item admission deferred owner={} attempt={} err='{}' policy='authored model never persists as fallback primitive'",
-                        owner.stable_u64(),
-                        attempts,
-                        error,
-                    );
-                }
+            .sanitized(),
+        );
+        let _ = world.insert(
+            entity,
+            newengine_engine_runtime::gameplay::PerceptionTuning {
+                sight_range: ai.sight_range,
+                field_of_view_degrees: ai.field_of_view_degrees,
+                memory_seconds: ai.memory_seconds,
             }
+            .sanitized(),
+        );
+        let _ = world.insert(
+            entity,
+            newengine_engine_runtime::gameplay::PerceptionState::default(),
+        );
+        let _ = world.insert(
+            entity,
+            newengine_engine_runtime::gameplay::TargetMemory::default(),
+        );
+        let _ = world.insert(
+            entity,
+            newengine_engine_runtime::gameplay::CombatIntent::default(),
+        );
+        let _ = world.insert(entity, ai.navigation);
+        let _ = world.insert(
+            entity,
+            newengine_engine_runtime::gameplay::AINavigationState::default(),
+        );
+        if !ai.patrol_route.is_empty() {
+            let _ = world.insert(
+                entity,
+                newengine_engine_runtime::gameplay::AIPatrolRoute {
+                    waypoints: ai.patrol_route.clone(),
+                    looping: ai.patrol_looping,
+                },
+            );
+            let _ = world.insert(
+                entity,
+                newengine_engine_runtime::gameplay::AIPatrolState::default(),
+            );
         }
-    }
-}
-
-pub(super) fn tick_deferred_item_pickups(
-    world: &mut newengine_ecs::World,
-    prims: &mut PrimitiveRegistry,
-    mats: &MaterialRegistry,
-) {
-    let Some(mut queue) = world.remove_resource::<DeferredWorldItemPickups>() else {
-        return;
-    };
-    if world
-        .resource::<newengine_engine_runtime::gameplay::ItemCatalog>()
-        .is_none()
-    {
-        world.insert_resource(queue);
-        return;
-    }
-
-    let mut remaining = Vec::new();
-    for mut pending in queue.pending.drain(..) {
-        match try_spawn_deferred_world_item(world, prims, mats, &pending) {
-            Ok(_) => {}
-            Err(error) => {
-                pending.attempts = pending.attempts.saturating_add(1);
-                if pending.attempts == 1 || pending.attempts % 60 == 0 {
-                    newengine_ulog_api::ulog::warn!(
-                        "game-ready inventory pickup admission deferred id='{}' item={:?} attempt={} err='{}'",
-                        pending.spec.id,
-                        pending.spec.item,
-                        pending.attempts,
-                        error,
-                    );
-                }
-                if pending.attempts < 300 {
-                    remaining.push(pending);
-                } else {
-                    newengine_ulog_api::ulog::error!(
-                        "game-ready inventory pickup admission abandoned id='{}' item={:?} attempts={} err='{}'",
-                        pending.spec.id,
-                        pending.spec.item,
-                        pending.attempts,
-                        error,
-                    );
-                }
-            }
-        }
-    }
-    if !remaining.is_empty() {
-        queue.pending = remaining;
-        world.insert_resource(queue);
+        let _ = world.insert(entity, ai.combat);
+        let _ = world.insert(entity, ai.weapon_mount);
+        let _ = world.insert(
+            entity,
+            newengine_gameplay_fps_api::FpsActorLoadoutRequest::new(ai.loadout.clone()),
+        );
     }
 }
 
@@ -830,22 +454,7 @@ pub(super) fn spawn_game_ready_mission(
             position,
             target.scale,
         );
-        let shape = newengine_engine_runtime::gameplay::CollisionShapeDesc::Capsule {
-            radius: target.scale.x.abs().max(target.scale.z.abs()).max(0.1),
-            half_height: (target.scale.y.abs() - target.scale.x.abs()).max(0.1),
-        };
-        let _ = world.insert(
-            entity,
-            newengine_engine_runtime::gameplay::PhysicsBodyDesc::static_solid(shape),
-        );
-        let _ = world.insert(
-            entity,
-            newengine_engine_runtime::gameplay::Health::new(target.health),
-        );
-        let _ = world.insert(
-            entity,
-            newengine_engine_runtime::gameplay::DamageReceiver::character(),
-        );
+        attach_enemy_character_foundation(world, entity, target);
         let _ = world.insert(entity, FpsDemoTarget);
         summary.targets = summary.targets.saturating_add(1);
     }
@@ -915,6 +524,186 @@ pub(super) fn spawn_game_ready_mission(
 #[cfg(test)]
 mod world_item_runtime_tests {
     use super::*;
+
+    #[test]
+    fn skeletal_character_presentation_does_not_inherit_capsule_scale() {
+        let mut world = newengine_ecs::World::new();
+        let entity = world.spawn();
+        let capsule_scale = Vec3::new(0.55, 1.05, 0.55);
+        let _ = world.insert(
+            entity,
+            Transform {
+                position: Vec3::new(1.0, 2.0, 3.0),
+                rotation: Quat::IDENTITY,
+                scale: capsule_scale,
+            },
+        );
+        let body = newengine_engine_runtime::gameplay::CharacterBody {
+            radius: 0.55,
+            standing_half_height: 0.5,
+            crouched_half_height: 0.5,
+            standing_eye_height: 0.5,
+            crouched_eye_height: 0.5,
+            visual_radius: 0.55,
+            visual_half_height: 1.05,
+        }
+        .sanitized();
+        let _ = world.insert(entity, body);
+
+        normalize_character_actor_presentation_basis(&mut world, entity);
+
+        assert_eq!(world.get::<Transform>(entity).unwrap().scale, Vec3::ONE);
+        let preserved = *world
+            .get::<newengine_engine_runtime::gameplay::CharacterBody>(entity)
+            .expect("character body");
+        assert!((preserved.radius - 0.55).abs() <= f32::EPSILON);
+        assert!((preserved.visual_half_height - 1.05).abs() <= f32::EPSILON);
+    }
+
+    #[test]
+    fn authored_ai_target_composes_shared_character_damage_and_ai_foundation() {
+        let mut world = newengine_ecs::World::new();
+        let entity = world.spawn();
+        let target = crate::content::GameReadyMissionTargetSpec {
+            id: "dummy.enemy.test".to_owned(),
+            character_ref: None,
+            position: Vec3::ZERO,
+            health: 125.0,
+            scale: Vec3::new(0.55, 1.05, 0.55),
+            ai: Some(crate::content::GameReadyEnemyAiSpec {
+                combat_team: 2,
+                sight_range: 24.0,
+                field_of_view_degrees: 110.0,
+                memory_seconds: 3.0,
+                decision_interval_seconds: 0.1,
+                navigation: newengine_engine_runtime::gameplay::AINavigationTuning {
+                    move_speed: 2.4,
+                    investigate_arrival_distance: 0.8,
+                    engage_standoff_distance: 8.0,
+                    waypoint_arrival_distance: 0.35,
+                    repath_interval_seconds: 0.35,
+                    view_turn_speed_radians_per_second: 240.0_f32.to_radians(),
+                },
+                patrol_route: vec![Vec3::new(-2.0, 0.0, -4.0), Vec3::new(2.0, 0.0, -4.0)],
+                patrol_looping: true,
+                combat: newengine_gameplay_fps_api::FpsAiCombatTuning {
+                    fire_distance: 22.0,
+                    aim_tolerance_radians: 3.0_f32.to_radians(),
+                },
+                weapon_mount: newengine_gameplay_fps_api::FpsActorWeaponMountTuning {
+                    local_offset: [0.20, 1.20, -0.45],
+                    local_forward: [0.0, 0.0, -1.0],
+                },
+                loadout: "loadout.fps.default".to_owned(),
+            }),
+        };
+
+        attach_enemy_character_foundation(&mut world, entity, &target);
+
+        assert!(world
+            .get::<newengine_engine_runtime::gameplay::GameplayActor>(entity)
+            .is_some());
+        assert!(world
+            .get::<newengine_engine_runtime::gameplay::CharacterBody>(entity)
+            .is_some());
+        assert!(world.get::<newengine_sim::CharacterMotor>(entity).is_some());
+        assert!(world
+            .get::<newengine_engine_runtime::gameplay::CharacterControlState>(entity)
+            .is_some_and(|state| state.enabled));
+        assert_eq!(
+            world
+                .get::<newengine_engine_runtime::gameplay::Health>(entity)
+                .expect("health")
+                .current,
+            125.0
+        );
+        assert_eq!(
+            world
+                .get::<newengine_engine_runtime::gameplay::CharacterLifeState>(entity)
+                .copied(),
+            Some(newengine_engine_runtime::gameplay::CharacterLifeState::Alive)
+        );
+        assert_eq!(
+            world
+                .get::<newengine_engine_runtime::gameplay::DamageReceiver>(entity)
+                .expect("damage receiver")
+                .kind,
+            newengine_engine_runtime::gameplay::DamageReceiverKind::Character
+        );
+        assert!(world
+            .get::<newengine_engine_runtime::gameplay::DamageHitZoneMap>(entity)
+            .is_some());
+        assert_eq!(
+            world
+                .get::<newengine_engine_runtime::gameplay::CombatTeam>(entity)
+                .copied(),
+            Some(newengine_engine_runtime::gameplay::CombatTeam::new(2))
+        );
+        assert!(world
+            .get::<newengine_engine_runtime::gameplay::AIController>(entity)
+            .is_some_and(|controller| controller.enabled));
+        let perception = world
+            .get::<newengine_engine_runtime::gameplay::PerceptionTuning>(entity)
+            .expect("perception tuning");
+        assert_eq!(perception.sight_range, 24.0);
+        assert_eq!(perception.field_of_view_degrees, 110.0);
+        assert_eq!(perception.memory_seconds, 3.0);
+        assert!(world
+            .get::<newengine_engine_runtime::gameplay::TargetMemory>(entity)
+            .is_some());
+        assert!(world
+            .get::<newengine_engine_runtime::gameplay::CombatIntent>(entity)
+            .is_some());
+        assert_eq!(
+            world
+                .get::<newengine_engine_runtime::gameplay::PhysicsBodyDesc>(entity)
+                .expect("dynamic enemy physics")
+                .kind,
+            newengine_physics_contracts::PhysicsBodyKind::Dynamic
+        );
+        assert!(world
+            .get::<newengine_engine_runtime::gameplay::AINavigationState>(entity)
+            .is_some());
+        assert_eq!(
+            world
+                .get::<newengine_engine_runtime::gameplay::AINavigationTuning>(entity)
+                .expect("navigation tuning")
+                .move_speed,
+            2.4
+        );
+        let patrol = world
+            .get::<newengine_engine_runtime::gameplay::AIPatrolRoute>(entity)
+            .expect("patrol route");
+        assert_eq!(patrol.waypoints.len(), 2);
+        assert!(patrol.looping);
+        assert!(world
+            .get::<newengine_engine_runtime::gameplay::AIPatrolState>(entity)
+            .is_some());
+        assert_eq!(
+            world
+                .get::<newengine_gameplay_fps_api::FpsAiCombatTuning>(entity)
+                .expect("AI combat tuning")
+                .fire_distance,
+            22.0
+        );
+        assert_eq!(
+            world
+                .get::<newengine_gameplay_fps_api::FpsActorWeaponMountTuning>(entity)
+                .expect("AI weapon mount")
+                .local_offset,
+            [0.20, 1.20, -0.45]
+        );
+        assert_eq!(
+            world
+                .get::<newengine_gameplay_fps_api::FpsActorLoadoutRequest>(entity)
+                .expect("authored enemy loadout request")
+                .loadout,
+            "loadout.fps.default"
+        );
+        assert!(world
+            .get::<newengine_engine_runtime::gameplay::PlayerController>(entity)
+            .is_none());
+    }
 
     #[test]
     fn world_item_material_library_is_scoped_by_mesh_slot() {

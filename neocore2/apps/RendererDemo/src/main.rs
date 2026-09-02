@@ -3,7 +3,7 @@
 use newengine_core::{Engine, EngineResult, StartupConfig};
 use newengine_game_ready_profile::{
     GameReadyRuntimeProfile, RustGameDataProvider, GAME_APP_ASSETS_DIR_ENV, GAME_FIXED_DT_MS,
-    GAME_READY_APP_DIR_NAME, GAME_READY_RUNTIME_ENV_DEFAULTS,
+    GAME_READY_APP_DIR_NAME, GAME_READY_CORE_ENV_POLICY,
 };
 use newengine_runtime_host::app_launcher::{
     RuntimeHostAppProfile, RuntimeHostBootOption, RuntimeHostLaunchSpec, RuntimeHostLauncher,
@@ -48,7 +48,7 @@ impl RendererDemoApp {
             app_assets_env: GAME_APP_ASSETS_DIR_ENV,
             early_log_file_name: "renderer-demo-early.log",
             default_profile_env: None,
-            env_defaults: GAME_READY_RUNTIME_ENV_DEFAULTS,
+            env_defaults: GAME_READY_CORE_ENV_POLICY,
         }
     }
 

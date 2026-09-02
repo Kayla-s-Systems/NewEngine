@@ -1,12 +1,12 @@
 use serde::{Deserialize, Serialize};
 
-/// Canonical editor font dictionary. Runtime code consumes this `.neftd`
+/// Canonical editor font dictionary. Runtime code consumes this `.yfd`
 /// reference rather than raw `.ttf` or `.otf` authoring files.
-pub const TEXT_FONT_ASSET_EDITOR: &str = "ui/fonts/editor.neftd";
-pub const TEXT_FONT_REF_EDITOR_SANS: &str = "ui/fonts/editor.neftd@tt_lakes_neue_trial_bold";
-pub const TEXT_FONT_REF_EDITOR_DISPLAY: &str = "ui/fonts/editor.neftd@tt_lakes_neue_trial_black";
-pub const TEXT_FONT_REF_EDITOR_BOLD: &str = "ui/fonts/editor.neftd@tt_lakes_neue_trial_bold";
-pub const TEXT_FONT_REF_BRAND_DISPLAY: &str = "ui/fonts/editor.neftd@tt_lakes_neue_trial_black";
+pub const TEXT_FONT_ASSET_EDITOR: &str = "ui/fonts/editor.yfd";
+pub const TEXT_FONT_REF_EDITOR_SANS: &str = "ui/fonts/editor.yfd@tt_lakes_neue_trial_bold";
+pub const TEXT_FONT_REF_EDITOR_DISPLAY: &str = "ui/fonts/editor.yfd@tt_lakes_neue_trial_black";
+pub const TEXT_FONT_REF_EDITOR_BOLD: &str = "ui/fonts/editor.yfd@tt_lakes_neue_trial_bold";
+pub const TEXT_FONT_REF_BRAND_DISPLAY: &str = "ui/fonts/editor.yfd@tt_lakes_neue_trial_black";
 pub const TEXT_FONT_REF_SYMBOLS: &str = "Segoe UI Symbol";
 pub const TEXT_FONT_REF_EMOJI: &str = "Segoe UI Emoji";
 
@@ -170,7 +170,7 @@ pub struct TextFontManifest {
 impl Default for TextFontManifest {
     fn default() -> Self {
         Self {
-            schema: "newengine.font_dictionary.neftd.v1".to_owned(),
+            schema: "newengine.font_dictionary.yfd.v1".to_owned(),
             asset_ref: TEXT_FONT_ASSET_EDITOR.to_owned(),
             faces: Vec::new(),
             fallback_stack: vec![

@@ -24,7 +24,6 @@ pub enum EngineServiceKind {
     AssetValidation,
     AssetUi,
     Materials,
-    Textures,
     Definitions,
     AssetGraph,
     Time,
@@ -107,7 +106,6 @@ impl EngineServiceKind {
             Self::AssetValidation => "assets.validation",
             Self::AssetUi => "assets.ui",
             Self::Materials => "assets.materials",
-            Self::Textures => "assets.textures",
             Self::Definitions => "assets.definitions",
             Self::AssetGraph => "assets.graph",
             Self::Time => "time",
@@ -179,7 +177,6 @@ impl EngineServiceKind {
             "assets.validation" | "assets_validation" => Some(Self::AssetValidation),
             "assets.ui" | "assets_ui" => Some(Self::AssetUi),
             "assets.materials" | "assets_materials" => Some(Self::Materials),
-            "assets.textures" | "assets_textures" => Some(Self::Textures),
             "assets.definitions" | "assets_definitions" => Some(Self::Definitions),
             "assets.graph" | "assets_graph" | "assets-graph" => Some(Self::AssetGraph),
             "time" => Some(Self::Time),
@@ -252,7 +249,6 @@ impl EngineServiceKind {
             | Self::AssetValidation
             | Self::AssetUi
             | Self::Materials
-            | Self::Textures
             | Self::Definitions
             | Self::AssetGraph
             | Self::Model => Some(Self::Assets),
@@ -302,7 +298,6 @@ impl EngineServiceKind {
             Self::AssetValidation => crate::ENGINE_ASSETS_VALIDATION_GATEWAY_ID,
             Self::AssetUi => crate::ENGINE_ASSETS_UI_GATEWAY_ID,
             Self::Materials => crate::ENGINE_ASSETS_MATERIALS_GATEWAY_ID,
-            Self::Textures => crate::ENGINE_ASSETS_TEXTURES_GATEWAY_ID,
             Self::Definitions => crate::ENGINE_ASSETS_DEFINITIONS_GATEWAY_ID,
             Self::AssetGraph => crate::ENGINE_ASSETS_GRAPH_GATEWAY_ID,
             Self::Time => "engine.time",

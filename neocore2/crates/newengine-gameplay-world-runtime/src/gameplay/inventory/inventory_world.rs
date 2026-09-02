@@ -211,6 +211,83 @@ pub fn drop_item(
     Ok(entity)
 }
 
+pub fn drop_item_instance(
+    world: &mut World,
+    owner: EntityId,
+    instance: ItemInstanceId,
+    quantity: u32,
+) -> Result<EntityId, String> {
+    let transform = world
+        .get::<Transform>(owner)
+        .copied()
+        .ok_or_else(|| "owner has no transform".to_owned())?;
+    let item = world
+        .get::<PlayerInventory>(owner)
+        .and_then(|inventory| inventory.entry(instance))
+        .map(|entry| entry.item)
+        .ok_or_else(|| "inventory instance is not present".to_owned())?;
+    let removed = world
+        .get_mut::<PlayerInventory>(owner)
+        .ok_or_else(|| "owner has no inventory".to_owned())?
+        .remove_instance_quantity(instance, quantity);
+    if removed.accepted == 0 {
+        return Err("inventory instance has no removable quantity".to_owned());
+    }
+
+    let forward = (transform.rotation * Vec3::new(0.0, 0.0, -1.0)).normalize_or_zero();
+    let spawn_position = transform.position + forward * 0.9 + Vec3::Y * 0.6;
+    let entity = spawn_item_pickup(world, None, item, removed.accepted, spawn_position)?;
+    let presentation = world
+        .get::<WorldItemPresentation>(entity)
+        .cloned()
+        .ok_or_else(|| "dropped item has no world presentation".to_owned())?;
+    let _ = world.insert(
+        entity,
+        PhysicsBodyDesc::dynamic_solid(CollisionShapeDesc::Box {
+            half_extents: [
+                presentation.pickup_half_extents.x,
+                presentation.pickup_half_extents.y,
+                presentation.pickup_half_extents.z,
+            ],
+        }),
+    );
+    let _ = world.insert(entity, Velocity(forward * 2.4 + Vec3::Y * 1.6));
+    let _ = world.insert(entity, AngularVelocity(Vec3::new(1.8, 3.2, 0.9)));
+    let persistent_id = mix64(entity.stable_u64() ^ item.0.rotate_left(31));
+    let _ = world.insert(
+        entity,
+        WorldItemRuntime::dropped(persistent_id, spawn_position, removed.accepted),
+    );
+    if let Some(pickup) = world.get_mut::<ItemPickup>(entity) {
+        pickup.enabled = false;
+        pickup.destroy_when_empty = true;
+    }
+    if let Some(interactable) = world.get_mut::<Interactable>(entity) {
+        interactable.enabled = false;
+    }
+    emit_inventory_event(
+        world,
+        InventoryEvent {
+            kind: InventoryEventKind::ItemDropped,
+            owner,
+            item,
+            instance_id: Some(instance),
+            quantity: removed.accepted,
+            slot: None,
+            world_entity: Some(entity),
+            message: "inventory instance dropped into world".to_owned(),
+        },
+    );
+    let needs_weapon_selection = world
+        .get::<PlayerInventory>(owner)
+        .is_some_and(|inventory| inventory.active_slot.is_none());
+    if needs_weapon_selection {
+        select_highest_ranked_equipped_weapon(world, owner);
+    }
+    sync_equipped_weapon_runtime(world, owner);
+    Ok(entity)
+}
+
 pub fn step_world_items(world: &mut World, dt: f32) {
     let dt = if dt.is_finite() && dt > 0.0 {
         dt.min(0.25)

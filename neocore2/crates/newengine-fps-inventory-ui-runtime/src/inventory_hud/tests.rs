@@ -967,3 +967,92 @@ fn double_click_consumable_uses_item_and_drop_creates_world_pickup() {
         .next()
         .is_some());
 }
+
+#[test]
+fn hud_publishes_read_only_character_vitals_and_republishes_on_vital_changes() {
+    let mut world = World::new();
+    let player = spawn_test_player(&mut world, "vitals-hud-player");
+    world
+        .get_mut::<newengine_engine_runtime::gameplay::Health>(player)
+        .unwrap()
+        .current = 42.0;
+    {
+        let stamina = world
+            .get_mut::<newengine_engine_runtime::gameplay::Stamina>(player)
+            .unwrap();
+        stamina.current = 11.0;
+        stamina.exhausted = true;
+    }
+    let _ = world.insert(
+        player,
+        newengine_engine_runtime::gameplay::CharacterInjuryState {
+            injured: true,
+            revision: 1,
+        },
+    );
+    let _ = world.insert(
+        player,
+        newengine_engine_runtime::gameplay::CharacterHitReactionState {
+            kind: newengine_engine_runtime::gameplay::CharacterHitReactionKind::Flinch,
+            remaining_seconds: 0.1,
+            sequence: 1,
+            source: 2,
+            hit_zone: Some("torso".to_owned()),
+            point: Vec3::ZERO,
+            impulse: Vec3::ZERO,
+            applied_damage: 5.0,
+            health_fraction: 0.42,
+            revision: 1,
+        },
+    );
+
+    let output = publish_inventory_hud_state(&mut world, 1);
+    let changes = &output.patches.first().expect("HUD patch").patch.changes;
+    let value = |path: &str| {
+        changes
+            .iter()
+            .find(|change| change.source_id == "player" && change.path == path)
+            .map(|change| change.value.clone())
+            .expect("published vitals field")
+    };
+    let health_normalized = value("health_normalized")
+        .as_f64()
+        .expect("health_normalized number");
+    assert!((health_normalized - 0.42).abs() < 1.0e-5);
+    assert_eq!(value("health_label"), serde_json::json!("42 / 100"));
+    let stamina_normalized = value("stamina_normalized")
+        .as_f64()
+        .expect("stamina_normalized number");
+    assert!((stamina_normalized - 0.11).abs() < 1.0e-5);
+    assert_eq!(value("stamina_label"), serde_json::json!("11 / 100"));
+    assert_eq!(value("stamina_exhausted"), serde_json::json!(true));
+    assert_eq!(value("injured"), serde_json::json!(true));
+    assert_eq!(value("damage_flash"), serde_json::json!(true));
+    assert_eq!(value("hit_reaction"), serde_json::json!("flinch"));
+    assert_eq!(value("dead"), serde_json::json!(false));
+
+    world
+        .get_mut::<newengine_engine_runtime::gameplay::Health>(player)
+        .unwrap()
+        .current = 41.0;
+    let changed = publish_inventory_hud_state(&mut world, 2);
+    assert_eq!(
+        changed.patches.len(),
+        1,
+        "health mutation must invalidate HUD fingerprint"
+    );
+
+    let _ = world.insert(
+        player,
+        newengine_engine_runtime::gameplay::CharacterLifeState::Dead,
+    );
+    let dead = publish_inventory_hud_state(&mut world, 3);
+    let changes = &dead.patches.first().expect("dead HUD patch").patch.changes;
+    assert_eq!(
+        changes
+            .iter()
+            .find(|change| change.source_id == "player" && change.path == "dead")
+            .map(|change| change.value.clone()),
+        Some(serde_json::json!(true))
+    );
+}

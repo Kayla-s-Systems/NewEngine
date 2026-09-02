@@ -8,6 +8,7 @@ enum EquipmentPresentationStance {
 }
 
 const EQUIPMENT_SUPPORT_IK_RESIDUAL_WARN_THRESHOLD_M: f32 = 0.025;
+const EQUIPMENT_SOCKET_ANGULAR_WARN_THRESHOLD_DEG: f32 = 1.0;
 const EQUIPMENT_SUPPORT_IK_RESIDUAL_DIAG_INTERVAL_SECONDS: f32 = 2.0;
 
 #[inline]
@@ -236,29 +237,6 @@ fn semantic_frame_state(
     }
 }
 
-#[cfg(test)]
-fn resolve_equipment_presentation_stance(
-    weapon_type: Option<newengine_engine_runtime::gameplay::WeaponType>,
-    weapon_state: Option<newengine_engine_runtime::gameplay::PlayerWeaponState>,
-    authored_presentation: bool,
-) -> EquipmentPresentationStance {
-    if !authored_presentation
-        || weapon_type != Some(newengine_engine_runtime::gameplay::WeaponType::Firearm)
-    {
-        return EquipmentPresentationStance::None;
-    }
-    let Some(state) = weapon_state else {
-        return EquipmentPresentationStance::Ready;
-    };
-    if state.reload_remaining > 0.0 {
-        EquipmentPresentationStance::Reload
-    } else if state.aiming {
-        EquipmentPresentationStance::Aim
-    } else {
-        EquipmentPresentationStance::Ready
-    }
-}
-
 fn resolve_authored_look_state(
     locomotion: newengine_engine_runtime::gameplay::PlayerLocomotionAnimation,
     equipment: EquipmentPresentationStance,
@@ -414,52 +392,5 @@ pub(crate) fn tick_player_skin_animation(
                 &bytes,
             );
         }
-    }
-}
-
-#[cfg(test)]
-mod equipment_stance_tests {
-    use super::*;
-    use newengine_engine_runtime::gameplay::{PlayerWeaponState, WeaponType};
-
-    #[test]
-    fn firearm_equipment_stance_resolves_ready_aim_reload() {
-        let mut state = PlayerWeaponState::melee();
-        assert_eq!(
-            resolve_equipment_presentation_stance(Some(WeaponType::Firearm), Some(state), true),
-            EquipmentPresentationStance::Ready
-        );
-        state.aiming = true;
-        assert_eq!(
-            resolve_equipment_presentation_stance(Some(WeaponType::Firearm), Some(state), true),
-            EquipmentPresentationStance::Aim
-        );
-        state.reload_remaining = 0.5;
-        assert_eq!(
-            resolve_equipment_presentation_stance(Some(WeaponType::Firearm), Some(state), true),
-            EquipmentPresentationStance::Reload
-        );
-    }
-
-    #[test]
-    fn unarmed_and_melee_never_activate_firearm_presentation() {
-        for weapon_type in [WeaponType::Unarmed, WeaponType::Melee] {
-            assert_eq!(
-                resolve_equipment_presentation_stance(
-                    Some(weapon_type),
-                    Some(PlayerWeaponState::melee()),
-                    true,
-                ),
-                EquipmentPresentationStance::None
-            );
-        }
-        assert_eq!(
-            resolve_equipment_presentation_stance(
-                Some(WeaponType::Firearm),
-                Some(PlayerWeaponState::melee()),
-                false,
-            ),
-            EquipmentPresentationStance::None
-        );
     }
 }

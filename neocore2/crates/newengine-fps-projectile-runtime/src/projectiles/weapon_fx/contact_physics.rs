@@ -3,11 +3,17 @@ const SHELL_SETTLE_ANGULAR_SPEED_RADPS: f32 = 1.0;
 const SHELL_WAKE_LINEAR_SPEED_MPS: f32 = 0.22;
 const SHELL_WAKE_ANGULAR_SPEED_RADPS: f32 = 4.0;
 const SHELL_SETTLE_HOLD_SECONDS: f32 = 0.20;
+// shell_roll grains are ~145..160 ms one-shots. Re-triggering faster than the clip length stacks
+// voices and turns ContactPersist into an audio/service-call storm. A single uninterrupted rolling
+// episode gets at most two grains; a genuine wake after settling re-arms the budget.
+const SHELL_ROLL_MIN_INTERVAL_SECONDS: f32 = 0.16;
+const SHELL_ROLL_MAX_EVENTS_PER_MOTION: u8 = 2;
 
 #[derive(Clone, Copy, Debug, Default)]
 struct WeaponShellContactRuntime {
     impact_cooldown_seconds: f32,
     rolling_cooldown_seconds: f32,
+    rolling_events_emitted: u8,
     quiet_seconds: f32,
     settled: bool,
 }
@@ -137,6 +143,7 @@ fn process_shell_physics_events(world: &mut World, dt: f32) {
             {
                 state.settled = false;
                 state.quiet_seconds = 0.0;
+                state.rolling_events_emitted = 0;
             }
         } else if linear_speed <= SHELL_SETTLE_LINEAR_SPEED_MPS
             && angular_speed <= SHELL_SETTLE_ANGULAR_SPEED_RADPS
@@ -249,7 +256,10 @@ fn process_shell_physics_events(world: &mut World, dt: f32) {
             }
         }
 
-        if !is_begin && state.rolling_cooldown_seconds <= 0.0 {
+        if !is_begin
+            && state.rolling_cooldown_seconds <= 0.0
+            && state.rolling_events_emitted < SHELL_ROLL_MAX_EVENTS_PER_MOTION
+        {
             let velocity = world
                 .get::<Velocity>(casing_entity)
                 .copied()
@@ -276,7 +286,9 @@ fn process_shell_physics_events(world: &mut World, dt: f32) {
                     contact.impulse,
                     report.fixed_tick,
                 );
-                state.rolling_cooldown_seconds = (0.14 - tangent_speed * 0.025).clamp(0.045, 0.14);
+                state.rolling_events_emitted = state.rolling_events_emitted.saturating_add(1);
+                state.rolling_cooldown_seconds =
+                    (0.24 - tangent_speed * 0.02).clamp(SHELL_ROLL_MIN_INTERVAL_SECONDS, 0.24);
             }
         }
         let _ = world.insert(casing_entity, state);

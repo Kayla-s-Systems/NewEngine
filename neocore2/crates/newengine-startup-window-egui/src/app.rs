@@ -192,7 +192,7 @@ impl eframe::App for PreStartGraphicsApp {
             .frame(
                 egui::Frame::none()
                     .fill(color32(style.palette.bg_deep))
-                    .stroke(egui::Stroke::new(1.0, color32(style.palette.edge_soft)))
+                    .stroke(egui::Stroke::new(1.0_f32, color32(style.palette.edge_soft)))
                     .inner_margin(egui::Margin::symmetric(20.0, 12.0)),
             )
             .show(ctx, |ui| self.show_header(ui));
@@ -202,7 +202,7 @@ impl eframe::App for PreStartGraphicsApp {
             .frame(
                 egui::Frame::none()
                     .fill(color32(style.palette.panel))
-                    .stroke(egui::Stroke::new(1.0, color32(style.palette.edge)))
+                    .stroke(egui::Stroke::new(1.0_f32, color32(style.palette.edge)))
                     .inner_margin(egui::Margin::symmetric(18.0, 12.0)),
             )
             .show(ctx, |ui| self.show_footer(ui, ctx));
@@ -213,7 +213,7 @@ impl eframe::App for PreStartGraphicsApp {
             .frame(
                 egui::Frame::none()
                     .fill(color32(style.palette.bg_deep))
-                    .stroke(egui::Stroke::new(1.0, color32(style.palette.edge_soft)))
+                    .stroke(egui::Stroke::new(1.0_f32, color32(style.palette.edge_soft)))
                     .inner_margin(egui::Margin::same(14.0)),
             )
             .show(ctx, |ui| self.show_sidebar(ui));

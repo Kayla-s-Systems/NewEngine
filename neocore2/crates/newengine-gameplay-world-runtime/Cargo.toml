@@ -12,6 +12,7 @@ parking_lot = "0.12"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-ai-api = { path = "../newengine-ai-api" }
 newengine-animation-api = { path = "../newengine-animation-api" }
 newengine-audio-api = { path = "../newengine-audio-api" }
 newengine-audio-client = { path = "../newengine-audio-client" }
@@ -24,6 +25,7 @@ newengine-input-capture-api = { path = "../newengine-input-capture-api" }
 newengine-task-api = { path = "../newengine-task-api" }
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-entity-api = { path = "../newengine-entity-api" }
+newengine-navigation-api = { path = "../newengine-navigation-api" }
 newengine-physics-contracts = { path = "../newengine-physics-contracts" }
 newengine-physics-world-api = { path = "../newengine-physics-world-api" }
 newengine-physics-api = { path = "../newengine-physics-api" }

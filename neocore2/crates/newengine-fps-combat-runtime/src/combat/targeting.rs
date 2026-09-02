@@ -43,15 +43,9 @@ pub(super) fn queue_weapon_obstruction_probe(world: &mut World, player: EntityId
     let Some((player_position, _)) = player_view_pose(world, player) else {
         return;
     };
-    let eye_height = world
-        .get::<PlayerStanceState>(player)
-        .map(|stance| stance.current_eye_height)
-        .or_else(|| {
-            crate::game_data::active_game_data(world)
-                .map(|data| data.player.tuning.camera_eye_height)
-        })
-        .unwrap_or(1.6)
-        .max(0.2);
+    let Some(eye_height) = actor_eye_height(world, player) else {
+        return;
+    };
 
     // Shoulder/chest origin instead of camera origin. A wall between the body and muzzle is a
     // genuine weapon obstruction even when a third-person camera can still see around it.
@@ -86,6 +80,26 @@ pub(super) fn signed_unit(seed: u64) -> f32 {
 }
 
 #[inline]
+fn actor_eye_height(world: &World, actor: EntityId) -> Option<f32> {
+    world
+        .get::<PlayerStanceState>(actor)
+        .map(|stance| stance.current_eye_height)
+        .or_else(|| {
+            world
+                .get::<CharacterBody>(actor)
+                .map(|body| body.sanitized().standing_eye_height)
+        })
+        .or_else(|| {
+            world
+                .get::<PlayerController>(actor)
+                .and_then(|_| crate::game_data::active_game_data(world))
+                .map(|data| data.player.tuning.camera_eye_height)
+        })
+        .filter(|height| height.is_finite())
+        .map(|height| height.max(0.2))
+}
+
+#[inline]
 fn player_view_pose(world: &World, player: EntityId) -> Option<(Vec3, Quat)> {
     let (position, body_rotation) =
         newengine_transform::read_entity_world_pose_local_chain(world, player)?;
@@ -104,15 +118,7 @@ pub(super) fn melee_origin_and_direction(
 ) -> Option<(Vec3, Vec3)> {
     let tuning = tuning.sanitized();
     let (player_position, rotation) = player_view_pose(world, player)?;
-    let eye_height = world
-        .get::<PlayerStanceState>(player)
-        .map(|stance| stance.current_eye_height)
-        .or_else(|| {
-            crate::game_data::active_game_data(world)
-                .map(|data| data.player.tuning.camera_eye_height)
-        })
-        .unwrap_or(1.6)
-        .max(0.2);
+    let eye_height = actor_eye_height(world, player)?;
     let origin = player_position + Vec3::Y * (eye_height * 0.72);
     let direction = (rotation * -Vec3::Z).normalize_or_zero();
     (direction.length_squared() > 1.0e-8 && tuning.range > 0.0).then_some((origin, direction))
@@ -157,6 +163,7 @@ fn spread_distribution_offset(
     }
 }
 
+#[cfg(test)]
 pub(super) fn shot_origin_and_direction(
     world: &World,
     player: EntityId,
@@ -184,15 +191,7 @@ pub(super) fn shot_origin_and_direction_with_profiles(
 ) -> Option<(Vec3, Vec3)> {
     let profiles = profiles.sanitized();
     let (player_position, view_rotation) = player_view_pose(world, player)?;
-    let eye_height = match world.get::<PlayerStanceState>(player) {
-        Some(stance) => stance.current_eye_height,
-        None => {
-            crate::game_data::active_game_data(world)?
-                .player
-                .tuning
-                .camera_eye_height
-        }
-    };
+    let eye_height = actor_eye_height(world, player)?;
     let camera_forward = (view_rotation * -Vec3::Z).normalize_or_zero();
     let right = (view_rotation * Vec3::X).normalize_or_zero();
     let up = (view_rotation * Vec3::Y).normalize_or_zero();
@@ -205,7 +204,8 @@ pub(super) fn shot_origin_and_direction_with_profiles(
     // This keeps the reticle and ballistic path coherent without allowing a camera ray to shoot
     // through cover that the barrel itself cannot clear.
     let active_camera_position = world
-        .resource::<newengine_scene::SceneState>()
+        .get::<PlayerController>(player)
+        .and_then(|_| world.resource::<newengine_scene::SceneState>())
         .and_then(|state| state.active_camera.or(state.root))
         .and_then(|camera| world.get::<newengine_sim::CameraRigComp>(camera))
         .map(|rig| rig.0.position)
@@ -215,6 +215,10 @@ pub(super) fn shot_origin_and_direction_with_profiles(
     // A firearm shot is invalid until presentation has published a physical muzzle socket.
     // The camera only selects a convergence target; it can never synthesize the shot origin.
     let muzzle = active_equipped_weapon_muzzle(world, player)?;
+    let muzzle_forward = muzzle.forward.normalize_or_zero();
+    if muzzle_forward.length_squared() <= 1.0e-8 {
+        return None;
+    }
     let obstruction = world
         .get::<WeaponObstructionState>(player)
         .copied()
@@ -222,7 +226,7 @@ pub(super) fn shot_origin_and_direction_with_profiles(
     let muzzle_origin = obstruction
         .map(|state| state.safe_muzzle_position)
         .filter(|position| position.is_finite())
-        .unwrap_or_else(|| muzzle.position + muzzle.forward.normalize_or_zero() * 0.008);
+        .unwrap_or_else(|| muzzle.position + muzzle_forward * 0.008);
 
     let hip_convergence = world
         .get::<EquippedWeaponBinding>(player)
@@ -245,12 +249,7 @@ pub(super) fn shot_origin_and_direction_with_profiles(
     let forward = if ballistic_forward.length_squared() > 1.0e-8 {
         ballistic_forward
     } else {
-        let muzzle_forward = muzzle.forward.normalize_or_zero();
-        if muzzle_forward.length_squared() > 1.0e-8 {
-            muzzle_forward
-        } else {
-            camera_forward
-        }
+        muzzle_forward
     };
 
     let spread_state = if aiming {
@@ -318,15 +317,7 @@ pub(super) fn interaction_ray(
     tuning: PlayerInteractionTuning,
 ) -> Option<(Vec3, Vec3)> {
     let (player_position, view_rotation) = player_view_pose(world, player)?;
-    let eye_height = match world.get::<PlayerStanceState>(player) {
-        Some(stance) => stance.current_eye_height,
-        None => {
-            crate::game_data::active_game_data(world)?
-                .player
-                .tuning
-                .camera_eye_height
-        }
-    };
+    let eye_height = actor_eye_height(world, player)?;
     let direction = (view_rotation * -Vec3::Z).normalize_or_zero();
     if direction.length_squared() <= 1.0e-8 {
         return None;

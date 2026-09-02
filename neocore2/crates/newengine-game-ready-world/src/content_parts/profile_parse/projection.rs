@@ -36,6 +36,94 @@ impl RawGameReadyPayload {
             .filter(|value| value.is_finite())
             .unwrap_or(walk_speed)
             .clamp(0.05, run_speed);
+        let combat_team = self
+            .player
+            .combat_team
+            .filter(|value| (1..=65_535).contains(value));
+        let health_maximum = self
+            .player
+            .health_maximum
+            .filter(|v| v.is_finite())
+            .unwrap_or(100.0)
+            .clamp(1.0, 1_000_000.0);
+        let stamina_maximum = self
+            .player
+            .stamina_maximum
+            .filter(|v| v.is_finite())
+            .unwrap_or(100.0)
+            .clamp(0.0, 1_000_000.0);
+        let stamina_sprint_drain_per_second = self
+            .player
+            .stamina_sprint_drain_per_second
+            .filter(|v| v.is_finite())
+            .unwrap_or(16.0)
+            .clamp(0.0, 10_000.0);
+        let stamina_regen_per_second = self
+            .player
+            .stamina_regen_per_second
+            .filter(|v| v.is_finite())
+            .unwrap_or(22.0)
+            .clamp(0.0, 10_000.0);
+        let stamina_regen_delay_seconds = self
+            .player
+            .stamina_regen_delay_seconds
+            .filter(|v| v.is_finite())
+            .unwrap_or(0.85)
+            .clamp(0.0, 60.0);
+        let stamina_exhausted_resume_fraction = self
+            .player
+            .stamina_exhausted_resume_fraction
+            .filter(|v| v.is_finite())
+            .unwrap_or(0.20)
+            .clamp(0.0, 1.0);
+
+        let damage_defaults =
+            newengine_engine_runtime::gameplay::CharacterDamageResponseTuning::default();
+        let damage_response_tuning =
+            newengine_engine_runtime::gameplay::CharacterDamageResponseTuning {
+                stagger_damage_fraction: self
+                    .player
+                    .damage_stagger_damage_fraction
+                    .filter(|v| v.is_finite())
+                    .unwrap_or(damage_defaults.stagger_damage_fraction),
+                stagger_impulse_threshold: self
+                    .player
+                    .damage_stagger_impulse_threshold
+                    .filter(|v| v.is_finite())
+                    .unwrap_or(damage_defaults.stagger_impulse_threshold),
+                flinch_duration_seconds: self
+                    .player
+                    .damage_flinch_duration_seconds
+                    .filter(|v| v.is_finite())
+                    .unwrap_or(damage_defaults.flinch_duration_seconds),
+                stagger_duration_seconds: self
+                    .player
+                    .damage_stagger_duration_seconds
+                    .filter(|v| v.is_finite())
+                    .unwrap_or(damage_defaults.stagger_duration_seconds),
+                injured_health_fraction: self
+                    .player
+                    .injured_health_fraction
+                    .filter(|v| v.is_finite())
+                    .unwrap_or(damage_defaults.injured_health_fraction),
+            }
+            .sanitized();
+        let death_presentation = self
+            .player
+            .death_presentation
+            .as_deref()
+            .map(str::trim)
+            .map(str::to_ascii_lowercase)
+            .map(|value| match value.as_str() {
+                "animation" => newengine_engine_runtime::gameplay::CharacterDeathPresentation::Animation,
+                "ragdoll" => newengine_engine_runtime::gameplay::CharacterDeathPresentation::Ragdoll,
+                _ => newengine_engine_runtime::gameplay::CharacterDeathPresentation::AnimationThenRagdoll,
+            })
+            .unwrap_or_default();
+        let death_policy = newengine_engine_runtime::gameplay::CharacterDeathPolicy {
+            drop_active_weapon: self.player.drop_active_weapon_on_death.unwrap_or(false),
+            presentation: death_presentation,
+        };
 
         GameReadyMapProfile {
             title: self.title,
@@ -49,6 +137,15 @@ impl RawGameReadyPayload {
                 run_speed,
                 sprint_speed,
                 crouch_speed,
+                combat_team,
+                health_maximum,
+                stamina_maximum,
+                stamina_sprint_drain_per_second,
+                stamina_regen_per_second,
+                stamina_regen_delay_seconds,
+                stamina_exhausted_resume_fraction,
+                damage_response_tuning,
+                death_policy,
                 look_sens: self.player.look_sens,
                 model: GameReadyPlayerModelSpec {
                     enabled: self.player.model.enabled

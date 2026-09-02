@@ -18,9 +18,7 @@ use newengine_asset_bootstrap_runtime::{ContentSetSpec, ProfileMountSpec};
 pub use game_ready_fps::{
     apply_game_ready_fps_env_policy, run_game_ready_fps_process, GameReadyFpsApp,
     GAME_READY_CORE_ENV_POLICY, GAME_READY_FPS_BOOT_OPTIONS, GAME_READY_FPS_ENV_POLICY,
-    GAME_READY_GAME_UI_ENV_DEFAULTS, GAME_READY_RUNTIME_ENV_DEFAULTS, GAME_READY_UI_DOCUMENT_ENV,
     GAME_READY_UI_PROFILE_GAME, GAME_READY_UI_PUBLISH_EDITOR_SHELL_ENV,
-    GAME_READY_UI_ROOT_SURFACE_ENV, GAME_READY_UI_ROOT_SURFACE_GAME,
     GAME_READY_UI_SCREEN_PROFILE_ENV,
 };
 pub use newengine_game_data::{

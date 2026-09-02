@@ -14,29 +14,30 @@ use newengine_engine_runtime::gameplay::{
     active_equipped_weapon_component_stat_modifiers, active_equipped_weapon_muzzle,
     consume_equipped_ammo, drain_weapon_reload_animation_markers, emit_animation_pulse,
     emit_gameplay_event, equipped_reserve_ammo, persist_equipped_weapon_state,
-    resolve_weapon_impact, sync_equipped_weapon_runtime, try_collect_item_pickup,
-    BallisticMaterialResponse, BallisticShotProfile, EquippedWeaponBinding, EquippedWeaponEntity,
-    FiringPatternDefinition, FiringPatternKind, HitscanWeaponTuning, Interactable,
-    InteractionEvent, InteractionEventBus, ItemCatalog, ItemInstanceId, ItemPickup,
-    MeleeWeaponTuning, PendingHitscan, PendingInteraction, PhysicsSurface,
+    resolve_weapon_impact, sync_equipped_weapon_runtime, try_collect_item_pickup, AIController,
+    BallisticMaterialResponse, BallisticShotProfile, CharacterBody, CharacterControlState,
+    CharacterLifeState, CombatActuationState, CombatIntent, CombatIntentKind,
+    EquippedWeaponBinding, EquippedWeaponEntity, EquippedWeaponMuzzle, FiringPatternDefinition,
+    FiringPatternKind, Health, HitscanWeaponTuning, Interactable, InteractionEvent,
+    InteractionEventBus, ItemCatalog, ItemInstanceId, ItemPickup, MeleeWeaponTuning,
+    PendingHitscan, PendingInteraction, PerceptionState, PhysicsSurface,
     PlayerAuthoredAnimationCapabilities, PlayerCommandFrame, PlayerController,
     PlayerInteractionTuning, PlayerStanceKind, PlayerStanceState, PlayerWeaponState,
     ResolvedWeaponStats, WeaponAccuracyModifiers, WeaponAccuracyState, WeaponActionKind,
     WeaponActionRuntime, WeaponActionTimingSource, WeaponAttackKind, WeaponEvent, WeaponEventBus,
     WeaponEventKind, WeaponFireControllerState, WeaponImpact, WeaponObstructionState,
-    WeaponRecoilProfile, WeaponReloadAnimationAuthority, WeaponReloadAnimationMarker,
-    WeaponReloadPhase, WeaponReloadTimelineProfile, WeaponRuntimeProfiles,
-    WeaponSpreadDistribution, WeaponSpreadProfile, WeaponStatModifierStack, WeaponType,
-    GAMEPLAY_EVENT_WEAPON_EMPTY, GAMEPLAY_EVENT_WEAPON_FIRED, GAMEPLAY_EVENT_WEAPON_HIT,
-    GAMEPLAY_EVENT_WEAPON_MELEE_ATTACKED, GAMEPLAY_EVENT_WEAPON_PENETRATED,
-    GAMEPLAY_EVENT_WEAPON_RELOAD_COMPLETED, GAMEPLAY_EVENT_WEAPON_RELOAD_PHASE,
-    GAMEPLAY_EVENT_WEAPON_RELOAD_STARTED,
+    WeaponRecoilProfile, WeaponReloadAnimationAuthority, WeaponReloadPhase,
+    WeaponReloadTimelineProfile, WeaponRuntimeProfiles, WeaponSpreadDistribution,
+    WeaponSpreadProfile, WeaponStatModifierStack, WeaponType, GAMEPLAY_EVENT_WEAPON_EMPTY,
+    GAMEPLAY_EVENT_WEAPON_FIRED, GAMEPLAY_EVENT_WEAPON_HIT, GAMEPLAY_EVENT_WEAPON_MELEE_ATTACKED,
+    GAMEPLAY_EVENT_WEAPON_PENETRATED, GAMEPLAY_EVENT_WEAPON_RELOAD_COMPLETED,
+    GAMEPLAY_EVENT_WEAPON_RELOAD_PHASE, GAMEPLAY_EVENT_WEAPON_RELOAD_STARTED,
 };
 #[cfg(test)]
 use newengine_gameplay_fps_api::action as fps_action;
 use newengine_gameplay_fps_api::{
-    FpsActionFrame, FpsGameplayPolicyProvider, FpsGameplayPolicySnapshot, FpsPolicyDecision,
-    FpsPolicyEvent,
+    FpsActionFrame, FpsActorWeaponMountTuning, FpsAiCombatTuning, FpsGameplayPolicyProvider,
+    FpsGameplayPolicySnapshot, FpsPolicyDecision, FpsPolicyEvent,
 };
 use newengine_gameplay_script_runtime::GameplayCommandExecutor;
 use newengine_math::{avalanche_u64, EulerRot, Quat, Vec3};
@@ -45,7 +46,7 @@ use newengine_sim::{CharacterMotor, Velocity};
 use newengine_transform::Transform;
 
 #[cfg(test)]
-use newengine_engine_runtime::gameplay::{EquippedWeaponMuzzle, Health};
+use newengine_engine_runtime::gameplay::WeaponReloadAnimationMarker;
 
 #[inline]
 fn resolved_weapon_stats(world: &World, player: EntityId) -> ResolvedWeaponStats {
@@ -143,6 +144,8 @@ pub fn focused_item_pickup(world: &World, player: EntityId) -> Option<EntityId> 
 
 #[path = "combat/actions.rs"]
 mod actions;
+#[path = "combat/ai_actuation.rs"]
+mod ai_actuation;
 #[path = "combat/queries.rs"]
 mod queries;
 #[path = "combat/runtime.rs"]
@@ -152,17 +155,20 @@ mod targeting;
 
 use actions::*;
 
+pub use ai_actuation::step_ai_combat_actuation;
 pub use queries::{collect_combat_queries, resolve_combat_queries};
-pub use runtime::step_player_combat;
+pub use runtime::{step_actor_combat, step_player_combat};
 
 #[cfg(test)]
 use runtime::{apply_recoil, recover_weapon_recoil};
 use runtime::{emit_interaction_event, emit_weapon_event};
 use targeting::{
     hitscan_bounce_query_seq, hitscan_query_seq, interaction_query_seq, interaction_ray,
-    melee_origin_and_direction, queue_weapon_obstruction_probe, shot_origin_and_direction,
+    melee_origin_and_direction, queue_weapon_obstruction_probe,
     shot_origin_and_direction_with_profiles, signed_unit,
 };
 
+#[cfg(test)]
+use targeting::shot_origin_and_direction;
 #[cfg(test)]
 include!("combat/tests.rs");

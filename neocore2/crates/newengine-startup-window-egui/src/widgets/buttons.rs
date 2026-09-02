@@ -16,9 +16,9 @@ pub(crate) fn nav_button(ui: &mut egui::Ui, page: SettingsPage, selected: bool) 
         color32(style.palette.bg_deep)
     };
     let stroke = if selected {
-        egui::Stroke::new(1.0, color32(style.palette.blue))
+        egui::Stroke::new(1.0_f32, color32(style.palette.blue))
     } else {
-        egui::Stroke::new(1.0, color32(style.palette.edge_soft))
+        egui::Stroke::new(1.0_f32, color32(style.palette.edge_soft))
     };
     ui.add_sized(
         [ui.available_width(), 48.0],
@@ -65,7 +65,7 @@ pub(crate) fn compact_choice_button(
             color32(palette.bg_deep)
         })
         .stroke(egui::Stroke::new(
-            1.0,
+            1.0_f32,
             if selected {
                 color32(palette.blue)
             } else {
@@ -99,7 +99,7 @@ pub(crate) fn preset_choice_button(
             color32(palette.bg_deep)
         })
         .stroke(egui::Stroke::new(
-            1.0,
+            1.0_f32,
             if selected {
                 color32(palette.blue_bright)
             } else {
@@ -120,7 +120,7 @@ pub(crate) fn primary_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
                 .color(color32(palette.bg_deep)),
         )
         .fill(color32(palette.blue_bright))
-        .stroke(egui::Stroke::new(1.0, color32(palette.blue_bright)))
+        .stroke(egui::Stroke::new(1.0_f32, color32(palette.blue_bright)))
         .rounding(egui::Rounding::same(8.0)),
     )
 }
@@ -135,7 +135,7 @@ pub(crate) fn secondary_button(ui: &mut egui::Ui, label: &str) -> egui::Response
                 .color(color32(palette.text_dim)),
         )
         .fill(color32(palette.bg_deep))
-        .stroke(egui::Stroke::new(1.0, color32(palette.edge)))
+        .stroke(egui::Stroke::new(1.0_f32, color32(palette.edge)))
         .rounding(egui::Rounding::same(8.0)),
     )
 }

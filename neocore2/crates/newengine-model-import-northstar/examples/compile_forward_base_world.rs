@@ -13,7 +13,6 @@ use std::{
 
 #[derive(Default)]
 struct Batch {
-    source_material: String,
     vertices: Vec<YddBinaryVertex>,
     indices: Vec<u32>,
     bounds_min: [f32; 3],
@@ -231,7 +230,6 @@ fn main() -> Result<(), String> {
                 .or_default()
                 .entry(material_hash)
                 .or_insert_with(|| Batch {
-                    source_material: material.clone(),
                     bounds_min: [f32::INFINITY; 3],
                     bounds_max: [f32::NEG_INFINITY; 3],
                     ..Batch::default()

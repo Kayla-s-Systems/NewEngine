@@ -98,7 +98,11 @@ impl WeaponAudioDefinition {
 #[derive(Clone, Debug, PartialEq)]
 pub struct WeaponPresentationDefinition {
     pub enabled: bool,
+    /// Translation component of the authored weapon-root -> handle frame.
     pub handle_from_root: [f32; 3],
+    /// Rotation component of the authored weapon-root -> handle frame. Together with
+    /// `handle_from_root`, this is the complete `handle_from_weapon_root` transform.
+    pub handle_rotation_from_root: [f32; 4],
     pub muzzle_from_root: [f32; 3],
     pub left_grip_from_handle: [f32; 3],
     pub stock_contact_from_handle: [f32; 3],
@@ -120,6 +124,10 @@ pub struct WeaponPresentationDefinition {
     /// Third-person, first-person, grip, muzzle and ADS presentation must all consume this same
     /// basis; view-specific orientation compensation is forbidden.
     pub native_rig_to_runtime_basis: [f32; 4],
+    /// Authored character prop-socket -> weapon-handle basis. This is recovered from the source
+    /// grip/reference domain and is independent from `native_rig_to_runtime_basis`. Runtime applies
+    /// each basis exactly once, then obtains the weapon root through the inverse handle transform.
+    pub authored_socket_to_weapon_handle_basis: [f32; 4],
     /// Camera/viewmodel hip handle placement. Kept separate from anatomical full-body reach.
     pub first_person_hip_handle_offset: [f32; 3],
     /// Camera-owned full-body FPP handle placement. This must keep both authored arm contacts
@@ -153,6 +161,7 @@ impl Default for WeaponPresentationDefinition {
         Self {
             enabled: false,
             handle_from_root: [0.0; 3],
+            handle_rotation_from_root: [0.0, 0.0, 0.0, 1.0],
             muzzle_from_root: [0.0, 0.0, 0.5],
             left_grip_from_handle: [0.0, 0.0, 0.25],
             stock_contact_from_handle: [0.0, 0.0, -0.25],
@@ -169,6 +178,7 @@ impl Default for WeaponPresentationDefinition {
             right_palm_to_handle: [0.0; 3],
             right_palm_to_native_rig: [0.0, 0.0, 0.0, 1.0],
             native_rig_to_runtime_basis: [0.0, 0.0, 0.0, 1.0],
+            authored_socket_to_weapon_handle_basis: [0.0, 0.0, 0.0, 1.0],
             first_person_hip_handle_offset: [0.2, -0.2, -0.5],
             // Compatibility default only. Authored item compilation inherits the ordinary FPP
             // offset when no explicit full-body value exists.
@@ -228,6 +238,7 @@ impl WeaponPresentationDefinition {
         }
         let fallback = Self::default();
         self.handle_from_root = vec3(self.handle_from_root, fallback.handle_from_root, 10.0);
+        self.handle_rotation_from_root = quat(self.handle_rotation_from_root);
         self.muzzle_from_root = vec3(self.muzzle_from_root, fallback.muzzle_from_root, 10.0);
         self.left_grip_from_handle = vec3(
             self.left_grip_from_handle,
@@ -303,6 +314,8 @@ impl WeaponPresentationDefinition {
         self.ready_left_palm_to_weapon = quat(self.ready_left_palm_to_weapon);
         self.right_palm_to_native_rig = quat(self.right_palm_to_native_rig);
         self.native_rig_to_runtime_basis = quat(self.native_rig_to_runtime_basis);
+        self.authored_socket_to_weapon_handle_basis =
+            quat(self.authored_socket_to_weapon_handle_basis);
         self.fire_kick_duration_seconds = if self.fire_kick_duration_seconds.is_finite() {
             self.fire_kick_duration_seconds.clamp(0.001, 10.0)
         } else {

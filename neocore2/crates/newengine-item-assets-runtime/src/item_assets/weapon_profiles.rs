@@ -14,6 +14,7 @@ pub struct AuthoredWeaponRuntimeProfiles {
 #[serde(default)]
 pub struct AuthoredWeaponHandlingProfile {
     pub reload_duration_seconds: Option<f32>,
+    pub reload_topology: Option<String>,
     pub equip_duration_seconds: Option<f32>,
     pub unequip_duration_seconds: Option<f32>,
     pub aim_in_duration_seconds: Option<f32>,
@@ -101,6 +102,9 @@ impl AuthoredWeaponRuntimeProfiles {
             &mut profiles.handling.reload_duration_seconds,
             self.handling.reload_duration_seconds,
         );
+        if let Some(topology) = self.handling.reload_topology.as_deref() {
+            profiles.handling.reload_topology = parse_reload_topology(topology)?;
+        }
         apply_opt(
             &mut profiles.handling.equip_duration_seconds,
             self.handling.equip_duration_seconds,
@@ -267,6 +271,19 @@ fn apply_opt(target: &mut f32, value: Option<f32>) {
 fn apply_degrees(target: &mut f32, value: Option<f32>) {
     if let Some(value) = value {
         *target = value.to_radians();
+    }
+}
+
+pub(super) fn parse_reload_topology(value: &str) -> Result<WeaponReloadTopology, String> {
+    match value.trim().to_ascii_lowercase().replace('-', "_").as_str() {
+        "" | "detachable" | "detachable_mag" | "detachable_magazine" | "magazine" => {
+            Ok(WeaponReloadTopology::DetachableMagazine)
+        }
+        "internal" | "internal_mag" | "internal_magazine" => {
+            Ok(WeaponReloadTopology::InternalMagazine)
+        }
+        "single" | "single_round" | "single_round_chamber" => Ok(WeaponReloadTopology::SingleRound),
+        other => Err(format!("unsupported weapon reload topology '{other}'")),
     }
 }
 

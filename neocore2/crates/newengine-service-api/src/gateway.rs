@@ -23,7 +23,6 @@ pub const ENGINE_ASSETS_MAPS_GATEWAY_ID: &str = "engine.assets.maps";
 pub const ENGINE_ASSETS_VALIDATION_GATEWAY_ID: &str = "engine.assets.validation";
 pub const ENGINE_ASSETS_UI_GATEWAY_ID: &str = "engine.assets.ui";
 pub const ENGINE_ASSETS_MATERIALS_GATEWAY_ID: &str = "engine.assets.materials";
-pub const ENGINE_ASSETS_TEXTURES_GATEWAY_ID: &str = "engine.assets.textures";
 pub const ENGINE_ASSETS_DEFINITIONS_GATEWAY_ID: &str = "engine.assets.definitions";
 pub const ENGINE_ASSETS_GRAPH_GATEWAY_ID: &str = "engine.assets.graph";
 pub const ENGINE_ASSETS_MODELS_GATEWAY_ID: &str = "engine.assets.models";

@@ -26,14 +26,14 @@ fn parallel_efficiency(worker_cpu_ns: u64, worker_wall_ns: u64, width: usize) ->
 
 fn run_owner_system(
     world: &mut World,
-    stage: SimStage,
+    _stage: SimStage,
     system: &SystemEntry,
     frame: SimFrame,
 ) -> u64 {
     let mut cb = CommandBuffer::new();
     (system.f)(world, frame, &mut cb);
     #[cfg(debug_assertions)]
-    validate_commands(stage, system.name, &cb);
+    validate_commands(_stage, system.name, &cb);
     let commit_started = Instant::now();
     if !cb.is_empty() {
         cb.apply_all(world);

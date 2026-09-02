@@ -78,7 +78,7 @@ mod tests {
                         alignment: VfxAlignment::DirectionZ,
                         texture_slot: 0,
                         billboard: VfxGpuBillboardMode::CameraFacing,
-                        offset_along_direction: 0.0,
+                        offset_along_direction: 0.06,
                         offset_along_normal: 0.0,
                         scale: Vec3::splat(0.1),
                         growth_per_second: Vec3::ZERO,
@@ -100,7 +100,7 @@ mod tests {
                         alignment: VfxAlignment::None,
                         texture_slot: 0,
                         billboard: VfxGpuBillboardMode::CameraFacing,
-                        offset_along_direction: 0.0,
+                        offset_along_direction: 0.03,
                         offset_along_normal: 0.0,
                         scale: Vec3::splat(0.05),
                         growth_per_second: Vec3::ZERO,
@@ -122,7 +122,7 @@ mod tests {
                         alignment: VfxAlignment::DirectionZ,
                         texture_slot: 0,
                         billboard: VfxGpuBillboardMode::CameraFacing,
-                        offset_along_direction: 0.0,
+                        offset_along_direction: 0.015,
                         offset_along_normal: 0.0,
                         scale: Vec3::splat(0.05),
                         growth_per_second: Vec3::splat(0.1),
@@ -241,9 +241,25 @@ mod tests {
                 weapon,
             },
         );
-        let origin = Vec3::new(1.0, 1.5, 2.0);
-        let direction = -Vec3::Z;
-        spawn_weapon_shot_fx(&mut world, owner, 17, origin, direction, 120.0);
+        let muzzle_position = Vec3::new(1.0, 1.5, 2.0);
+        let muzzle_forward = Vec3::X;
+        let shot_direction = -Vec3::Z;
+        let bogus_camera_origin = Vec3::new(80.0, 90.0, 100.0);
+        consume_weapon_gameplay_events(
+            &mut world,
+            &[GameplayEvent::new(GAMEPLAY_EVENT_WEAPON_FIRED)
+                .with_source(owner)
+                .with_payload(serde_json::json!({
+                    "shot_sequence": 17,
+                    "muzzle_position": [muzzle_position.x, muzzle_position.y, muzzle_position.z],
+                    "muzzle_forward": [muzzle_forward.x, muzzle_forward.y, muzzle_forward.z],
+                    // Deliberately disagree with the physical barrel. Weapon presentation must not
+                    // inherit either origin or orientation from camera/reticle ballistic data.
+                    "shot_origin": [bogus_camera_origin.x, bogus_camera_origin.y, bogus_camera_origin.z],
+                    "shot_direction": [shot_direction.x, shot_direction.y, shot_direction.z],
+                    "range": 120.0
+                }))],
+        );
 
         let effects = world
             .query::<newengine_vfx_runtime::VfxLayerRuntime>()
@@ -258,15 +274,33 @@ mod tests {
             newengine_vfx_runtime::vfx_runtime_stats(&world).active_layers,
             4
         );
+        let gpu_spawns = world
+            .resource::<newengine_vfx_api::VfxGpuParticleBridge>()
+            .expect("GPU particle bridge")
+            .drain_spawns(16);
         assert_eq!(
-            world
-                .resource::<newengine_vfx_api::VfxGpuParticleBridge>()
-                .expect("GPU particle bridge")
-                .stats()
-                .pending_spawns,
+            gpu_spawns.len(),
             3,
             "muzzle flash, hot core and smoke must be queued independently for GPU materialization"
         );
+        for spawn in &gpu_spawns {
+            let offset = match spawn.kind {
+                newengine_vfx_api::VfxGpuParticleKind::MuzzleFlash => 0.06,
+                newengine_vfx_api::VfxGpuParticleKind::MuzzleCore => 0.03,
+                newengine_vfx_api::VfxGpuParticleKind::Smoke => 0.015,
+                other => panic!("unexpected muzzle GPU particle kind: {other:?}"),
+            };
+            let expected = muzzle_position + muzzle_forward * offset;
+            let actual = Vec3::new(spawn.position[0], spawn.position[1], spawn.position[2]);
+            assert!(
+                actual.distance(expected) < 1.0e-6,
+                "muzzle particle must use physical barrel pose: kind={:?} actual={:?} expected={:?}",
+                spawn.kind,
+                actual,
+                expected
+            );
+            assert!(actual.distance(bogus_camera_origin) > 1.0);
+        }
         let (tracer, tracer_runtime) = effects
             .iter()
             .copied()
@@ -276,9 +310,16 @@ mod tests {
             .get::<Transform>(tracer)
             .copied()
             .expect("tracer transform");
-        assert!((tracer_runtime.origin - origin).length() < 1.0e-6);
-        assert!(tracer_runtime.velocity.normalize_or_zero().dot(direction) > 0.999_999);
-        assert!(tracer_transform.position.z < origin.z);
+        assert!((tracer_runtime.origin - muzzle_position).length() < 1.0e-6);
+        assert!(
+            tracer_runtime
+                .velocity
+                .normalize_or_zero()
+                .dot(shot_direction)
+                > 0.999_999
+        );
+        assert!(tracer_transform.position.z < muzzle_position.z);
+        assert!(tracer_runtime.origin.distance(bogus_camera_origin) > 1.0);
         assert_eq!(
             world.query::<WeaponShellCasing>().count(),
             0,
@@ -290,7 +331,7 @@ mod tests {
             "shot must schedule one native frame-1 casing ejection"
         );
 
-        let hit = origin + direction * 1.0;
+        let hit = muzzle_position + shot_direction * 1.0;
         let target = world.spawn();
         let _ = world.insert(
             target,
@@ -359,7 +400,7 @@ mod tests {
             .copied()
             .expect("travelling tracer");
         let tracer_half_length = tracer_runtime.base_scale.z * 0.5;
-        assert!((after.position - origin).length() <= 1.0 + tracer_half_length + 1.0e-4);
+        assert!((after.position - muzzle_position).length() <= 1.0 + tracer_half_length + 1.0e-4);
         step_weapon_shot_fx(&mut world, 0.01);
         assert!(
             !world.exists(tracer),
@@ -597,6 +638,68 @@ mod tests {
             .any(|event| event.id == GAMEPLAY_EVENT_WEAPON_SHELL_ROLLING));
     }
     #[test]
+    fn shell_rolling_grains_are_bounded_per_continuous_motion_episode() {
+        let mut world = World::new();
+        let package = newengine_item_assets_runtime::compile_authored_item_package(
+            &newengine_item_assets_runtime::test_fps_item_package(),
+        )
+        .expect("compile test item package");
+        newengine_item_assets_runtime::install_compiled_item_package(&mut world, package);
+        let rifle_id = world
+            .resource::<ItemCatalog>()
+            .and_then(|catalog| catalog.find("weapon.rifle.standard"))
+            .map(|definition| definition.id)
+            .expect("test rifle");
+        let owner = world.spawn();
+        let casing = world.spawn();
+        let ground = world.spawn();
+        let _ = world.insert(
+            casing,
+            WeaponShellCasing::new(owner.stable_u64(), 120, rifle_id.raw(), 0),
+        );
+        let _ = world.insert(casing, WeaponShellContactRuntime::default());
+        let _ = world.insert(casing, Transform::default());
+        let _ = world.insert(casing, Velocity(Vec3::new(0.70, 0.0, 0.22)));
+        let _ = world.insert(casing, AngularVelocity(Vec3::new(0.0, 12.0, 3.0)));
+        let _ = world.insert(
+            ground,
+            PhysicsSurface {
+                id: "surface.metal.floor".to_owned(),
+                ..PhysicsSurface::default()
+            },
+        );
+        let contact = newengine_physics_contracts::PhysicsContactEvent {
+            a: casing.into(),
+            b: ground.into(),
+            point: Vec3::ZERO,
+            normal: Vec3::Y,
+            impulse: 0.0001,
+        };
+
+        let mut rolling_events = 0usize;
+        for tick in 1..=90 {
+            world.insert_resource(PhysicsStepReport {
+                fixed_tick: tick,
+                dt: 1.0 / 60.0,
+                events: vec![PhysicsEvent::ContactPersist(contact)],
+                ..PhysicsStepReport::default()
+            });
+            process_shell_physics_events(&mut world, 1.0 / 60.0);
+            rolling_events += newengine_engine_runtime::gameplay::drain_gameplay_events(&mut world)
+                .into_iter()
+                .filter(|event| event.id == GAMEPLAY_EVENT_WEAPON_SHELL_ROLLING)
+                .count();
+        }
+
+        assert_eq!(rolling_events, SHELL_ROLL_MAX_EVENTS_PER_MOTION as usize);
+        assert!(world
+            .get::<WeaponShellContactRuntime>(casing)
+            .is_some_and(|state| {
+                state.rolling_events_emitted == SHELL_ROLL_MAX_EVENTS_PER_MOTION && !state.settled
+            }));
+    }
+
+    #[test]
     fn settled_shell_stops_emitting_persistent_contact_audio_until_real_wake() {
         let mut world = World::new();
         let package = newengine_item_assets_runtime::compile_authored_item_package(
@@ -784,7 +887,11 @@ mod tests {
             .query::<PersistentImpactDebris>()
             .map(|(entity, _)| entity)
             .collect::<Vec<_>>();
-        assert_eq!(debris.len(), 6, "metal firearm hit must eject six rigid shards");
+        assert_eq!(
+            debris.len(),
+            6,
+            "metal firearm hit must eject six rigid shards"
+        );
         for entity in debris {
             assert!(world.get::<ActiveImpactDebris>(entity).is_some());
             assert!(world.get::<PhysicsBodyDesc>(entity).is_some());

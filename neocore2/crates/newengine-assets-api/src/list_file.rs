@@ -369,13 +369,12 @@ pub const LIST_FILE_CONTENT_KIND_YDR: u32 = 6;
 pub const LIST_FILE_CONTENT_KIND_YFT: u32 = 7;
 /// Bounds dictionary type identifier.
 pub const LIST_FILE_CONTENT_KIND_YBN: u32 = 8;
-/// North Star font dictionary type identifier.
-pub const LIST_FILE_CONTENT_KIND_NEFTD: u32 = 22;
+/// Y Font Dictionary type identifier. Wire id 22 is retained across the format rename.
+pub const LIST_FILE_CONTENT_KIND_YFD: u32 = 22;
 pub const LIST_FILE_CONTENT_KIND_YMF: u32 = 9;
 pub const LIST_FILE_CONTENT_KIND_YMT: u32 = 10;
 pub const LIST_FILE_CONTENT_KIND_YCD: u32 = 11;
 pub const LIST_FILE_CONTENT_KIND_YED: u32 = 12;
-pub const LIST_FILE_CONTENT_KIND_YFD: u32 = 13;
 pub const LIST_FILE_CONTENT_KIND_YLD: u32 = 14;
 pub const LIST_FILE_CONTENT_KIND_YPDB: u32 = 15;
 pub const LIST_FILE_CONTENT_KIND_YVR: u32 = 16;
@@ -392,6 +391,43 @@ pub const LIST_FILE_CONTENT_KIND_NEITEMS: u32 = 33;
 pub const LIST_FILE_CONTENT_KIND_YSCD: u32 = 34;
 /// Project-authored FX Dictionary: semantic VFX graphs and project texture references.
 pub const LIST_FILE_CONTENT_KIND_FXD: u32 = 35;
+
+/// Stable human-readable label for a NEF8/ListFile content kind.
+///
+/// Tooling uses this projection for diagnostics and inspect output; wire identity
+/// remains the numeric `content_kind`. Unknown/future ids intentionally collapse
+/// to `unknown` so old tools can inspect newer envelopes without inventing meaning.
+#[inline]
+pub fn list_file_content_kind_label(content_kind: u32) -> &'static str {
+    match content_kind {
+        LIST_FILE_CONTENT_KIND_YTD => "ytd_texture_dictionary",
+        LIST_FILE_CONTENT_KIND_YDD => "ydd_drawable_dictionary",
+        LIST_FILE_CONTENT_KIND_YTYP => "ytyp_archetype_dictionary",
+        LIST_FILE_CONTENT_KIND_NEMAT => "nemat_material_library",
+        LIST_FILE_CONTENT_KIND_YMAP => "ymap_map_data",
+        LIST_FILE_CONTENT_KIND_YDR => "ydr_drawable",
+        LIST_FILE_CONTENT_KIND_YFT => "yft_fragment",
+        LIST_FILE_CONTENT_KIND_YBN => "ybn_bounds_dictionary",
+        LIST_FILE_CONTENT_KIND_YMF => "ymf_manifest",
+        LIST_FILE_CONTENT_KIND_YMT => "ymt_metadata",
+        LIST_FILE_CONTENT_KIND_YCD => "ycd_clip_dictionary",
+        LIST_FILE_CONTENT_KIND_YED => "yed_expression_dictionary",
+        LIST_FILE_CONTENT_KIND_YLD => "yld_cloth_dictionary",
+        LIST_FILE_CONTENT_KIND_YPDB => "ypdb_particle_dictionary",
+        LIST_FILE_CONTENT_KIND_YVR => "yvr_vehicle_recording",
+        LIST_FILE_CONTENT_KIND_YWR => "ywr_waypoint_recording",
+        LIST_FILE_CONTENT_KIND_YSC => "ysc_script_dictionary",
+        LIST_FILE_CONTENT_KIND_YBD => "ybd_bytecode_dictionary",
+        LIST_FILE_CONTENT_KIND_YTF => "ytf_texture_fragment",
+        LIST_FILE_CONTENT_KIND_YTYD => "ytyd_type_dictionary",
+        LIST_FILE_CONTENT_KIND_YFD => "yfd_font_dictionary",
+        LIST_FILE_CONTENT_KIND_NEUI => "neui_ui_dictionary",
+        LIST_FILE_CONTENT_KIND_NEITEMS => "neitems_item_dictionary",
+        LIST_FILE_CONTENT_KIND_YSCD => "yscd_sound_cue_dictionary",
+        LIST_FILE_CONTENT_KIND_FXD => "fxd_effect_dictionary",
+        _ => "unknown",
+    }
+}
 
 /// The numeric `LIST_FILE_CONTENT_KIND_*` constants above are frozen wire-compatibility
 /// aliases for existing assets only. They are not a registry and new asset formats must

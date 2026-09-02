@@ -1,5 +1,6 @@
 use super::geometry::{
-    material_texture_refs, require_complete_graph, scene_preview_snapshot, texture_dimensions,
+    asset_extension, material_texture_refs, require_complete_graph, scene_preview_snapshot,
+    texture_dimensions,
 };
 use super::*;
 
@@ -279,6 +280,7 @@ impl AssetPreviewApi {
             .semantic_gateway
             .eq_ignore_ascii_case("engine.assets.textures")
             || document.asset_kind.contains("texture")
+            || asset_extension(&document.asset_ref).eq_ignore_ascii_case("ytd")
     }
 
     pub(super) fn is_model(&self, document: &AssetDocument) -> bool {
@@ -294,6 +296,12 @@ impl AssetPreviewApi {
             || document.asset_kind.contains("drawable")
             || document.asset_kind.contains("model")
             || document.asset_kind.contains("archetype")
+            || matches!(
+                asset_extension(&document.asset_ref)
+                    .to_ascii_lowercase()
+                    .as_str(),
+                "ydd" | "ydr"
+            )
     }
 
     pub(super) fn is_material(&self, document: &AssetDocument) -> bool {
@@ -304,5 +312,7 @@ impl AssetPreviewApi {
                 .semantic_gateway
                 .eq_ignore_ascii_case("engine.assets.materials")
             || document.asset_kind.contains("material")
+            || document.content_kind == Some(newengine_assets_api::LIST_FILE_CONTENT_KIND_NEMAT)
+            || asset_extension(&document.asset_ref).eq_ignore_ascii_case("nemat")
     }
 }

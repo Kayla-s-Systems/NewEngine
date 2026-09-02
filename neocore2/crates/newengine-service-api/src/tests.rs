@@ -64,12 +64,6 @@ fn child_domains_parse_with_canonical_gateways() {
             Some(EngineServiceKind::Assets),
         ),
         (
-            "assets.textures",
-            EngineServiceKind::Textures,
-            "engine.assets.textures",
-            Some(EngineServiceKind::Assets),
-        ),
-        (
             "assets.definitions",
             EngineServiceKind::Definitions,
             "engine.assets.definitions",

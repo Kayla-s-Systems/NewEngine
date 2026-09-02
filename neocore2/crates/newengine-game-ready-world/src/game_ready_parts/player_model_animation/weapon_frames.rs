@@ -199,7 +199,12 @@ pub(crate) fn publish_player_first_person_camera_anchors(world: &mut newengine_e
     // stance eye height. Camera runtime adds only a small body-owned forward/parallax offset.
     let players = world
         .query::<PlayerAnimationRuntimeBinding>()
-        .map(|(player, _)| player)
+        .filter_map(|(player, _)| {
+            world
+                .get::<newengine_engine_runtime::gameplay::PlayerActor>(player)
+                .is_some()
+                .then_some(player)
+        })
         .collect::<Vec<_>>();
 
     for player in players {

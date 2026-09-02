@@ -117,27 +117,18 @@ pub(super) fn pattern_for_observation(
     kind: WeatherKind,
 ) -> &'static WeatherPresentationDescriptor {
     let table = presentation_table_by_id(profile.weather_table_ref);
-    table
+    if let Some(pattern) = table
         .bands
         .iter()
         .map(|band| presentation_by_id(band.pattern_id))
         .find(|pattern| pattern.kind == kind)
-        .unwrap_or_else(|| presentation_by_id(fallback_pattern_id(kind)))
-}
-
-fn fallback_pattern_id(kind: WeatherKind) -> &'static str {
-    match kind {
-        WeatherKind::Clear => "weather.clear.dry_high_pressure",
-        WeatherKind::Cloudy => "weather.cloudy.fair_cumulus",
-        WeatherKind::Overcast => "weather.overcast.stratus_deck",
-        WeatherKind::Rain => "weather.rain.nimbostratus",
-        WeatherKind::Storm => "weather.storm.cumulonimbus",
-        WeatherKind::Snow => "weather.snow.stratiform",
-        WeatherKind::Fog => "weather.fog.ground_radiation",
-        WeatherKind::DustStorm => "weather.dust_storm.front",
-        WeatherKind::HeatHaze => "weather.clear.dry_high_pressure",
+    {
+        pattern
+    } else {
+        presentation_by_id(table.fallback_pattern_id)
     }
 }
+
 
 pub(super) fn enrich_tags(
     weather: &mut WeatherStateDto,

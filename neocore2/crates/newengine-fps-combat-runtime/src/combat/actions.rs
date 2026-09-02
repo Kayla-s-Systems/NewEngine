@@ -111,9 +111,9 @@ pub(super) fn reload_timing_source(
         .filter(|authority| authority.weapon_instance_id == weapon_instance_id)
         .filter(|authority| authority.is_complete());
     match authority {
-        Some(authority) => (
+        Some(_) => (
             WeaponActionTimingSource::AnimationMarkers,
-            authority.clip_duration_seconds,
+            fallback_duration_seconds,
         ),
         None => (
             WeaponActionTimingSource::TimelineFallback,

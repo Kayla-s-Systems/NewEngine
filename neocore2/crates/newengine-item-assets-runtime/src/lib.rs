@@ -14,9 +14,9 @@ use newengine_engine_runtime::gameplay::{
     WeaponAudioDefinition, WeaponCasingDefinition, WeaponComponentDefinition,
     WeaponComponentGraphDefinition, WeaponComponentModifiers, WeaponComponentPointDefinition,
     WeaponFireMode, WeaponItemDefinition, WeaponPresentationDefinition, WeaponRecoilStateProfile,
-    WeaponRuntimeProfiles, WeaponSpreadDistribution, WeaponSpreadStateProfile, WeaponStatId,
-    WeaponStatModifier, WeaponStatModifierOp, WeaponStatModifierStack, WeaponType,
-    WeaponVfxDefinition, WorldItemDefinition,
+    WeaponReloadTopology, WeaponRuntimeProfiles, WeaponSpreadDistribution,
+    WeaponSpreadStateProfile, WeaponStatId, WeaponStatModifier, WeaponStatModifierOp,
+    WeaponStatModifierStack, WeaponType, WeaponVfxDefinition, WorldItemDefinition,
 };
 use newengine_primitives::builtins as primitive_builtins;
 use serde::{Deserialize, Serialize};

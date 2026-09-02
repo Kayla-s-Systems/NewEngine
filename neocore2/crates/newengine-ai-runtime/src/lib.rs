@@ -29,25 +29,77 @@ impl AiState {
         let mut intents = Vec::new();
         let mut trace = Vec::new();
         for agent in input.agents {
+            let visible_target = agent
+                .visible_facts
+                .iter()
+                .find(|fact| fact.fact_id == "combat.target.visible")
+                .and_then(|fact| {
+                    let target = fact.value.get("target")?.as_u64()?;
+                    let position = fact.value.get("position").cloned().unwrap_or(Value::Null);
+                    Some((target, position))
+                });
+            let combat_memory = agent.blackboard.get("combat");
+            let memory_target = combat_memory
+                .and_then(|value| value.get("memory_target"))
+                .and_then(Value::as_u64);
+            let memory_position = combat_memory
+                .and_then(|value| value.get("last_known_position"))
+                .cloned()
+                .unwrap_or(Value::Null);
+
             let alert = agent.tags.iter().any(|tag| tag.as_str() == "state.alert");
             let idle = agent.tags.iter().any(|tag| tag.as_str() == "state.idle");
-            let kind = if alert {
-                AiIntentKind::RequestTask
+            let (kind, task, payload, selected_pattern, score) = if let Some((target, position)) =
+                visible_target
+            {
+                (
+                    AiIntentKind::Custom("combat.engage".to_owned()),
+                    None,
+                    serde_json::json!({
+                        "target": target,
+                        "target_position": position,
+                        "reason": "visible-hostile-target",
+                    }),
+                    "foundation.combat.engage",
+                    1.0,
+                )
+            } else if let Some(target) = memory_target {
+                (
+                    AiIntentKind::Custom("combat.investigate".to_owned()),
+                    None,
+                    serde_json::json!({
+                        "target": target,
+                        "target_position": memory_position,
+                        "reason": "target-memory",
+                    }),
+                    "foundation.combat.investigate",
+                    0.65,
+                )
+            } else if alert {
+                (
+                    AiIntentKind::RequestTask,
+                    Some(TaskRequestDtoV1 {
+                        task: TaskId::new("move_to"),
+                        issuer: Some(agent.entity),
+                        target: None,
+                        priority: 100,
+                        parameters: serde_json::json!({"reason":"alert-agent-foundation-intent"}),
+                        tags: agent.tags.clone(),
+                    }),
+                    serde_json::json!({"apply_stage_required":true}),
+                    "foundation.alert.request_task",
+                    1.0,
+                )
             } else {
-                AiIntentKind::Idle
+                (
+                    AiIntentKind::Idle,
+                    None,
+                    serde_json::json!({"apply_stage_required":true}),
+                    "foundation.idle",
+                    0.1,
+                )
             };
-            let task = if alert {
-                Some(TaskRequestDtoV1 {
-                    task: TaskId::new("move_to"),
-                    issuer: Some(agent.entity),
-                    target: None,
-                    priority: 100,
-                    parameters: serde_json::json!({"reason":"alert-agent-foundation-intent"}),
-                    tags: agent.tags.clone(),
-                })
-            } else {
-                None
-            };
+
             intents.push(AiIntentDtoV1 {
                 intent_id: format!("ai.intent.{}.{}", input.fixed_tick, agent.agent_id),
                 agent: agent.entity,
@@ -65,16 +117,12 @@ impl AiState {
                     parameters: serde_json::json!({}),
                 }),
                 tags: agent.tags.clone(),
-                payload: serde_json::json!({"apply_stage_required":true}),
+                payload,
             });
             trace.push(AiDecisionTraceV1 {
                 agent: agent.entity,
-                selected_pattern: if alert {
-                    "foundation.alert.request_task".to_owned()
-                } else {
-                    "foundation.idle".to_owned()
-                },
-                score: if alert { 1.0 } else { 0.1 },
+                selected_pattern: selected_pattern.to_owned(),
+                score,
                 notes: vec![
                     "AI emitted intent DTO only; runtime apply stage owns mutation.".to_owned(),
                 ],
@@ -184,3 +232,82 @@ pub const RUNTIME_UNIT_REGISTRATION: newengine_runtime_unit_api::RuntimeUnitRegi
         RUNTIME_UNIT_SPEC,
         runtime_unit_factory,
     );
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use newengine_ai_api::{AiAgentSnapshotV1, AiFrameInputV1, AiPerceptionFactV1};
+
+    fn agent(
+        visible_facts: Vec<AiPerceptionFactV1>,
+        blackboard: serde_json::Value,
+    ) -> AiAgentSnapshotV1 {
+        AiAgentSnapshotV1 {
+            entity: Default::default(),
+            agent_id: "test-agent".to_owned(),
+            position: None,
+            velocity: None,
+            tags: Vec::new(),
+            current_task: None,
+            visible_facts,
+            blackboard,
+        }
+    }
+
+    fn decide(agent: AiAgentSnapshotV1) -> AiIntentKind {
+        AiState
+            .frame(AiFrameInputV1 {
+                frame_id: 1,
+                fixed_tick: 1,
+                seed: 7,
+                agents: vec![agent],
+                world_facts: Vec::new(),
+            })
+            .intents
+            .into_iter()
+            .next()
+            .expect("AI intent")
+            .kind
+    }
+
+    #[test]
+    fn visible_combat_fact_selects_engage() {
+        let kind = decide(agent(
+            vec![AiPerceptionFactV1 {
+                fact_id: "combat.target.visible".to_owned(),
+                tags: Vec::new(),
+                value: serde_json::json!({
+                    "target": 42,
+                    "position": [1.0, 2.0, 3.0],
+                    "distance": 5.0,
+                }),
+            }],
+            serde_json::json!({}),
+        ));
+        assert_eq!(kind, AiIntentKind::Custom("combat.engage".to_owned()));
+    }
+
+    #[test]
+    fn target_memory_without_visibility_selects_investigate() {
+        let kind = decide(agent(
+            Vec::new(),
+            serde_json::json!({
+                "combat": {
+                    "memory_target": 42,
+                    "memory_visible": false,
+                    "last_known_position": [4.0, 0.0, -2.0],
+                    "seconds_since_seen": 0.4,
+                }
+            }),
+        ));
+        assert_eq!(kind, AiIntentKind::Custom("combat.investigate".to_owned()));
+    }
+
+    #[test]
+    fn no_perception_or_memory_selects_idle() {
+        assert_eq!(
+            decide(agent(Vec::new(), serde_json::json!({}))),
+            AiIntentKind::Idle
+        );
+    }
+}

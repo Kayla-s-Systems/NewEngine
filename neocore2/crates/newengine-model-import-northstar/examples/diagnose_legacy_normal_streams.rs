@@ -6,7 +6,6 @@ struct StreamDesc {
     kind: u8,
     buffer: usize,
     buffer_size: usize,
-    num_vertices: usize,
     sizes: [u8; 4],
     q_scale: [f32; 4],
     q_offset: [f32; 4],
@@ -23,7 +22,6 @@ fn desc(pak: &PakFile, at: usize) -> Result<StreamDesc, String> {
         kind: pak.read_u8(at + 20)?,
         buffer: pak.resolve_pointer(at)?.ok_or("missing stream buffer")?,
         buffer_size: pak.read_u32(at + 16)? as usize,
-        num_vertices: pak.read_u32(at + 8)? as usize,
         sizes: [
             pak.read_u8(at + 24)?,
             pak.read_u8(at + 25)?,

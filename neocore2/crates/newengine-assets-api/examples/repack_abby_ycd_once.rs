@@ -7,7 +7,10 @@ use newengine_assets_api::{
 };
 
 fn main() -> Result<(), String> {
-    let root = PathBuf::from("C:\\Users\\Aiden\\Documents\\Repos\\NorthStar");
+    let root = std::env::args_os()
+        .nth(1)
+        .map(PathBuf::from)
+        .ok_or_else(|| "usage: repack_abby_ycd_once <northstar-repository-root>".to_owned())?;
     let source_root = root.join("Shared\\Source\\animations\\characters\\abby");
     let content_root = root.join("Shared\\Content\\animations\\characters\\abby");
 

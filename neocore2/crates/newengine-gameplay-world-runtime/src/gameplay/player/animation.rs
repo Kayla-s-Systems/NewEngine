@@ -123,14 +123,17 @@ fn cycle_rate_hz(state: PlayerLocomotionAnimation, normalized_speed: f32) -> f32
 /// input to the skeletal animation backend: YCD/blend-tree/motion-matching providers
 /// can consume `locomotion`, `normalized_speed` and `cycle_phase` without coupling
 /// player physics or camera code to a particular clip format.
-pub fn update_player_animation_states(world: &mut World, dt: f32) {
+pub fn update_character_animation_states(world: &mut World, dt: f32) {
     let dt = sanitized_dt(dt);
-    let players = world
+    let mut characters = world
         .query::<PlayerActor>()
         .map(|(entity, _)| entity)
         .collect::<Vec<_>>();
+    characters.extend(world.query::<AIController>().map(|(entity, _)| entity));
+    characters.sort_unstable_by_key(|entity| entity.stable_u64());
+    characters.dedup();
 
-    for player in players {
+    for player in characters {
         let velocity = world.get::<Velocity>(player).copied().unwrap_or_default().0;
         let horizontal_speed = Vec3::new(velocity.x, 0.0, velocity.z).length();
         let ground = world
@@ -218,7 +221,7 @@ pub fn update_player_animation_states(world: &mut World, dt: f32) {
             }),
         ) {
             newengine_ulog_api::ulog::warn!(
-                "player animation semantic locomotion publish failed player={} err='{}'",
+                "character animation semantic locomotion publish failed entity={} err='{}'",
                 player.stable_u64(),
                 error
             );
@@ -243,7 +246,7 @@ pub fn update_player_animation_states(world: &mut World, dt: f32) {
             }),
         ) {
             newengine_ulog_api::ulog::warn!(
-                "player animation semantic look-view publish failed player={} err='{}'",
+                "character animation semantic look-view publish failed entity={} err='{}'",
                 player.stable_u64(),
                 error
             );
@@ -268,13 +271,13 @@ pub fn update_player_animation_states(world: &mut World, dt: f32) {
             serde_json::Value::Null,
         ) {
             newengine_ulog_api::ulog::warn!(
-                "player animation semantic look-context publish failed player={} err='{}'",
+                "character animation semantic look-context publish failed entity={} err='{}'",
                 player.stable_u64(),
                 error
             );
         }
 
-        if changed {
+        if changed && world.get::<PlayerActor>(player).is_some() {
             emit_player_event(
                 world,
                 player,
@@ -290,9 +293,37 @@ pub fn update_player_animation_states(world: &mut World, dt: f32) {
     }
 }
 
+/// Backward-compatible player-facing entry point. The underlying semantic locomotion derivation is
+/// character-neutral so AI/NPC actors with authored skeletal presentation consume the same state.
+#[inline]
+pub fn update_player_animation_states(world: &mut World, dt: f32) {
+    update_character_animation_states(world, dt);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ai_character_velocity_publishes_walk_semantic_without_player_actor() {
+        let mut world = World::new();
+        let entity = world.spawn();
+        let _ = world.insert(entity, AIController::default());
+        let _ = world.insert(entity, CharacterMotor::default());
+        let _ = world.insert(entity, Velocity(Vec3::new(0.0, 0.0, -1.5)));
+        let _ = world.insert(entity, PlayerMovementSpeeds::default());
+
+        update_character_animation_states(&mut world, 1.0 / 60.0);
+
+        assert!(world.get::<PlayerActor>(entity).is_none());
+        assert_eq!(
+            world
+                .get::<PlayerAnimationState>(entity)
+                .expect("AI animation state")
+                .locomotion,
+            PlayerLocomotionAnimation::Walk
+        );
+    }
 
     #[test]
     fn locomotion_semantics_cover_ground_crouch_and_air() {

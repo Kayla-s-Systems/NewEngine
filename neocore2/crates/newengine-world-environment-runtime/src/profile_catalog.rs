@@ -71,6 +71,8 @@ pub(crate) struct WeatherPresentationEntryDescriptor {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct WeatherPresentationTableDescriptor {
     pub bands: &'static [WeatherPresentationEntryDescriptor],
+    /// Explicit profile policy for observed weather kinds not represented by this table.
+    pub fallback_pattern_id: &'static str,
 }
 
 #[derive(Clone, Copy, Debug)]

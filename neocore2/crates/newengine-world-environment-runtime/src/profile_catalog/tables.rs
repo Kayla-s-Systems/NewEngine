@@ -60,17 +60,22 @@ pub(super) const DESERT_WEATHER_BANDS: &[WeatherPresentationEntryDescriptor] = &
 pub(super) const TABLES: &[WeatherPresentationTableDescriptor] = &[
     WeatherPresentationTableDescriptor {
         bands: FOREST_ROAD_WEATHER_BANDS,
+        fallback_pattern_id: "weather.clear.dry_high_pressure",
     },
     WeatherPresentationTableDescriptor {
         bands: HIGHLANDS_WEATHER_BANDS,
+        fallback_pattern_id: "weather.clear.dry_high_pressure",
     },
     WeatherPresentationTableDescriptor {
         bands: DEFAULT_WEATHER_BANDS,
+        fallback_pattern_id: "weather.clear.dry_high_pressure",
     },
     WeatherPresentationTableDescriptor {
         bands: SNOW_WEATHER_BANDS,
+        fallback_pattern_id: "weather.snow.stratiform",
     },
     WeatherPresentationTableDescriptor {
         bands: DESERT_WEATHER_BANDS,
+        fallback_pattern_id: "weather.clear.dry_high_pressure",
     },
 ];

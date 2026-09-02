@@ -3,6 +3,19 @@ use newengine_math::Vec3;
 
 use crate::gameplay::inventory::ItemInstanceId;
 
+/// Controller-neutral weapon actuation request consumed by product combat runtimes.
+///
+/// This component carries only actions. It never names a target, damage amount, projectile hit,
+/// or health mutation, so player input and AI can converge on the same weapon state machine.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CombatActuationState {
+    pub aim: bool,
+    pub trigger_pressed: bool,
+    pub trigger_held: bool,
+    pub reload_pressed: bool,
+    pub source_frame: u64,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HitscanWeaponTuning {
     pub magazine_capacity: u32,
@@ -273,6 +286,7 @@ pub struct WeaponReloadAnimationAuthority {
     pub weapon_instance_id: ItemInstanceId,
     pub clip_duration_seconds: f32,
     pub marker_mask: u8,
+    pub required_marker_mask: u8,
 }
 
 impl WeaponReloadAnimationAuthority {
@@ -280,8 +294,8 @@ impl WeaponReloadAnimationAuthority {
     pub fn is_complete(self) -> bool {
         self.clip_duration_seconds.is_finite()
             && self.clip_duration_seconds > 1.0e-4
-            && self.marker_mask & WEAPON_RELOAD_ANIMATION_REQUIRED_MARKER_MASK
-                == WEAPON_RELOAD_ANIMATION_REQUIRED_MARKER_MASK
+            && self.required_marker_mask != 0
+            && self.marker_mask & self.required_marker_mask == self.required_marker_mask
     }
 }
 
@@ -455,44 +469,6 @@ impl WeaponObstructionState {
 impl Default for WeaponObstructionState {
     fn default() -> Self {
         Self::clear(Vec3::ZERO, 0)
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Health {
-    pub current: f32,
-    pub maximum: f32,
-}
-
-impl Health {
-    pub fn new(maximum: f32) -> Self {
-        let maximum = maximum.max(0.0);
-        Self {
-            current: maximum,
-            maximum,
-        }
-    }
-
-    pub fn apply_damage(&mut self, amount: f32) -> f32 {
-        let amount = if amount.is_finite() {
-            amount.max(0.0)
-        } else {
-            0.0
-        };
-        let before = self.current;
-        self.current = (self.current - amount).clamp(0.0, self.maximum.max(0.0));
-        before - self.current
-    }
-
-    #[inline]
-    pub fn alive(self) -> bool {
-        self.current > 0.0
-    }
-}
-
-impl Default for Health {
-    fn default() -> Self {
-        Self::new(100.0)
     }
 }
 

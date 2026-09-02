@@ -487,6 +487,20 @@ pub(super) fn critical_scene_materials_ready(
             total,
             failed,
         )
+    } else if !plan.launch_required_paths.is_empty() {
+        LaunchReadiness {
+            ready: true,
+            reason: format!(
+                "launch-critical texture working set resident launch_required={} total={} background_streaming_waiting={} failed={} policy='scene handoff no longer waits for streaming-critical/secondary residency'",
+                plan.launch_required_paths.len(),
+                total,
+                waiting,
+                failed,
+            ),
+            waiting,
+            total,
+            failed,
+        }
     } else if waiting == 0 {
         LaunchReadiness::ready(
             if failed == 0 {

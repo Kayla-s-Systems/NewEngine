@@ -8,26 +8,24 @@ use newengine_project_api::{ContentMountDescriptor, ContentMountNamespace, Conte
 
 use crate::{ProjectPaths, PROJECT_SOURCE_DIR};
 
-pub fn register_engine_asset_roots(
+pub fn register_engine_bootstrap_asset_roots(
     registry: &mut ContentMountRegistry,
     roots: &[PathBuf],
 ) -> Result<(), String> {
     for (index, root) in roots.iter().enumerate() {
         registry.register(ContentMountDescriptor {
-            id: format!("engine.compat.{index}"),
+            id: format!("engine.bootstrap.{index}"),
             namespace: ContentMountNamespace::Engine,
             root: root.clone(),
             mount: "engine".to_owned(),
             priority: ContentMountNamespace::Engine.default_priority() - index as i32,
             writable: false,
             required: false,
-            owner: "runtime-host.compat".to_owned(),
+            owner: "runtime-host.bootstrap".to_owned(),
         })?;
     }
     Ok(())
 }
-
-const SOURCE_DISCOVERY_LIMIT: usize = 50_000;
 
 fn normalize_project_relative_path(value: &str) -> Option<String> {
     let normalized = value
@@ -51,49 +49,11 @@ fn normalize_project_relative_path(value: &str) -> Option<String> {
     Some(normalized)
 }
 
-fn legacy_runtime_logical_path_from_output(output: &str) -> Option<String> {
-    let output = normalize_project_relative_path(output)?;
-    let (root, rest) = output
-        .split_once('/')
-        .map(|(root, rest)| (root, rest))
-        .unwrap_or(("", output.as_str()));
-    if rest.is_empty() {
-        return None;
-    }
-    if root.eq_ignore_ascii_case("Content") {
-        return Some(rest.to_owned());
-    }
-    if root.eq_ignore_ascii_case("Definitions") {
-        return Some(format!("definitions/{rest}"));
-    }
-    if root.eq_ignore_ascii_case("Scripts") {
-        return Some(format!("scripts/{rest}"));
-    }
-    Some(output)
-}
-
-fn build_plan_has_explicit_logical_paths(value: &serde_json::Value) -> bool {
-    match value {
-        serde_json::Value::Object(object) => {
-            object
-                .get("logical_path")
-                .and_then(|value| value.as_str())
-                .and_then(normalize_project_relative_path)
-                .is_some()
-                || object.values().any(build_plan_has_explicit_logical_paths)
-        }
-        serde_json::Value::Array(values) => {
-            values.iter().any(build_plan_has_explicit_logical_paths)
-        }
-        _ => false,
-    }
-}
-
 fn collect_build_plan_aliases(
     value: &serde_json::Value,
     aliases: &mut BTreeMap<String, String>,
-    allow_legacy_output_inference: bool,
-) {
+    path: &str,
+) -> Result<(), String> {
     match value {
         serde_json::Value::Object(object) => {
             let source = object
@@ -103,144 +63,65 @@ fn collect_build_plan_aliases(
                 .and_then(|value| value.as_str());
             let output = object.get("output").and_then(|value| value.as_str());
             if let (Some(source), Some(output)) = (source, output) {
-                let explicit_logical_path = object
+                let logical_path = object
                     .get("logical_path")
                     .and_then(|value| value.as_str())
-                    .and_then(normalize_project_relative_path);
-                let logical_path = explicit_logical_path.or_else(|| {
-                    allow_legacy_output_inference
-                        .then(|| legacy_runtime_logical_path_from_output(output))
-                        .flatten()
-                });
-                let source_path = normalize_project_relative_path(source);
-                if let (Some(logical_path), Some(source_path)) = (logical_path, source_path) {
-                    if source_path
-                        .split('/')
-                        .next()
-                        .is_some_and(|root| root.eq_ignore_ascii_case("Source"))
+                    .and_then(normalize_project_relative_path)
+                    .ok_or_else(|| {
+                        format!(
+                            "build plan entry '{path}' source='{source}' output='{output}' must author explicit logical_path"
+                        )
+                    })?;
+                let source_path = normalize_project_relative_path(source).ok_or_else(|| {
+                    format!("build plan entry '{path}' has unsafe source path '{source}'")
+                })?;
+                if source_path
+                    .split('/')
+                    .next()
+                    .is_some_and(|root| root.eq_ignore_ascii_case("Source"))
+                {
+                    if let Some(previous) =
+                        aliases.insert(logical_path.clone(), source_path.clone())
                     {
-                        aliases.insert(logical_path, source_path);
+                        if previous != source_path {
+                            return Err(format!(
+                                "build plan logical_path collision '{logical_path}': '{previous}' vs '{source_path}'"
+                            ));
+                        }
                     }
                 }
             }
-            for child in object.values() {
-                collect_build_plan_aliases(child, aliases, allow_legacy_output_inference);
+            for (key, child) in object {
+                let child_path = if path.is_empty() {
+                    key.clone()
+                } else {
+                    format!("{path}.{key}")
+                };
+                collect_build_plan_aliases(child, aliases, &child_path)?;
             }
         }
         serde_json::Value::Array(values) => {
-            for child in values {
-                collect_build_plan_aliases(child, aliases, allow_legacy_output_inference);
+            for (index, child) in values.iter().enumerate() {
+                let child_path = format!("{path}[{index}]");
+                collect_build_plan_aliases(child, aliases, &child_path)?;
             }
         }
         _ => {}
-    }
-}
-
-fn convention_logical_path(source_relative: &str) -> Option<String> {
-    let normalized = normalize_project_relative_path(source_relative)?;
-    let lower = normalized.to_ascii_lowercase();
-    for suffix in [
-        ".ymap.xml",
-        ".ytyp.xml",
-        ".nemat.xml",
-        ".neui.xml",
-        ".ymt.xml",
-    ] {
-        if lower.ends_with(suffix) {
-            return Some(normalized[..normalized.len() - ".xml".len()].to_owned());
-        }
-    }
-    if lower.starts_with("scripts/") {
-        for extension in [".ts", ".tsx", ".js", ".mjs", ".lua"] {
-            if lower.ends_with(extension) {
-                return Some(format!(
-                    "{}.ysc",
-                    &normalized[..normalized.len() - extension.len()]
-                ));
-            }
-        }
-    }
-    if lower.starts_with("animations/") && lower.ends_with(".clip.json") {
-        return Some(format!(
-            "{}.ycd",
-            &normalized[..normalized.len() - ".clip.json".len()]
-        ));
-    }
-    None
-}
-
-fn discover_convention_aliases(
-    project_root: &Path,
-    aliases: &mut BTreeMap<String, String>,
-) -> Result<(), String> {
-    let source_root = ProjectPaths::new(project_root.to_path_buf()).source_dir();
-    if !source_root.is_dir() {
-        return Ok(());
-    }
-    let mut pending = vec![source_root.clone()];
-    let mut visited = 0usize;
-
-    while let Some(directory) = pending.pop() {
-        let entries = std::fs::read_dir(&directory)
-            .map_err(|error| format!("scan source directory '{}': {error}", directory.display()))?;
-        for entry in entries {
-            let entry = entry.map_err(|error| {
-                format!("scan source entry under '{}': {error}", directory.display())
-            })?;
-            visited = visited.saturating_add(1);
-            if visited > SOURCE_DISCOVERY_LIMIT {
-                return Err(format!(
-                    "source discovery exceeded bounded entry limit {SOURCE_DISCOVERY_LIMIT} under '{}'",
-                    source_root.display()
-                ));
-            }
-            let path = entry.path();
-            // Directory iteration already carries the file type on the common Windows path.
-            // Avoid an extra metadata query per source entry during project bootstrap.
-            let file_type = entry
-                .file_type()
-                .map_err(|error| format!("read source file type '{}': {error}", path.display()))?;
-            if file_type.is_dir() {
-                pending.push(path);
-                continue;
-            }
-            if !file_type.is_file() {
-                continue;
-            }
-            let relative = path
-                .strip_prefix(&source_root)
-                .ok()
-                .map(|value| value.to_string_lossy().replace('\\', "/"));
-            let Some(relative) = relative else {
-                continue;
-            };
-            if let Some(logical_path) = convention_logical_path(&relative) {
-                aliases
-                    .entry(logical_path)
-                    .or_insert_with(|| format!("{PROJECT_SOURCE_DIR}/{relative}"));
-            }
-        }
     }
     Ok(())
 }
 
 fn discover_project_source_aliases(project_root: &Path) -> Result<Vec<(String, String)>, String> {
-    let mut aliases = BTreeMap::new();
     let plan_path = ProjectPaths::new(project_root.to_path_buf()).asset_build_plan_path();
-    let mut project_defined_aliases = false;
-    if plan_path.is_file() {
-        let bytes = std::fs::read(&plan_path)
-            .map_err(|error| format!("read '{}': {error}", plan_path.display()))?;
-        let plan: serde_json::Value = serde_json::from_slice(&bytes)
-            .map_err(|error| format!("parse '{}': {error}", plan_path.display()))?;
-        project_defined_aliases = build_plan_has_explicit_logical_paths(&plan);
-        collect_build_plan_aliases(&plan, &mut aliases, !project_defined_aliases);
+    if !plan_path.is_file() {
+        return Ok(Vec::new());
     }
-    // Once a project authors even one explicit logical path, its build plan owns the namespace.
-    // We intentionally do not synthesize extra aliases from filenames/extensions/directories.
-    if !project_defined_aliases {
-        discover_convention_aliases(project_root, &mut aliases)?;
-    }
+    let bytes = std::fs::read(&plan_path)
+        .map_err(|error| format!("read '{}': {error}", plan_path.display()))?;
+    let plan: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("parse '{}': {error}", plan_path.display()))?;
+    let mut aliases = BTreeMap::new();
+    collect_build_plan_aliases(&plan, &mut aliases, "root")?;
     Ok(aliases.into_iter().collect())
 }
 
@@ -332,9 +213,8 @@ pub fn mount_content_registry_best_effort(
         }
     }
 
-    // Source companions are discovered from the selected project only. An authored
-    // build-plan logical_path makes the project namespace authoritative. Filename/
-    // directory inference exists only for legacy plans that author no logical paths.
+    // Source companions are discovered from the selected project only. The build plan
+    // owns the runtime namespace explicitly: every build entry must author logical_path.
     for (project_root, priority) in discover_project_source_roots(registry) {
         let aliases = match discover_project_source_aliases(&project_root) {
             Ok(aliases) => aliases,
@@ -413,9 +293,8 @@ mod tests {
                 "logical_path": "logic/bootstrap"
             }]
         });
-        assert!(build_plan_has_explicit_logical_paths(&plan));
         let mut aliases = BTreeMap::new();
-        collect_build_plan_aliases(&plan, &mut aliases, false);
+        collect_build_plan_aliases(&plan, &mut aliases, "root").unwrap();
         assert_eq!(
             aliases.get("avatars/main/body").map(String::as_str),
             Some("Source/models/hero.glb")
@@ -432,7 +311,7 @@ mod tests {
     }
 
     #[test]
-    fn explicit_logical_paths_disable_legacy_output_inference() {
+    fn build_plan_entry_without_logical_path_is_rejected() {
         let plan = serde_json::json!({
             "explicit": {
                 "source": "Source/a.custom",
@@ -445,40 +324,26 @@ mod tests {
             }
         });
         let mut aliases = BTreeMap::new();
-        collect_build_plan_aliases(&plan, &mut aliases, false);
-        assert_eq!(
-            aliases.get("project/a").map(String::as_str),
-            Some("Source/a.custom")
-        );
-        assert!(!aliases.contains_key("b.ydd"));
-        assert_eq!(aliases.len(), 1);
+        let error = collect_build_plan_aliases(&plan, &mut aliases, "root").unwrap_err();
+        assert!(error.contains("must author explicit logical_path"));
     }
 
     #[test]
-    fn source_conventions_cover_double_extensions_and_scripts() {
-        assert_eq!(
-            convention_logical_path("maps/world.ymap.xml").as_deref(),
-            Some("maps/world.ymap")
-        );
-        assert_eq!(
-            convention_logical_path("materials/world.nemat.xml").as_deref(),
-            Some("materials/world.nemat")
-        );
-        assert_eq!(
-            convention_logical_path("scripts/game.lua").as_deref(),
-            Some("scripts/game.ysc")
-        );
-        assert_eq!(
-            convention_logical_path("scripts/game.ts").as_deref(),
-            Some("scripts/game.ysc")
-        );
-        assert_eq!(
-            convention_logical_path("scripts/editor.mjs").as_deref(),
-            Some("scripts/editor.ysc")
-        );
-        assert_eq!(
-            convention_logical_path("animations/idle.clip.json").as_deref(),
-            Some("animations/idle.ycd")
-        );
+    fn duplicate_logical_path_with_different_sources_is_rejected() {
+        let plan = serde_json::json!({
+            "a": {
+                "source": "Source/a.custom",
+                "output": "Content/a.ydd",
+                "logical_path": "models/shared.ydd"
+            },
+            "b": {
+                "source": "Source/b.custom",
+                "output": "Content/b.ydd",
+                "logical_path": "models/shared.ydd"
+            }
+        });
+        let mut aliases = BTreeMap::new();
+        let error = collect_build_plan_aliases(&plan, &mut aliases, "root").unwrap_err();
+        assert!(error.contains("logical_path collision"));
     }
 }

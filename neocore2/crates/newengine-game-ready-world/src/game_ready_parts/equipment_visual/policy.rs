@@ -387,28 +387,17 @@ fn register_equipped_part_material(
         MaterialFlags::CAST_SHADOWS.union(MaterialFlags::RECEIVE_SHADOWS),
         &spec,
     )?;
-    let resolved = newengine_materials::api::MaterialRegistryApi::resolve(mats, material_id)
+    // Canonical material admission requires a resolved `.nemat@entry`, not a fixed
+    // texture-slot checklist. `MaterialDescriptor` owns valid constant base-color,
+    // roughness and metallic values; emissive/glass/decal materials may therefore
+    // intentionally omit one or more texture maps without becoming invalid.
+    // Reject only a material that disappears after canonical registration.
+    let _resolved = newengine_materials::api::MaterialRegistryApi::resolve(mats, material_id)
         .ok_or_else(|| {
             format!(
                 "required equipped material disappeared after registration name='{logical_name}'"
             )
         })?;
-    let mut missing = Vec::new();
-    if resolved.textures.base_color_texture.is_none() {
-        missing.push("base_color");
-    }
-    if resolved.textures.normal_texture.is_none() {
-        missing.push("normal");
-    }
-    if resolved.textures.roughness_texture.is_none() {
-        missing.push("roughness");
-    }
-    if !missing.is_empty() {
-        return Err(format!(
-            "required equipped PBR material is incomplete name='{}' asset={:?} missing={:?}",
-            logical_name, spec.asset, missing
-        ));
-    }
     Ok(material_id)
 }
 

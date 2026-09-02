@@ -5,8 +5,10 @@ use std::sync::Arc;
 
 use newengine_ecs::EntityId;
 use newengine_engine_runtime::gameplay::{
-    drain_gameplay_events, step_world_items, GameplayExecutionPhase, GameplayFrame,
-    GameplayPhysicsQueryProvider, GameplaySystemProvider, GameplayWorld,
+    collect_ai_perception_queries, drain_gameplay_events, prepare_ai_perception,
+    resolve_ai_perception_query_hits, step_ai_decisions, step_ai_navigation_actuation,
+    step_world_items, GameplayExecutionPhase, GameplayFrame, GameplayPhysicsQueryProvider,
+    GameplaySystemProvider, GameplayWorld,
 };
 use newengine_gameplay_fps_api::{
     FpsCharacterMenuPolicyProvider, FpsGameplayPolicyProvider, FpsGameplayPolicySnapshot,
@@ -21,8 +23,8 @@ use newengine_fps_character_runtime::{
     collect_character_queries, resolve_character_query_hits, step_character_locomotion,
     step_fps_noclip_motion, sync_physics_world_settings,
 };
-use newengine_fps_combat_runtime::step_player_combat;
-use newengine_fps_content_runtime::ensure_fps_player_loadouts;
+use newengine_fps_combat_runtime::{step_actor_combat, step_ai_combat_actuation};
+use newengine_fps_content_runtime::{ensure_fps_actor_loadouts, ensure_fps_player_loadouts};
 use newengine_fps_inventory_ui_runtime::{
     character_select_is_open, ensure_character_menu_policy, step_inventory_commands,
 };
@@ -153,6 +155,8 @@ impl GameplaySystemProvider for FpsGameplayProvider {
             GameplayExecutionPhase::BeforePhysics => {
                 sync_physics_world_settings(world);
                 ensure_fps_player_loadouts(world);
+                ensure_fps_actor_loadouts(world);
+                prepare_ai_perception(world, frame.dt);
                 step_scripted_gameplay(
                     world,
                     self.script_provider.as_ref(),
@@ -161,7 +165,9 @@ impl GameplaySystemProvider for FpsGameplayProvider {
                 let character_selector_open = character_select_is_open(world);
                 if !character_selector_open {
                     apply_fps_character_commands(world, frame.dt, frame.fixed_tick);
-                    step_player_combat(world, frame.dt, frame.fixed_tick);
+                    step_ai_navigation_actuation(world, frame.dt);
+                    step_ai_combat_actuation(world, frame.fixed_tick);
+                    step_actor_combat(world, frame.dt, frame.fixed_tick);
                     step_projectile_sphere_launcher(world, frame.dt);
                 }
                 // Keep noclip velocity synchronized even while the selector is open. The UI
@@ -172,6 +178,7 @@ impl GameplaySystemProvider for FpsGameplayProvider {
             }
             GameplayExecutionPhase::AfterPhysics => {
                 step_character_locomotion(world, frame.dt);
+                step_ai_decisions(world, frame.dt, frame.fixed_tick);
             }
             GameplayExecutionPhase::AfterDerived => {
                 step_fps_objective_events(
@@ -199,6 +206,7 @@ impl GameplayPhysicsQueryProvider for FpsGameplayProvider {
     fn collect_queries(&self, world: &GameplayWorld) -> Vec<PhysicsQueryDto> {
         let mut queries = collect_character_queries(world);
         queries.extend(newengine_fps_combat_runtime::collect_combat_queries(world));
+        queries.extend(collect_ai_perception_queries(world));
         queries
     }
 
@@ -218,6 +226,12 @@ impl GameplayPhysicsQueryProvider for FpsGameplayProvider {
             &self.command_executor,
         );
         consumed.extend(resolve_character_query_hits(
+            world,
+            fixed_tick,
+            hits,
+            key_to_entity,
+        ));
+        consumed.extend(resolve_ai_perception_query_hits(
             world,
             fixed_tick,
             hits,

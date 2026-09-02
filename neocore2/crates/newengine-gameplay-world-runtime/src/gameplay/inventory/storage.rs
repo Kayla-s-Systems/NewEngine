@@ -8,6 +8,44 @@ pub struct InventoryEntry {
     pub condition: f32,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct InventoryCapacityState {
+    pub used_slots: u32,
+    pub slot_capacity: u32,
+    pub total_weight: f32,
+    pub weight_capacity: f32,
+}
+
+impl InventoryCapacityState {
+    #[inline]
+    pub fn free_slots(self) -> u32 {
+        self.slot_capacity.saturating_sub(self.used_slots)
+    }
+
+    #[inline]
+    pub fn free_weight(self) -> f32 {
+        (self.weight_capacity - self.total_weight).max(0.0)
+    }
+
+    #[inline]
+    pub fn slot_fill(self) -> f32 {
+        if self.slot_capacity == 0 {
+            1.0
+        } else {
+            (self.used_slots as f32 / self.slot_capacity as f32).clamp(0.0, 1.0)
+        }
+    }
+
+    #[inline]
+    pub fn weight_fill(self) -> f32 {
+        if self.weight_capacity <= f32::EPSILON {
+            (self.total_weight > f32::EPSILON) as u8 as f32
+        } else {
+            (self.total_weight / self.weight_capacity).clamp(0.0, 1.0)
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlayerInventory {
     pub slot_capacity: u32,
@@ -68,6 +106,149 @@ impl PlayerInventory {
                 .map(|definition| definition.unit_weight)
                 .unwrap_or(0.0);
             total + weight * entry.quantity as f32
+        })
+    }
+
+    #[inline]
+    pub fn capacity_state(&self, catalog: &ItemCatalog) -> InventoryCapacityState {
+        InventoryCapacityState {
+            used_slots: self.used_slots(),
+            slot_capacity: self.slot_capacity,
+            total_weight: self.total_weight(catalog),
+            weight_capacity: self.weight_capacity,
+        }
+    }
+
+    pub(super) fn move_instance_to_index(
+        &mut self,
+        instance: ItemInstanceId,
+        target_index: usize,
+    ) -> Result<bool, String> {
+        let source_index = self
+            .entries
+            .iter()
+            .position(|entry| entry.instance_id == instance)
+            .ok_or_else(|| "inventory instance is not present".to_owned())?;
+        if self.entries.len() <= 1 {
+            return Ok(false);
+        }
+        let mut insertion = target_index.min(self.entries.len() - 1);
+        if source_index == insertion {
+            return Ok(false);
+        }
+        let entry = self.entries.remove(source_index);
+        if source_index < insertion {
+            insertion = insertion.saturating_sub(1);
+        }
+        insertion = insertion.min(self.entries.len());
+        self.entries.insert(insertion, entry);
+        Ok(true)
+    }
+
+    pub(super) fn split_stack(
+        &mut self,
+        owner: EntityId,
+        instance: ItemInstanceId,
+        quantity: u32,
+        catalog: &ItemCatalog,
+    ) -> Result<ItemInstanceId, String> {
+        if quantity == 0 {
+            return Err("split quantity must be greater than zero".to_owned());
+        }
+        if self.used_slots() >= self.slot_capacity {
+            return Err("inventory has no free slot for split stack".to_owned());
+        }
+        let source_index = self
+            .entries
+            .iter()
+            .position(|entry| entry.instance_id == instance)
+            .ok_or_else(|| "inventory instance is not present".to_owned())?;
+        let source = self.entries[source_index];
+        let definition = catalog
+            .get(source.item)
+            .ok_or_else(|| "item definition is unavailable".to_owned())?;
+        if definition.max_stack <= 1 {
+            return Err("item is not stackable".to_owned());
+        }
+        if quantity >= source.quantity {
+            return Err("split quantity must be smaller than source stack".to_owned());
+        }
+        let new_instance = self.allocate_instance(owner, source.item);
+        self.entries[source_index].quantity -= quantity;
+        self.entries.insert(
+            source_index + 1,
+            InventoryEntry {
+                instance_id: new_instance,
+                item: source.item,
+                quantity,
+                condition: source.condition,
+            },
+        );
+        Ok(new_instance)
+    }
+
+    pub(super) fn merge_stack_instances(
+        &mut self,
+        source: ItemInstanceId,
+        target: ItemInstanceId,
+        catalog: &ItemCatalog,
+    ) -> Result<InventoryMutation, String> {
+        if source == target {
+            return Ok(InventoryMutation::default());
+        }
+        let source_index = self
+            .entries
+            .iter()
+            .position(|entry| entry.instance_id == source)
+            .ok_or_else(|| "source inventory instance is not present".to_owned())?;
+        let target_index = self
+            .entries
+            .iter()
+            .position(|entry| entry.instance_id == target)
+            .ok_or_else(|| "target inventory instance is not present".to_owned())?;
+        let source_entry = self.entries[source_index];
+        let target_entry = self.entries[target_index];
+        if source_entry.item != target_entry.item {
+            return Err("only identical item definitions can be merged".to_owned());
+        }
+        if (source_entry.condition - target_entry.condition).abs() > 1.0e-4 {
+            return Err("stacks with different condition cannot be merged".to_owned());
+        }
+        let definition = catalog
+            .get(source_entry.item)
+            .ok_or_else(|| "item definition is unavailable".to_owned())?;
+        let max_stack = definition.max_stack.max(1);
+        if max_stack <= 1 {
+            return Err("item is not stackable".to_owned());
+        }
+        let available = max_stack.saturating_sub(target_entry.quantity);
+        let moved = source_entry.quantity.min(available);
+        if moved == 0 {
+            return Ok(InventoryMutation {
+                accepted: 0,
+                rejected: source_entry.quantity,
+                touched_instances: vec![source, target],
+            });
+        }
+        self.entries[target_index].quantity += moved;
+        self.entries[source_index].quantity -= moved;
+        if self.entries[source_index].quantity == 0 {
+            let removed = self.entries.remove(source_index);
+            self.weapon_states.remove(&removed.instance_id);
+            self.weapon_components.remove(&removed.instance_id);
+            self.equipped
+                .retain(|_, equipped_instance| *equipped_instance != removed.instance_id);
+            if self
+                .active_slot
+                .is_some_and(|slot| !self.equipped.contains_key(&slot))
+            {
+                self.active_slot = None;
+            }
+        }
+        Ok(InventoryMutation {
+            accepted: moved,
+            rejected: source_entry.quantity.saturating_sub(moved),
+            touched_instances: vec![source, target],
         })
     }
 
@@ -215,6 +396,47 @@ impl PlayerInventory {
             accepted: requested - remaining,
             rejected: remaining,
             touched_instances: touched,
+        }
+    }
+
+    pub(super) fn remove_instance_quantity(
+        &mut self,
+        instance: ItemInstanceId,
+        requested: u32,
+    ) -> InventoryMutation {
+        if requested == 0 {
+            return InventoryMutation::default();
+        }
+        let Some(index) = self
+            .entries
+            .iter()
+            .position(|entry| entry.instance_id == instance)
+        else {
+            return InventoryMutation {
+                accepted: 0,
+                rejected: requested,
+                touched_instances: Vec::new(),
+            };
+        };
+        let moved = requested.min(self.entries[index].quantity);
+        self.entries[index].quantity -= moved;
+        if self.entries[index].quantity == 0 {
+            let removed = self.entries.remove(index);
+            self.weapon_states.remove(&removed.instance_id);
+            self.weapon_components.remove(&removed.instance_id);
+            self.equipped
+                .retain(|_, equipped_instance| *equipped_instance != removed.instance_id);
+            if self
+                .active_slot
+                .is_some_and(|slot| !self.equipped.contains_key(&slot))
+            {
+                self.active_slot = None;
+            }
+        }
+        InventoryMutation {
+            accepted: moved,
+            rejected: requested.saturating_sub(moved),
+            touched_instances: (moved > 0).then_some(instance).into_iter().collect(),
         }
     }
 }
@@ -381,6 +603,9 @@ impl ItemPickup {
 pub enum InventoryEventKind {
     ItemAdded,
     ItemRemoved,
+    ItemReordered,
+    StackSplit,
+    StacksMerged,
     Equipped,
     Unequipped,
     ActiveSlotChanged,

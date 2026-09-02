@@ -1,5 +1,6 @@
 use super::geometry::{normalize_preview_geometry, texture_dimensions};
 use super::*;
+use newengine_assets_api::LIST_FILE_CONTENT_KIND_NEMAT;
 
 #[test]
 fn bundle_cache_is_bounded_and_promotes_recent_hit() {

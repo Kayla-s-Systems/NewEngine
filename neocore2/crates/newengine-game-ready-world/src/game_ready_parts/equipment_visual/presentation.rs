@@ -626,22 +626,16 @@ fn update_weapon_attachment(
                     std::sync::atomic::AtomicUsize::new(0);
                 let sample = BASIS_SAMPLES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 if sample < 2 {
-                    let native_to_runtime = Quat::from_xyzw(
-                        presentation.native_rig_to_runtime_basis[0],
-                        presentation.native_rig_to_runtime_basis[1],
-                        presentation.native_rig_to_runtime_basis[2],
-                        presentation.native_rig_to_runtime_basis[3],
-                    )
-                    .normalize_or_identity();
-                    let runtime_to_native = native_to_runtime.inverse();
-                    let forward =
-                        (weapon_root.rotation * (runtime_to_native * Vec3::Z)).normalize_or_zero();
-                    let up =
-                        (weapon_root.rotation * (runtime_to_native * Vec3::Y)).normalize_or_zero();
-                    let right =
-                        (weapon_root.rotation * (runtime_to_native * Vec3::X)).normalize_or_zero();
+                    let root_forward = (weapon_root.rotation * Vec3::Z).normalize_or_zero();
+                    let root_up = (weapon_root.rotation * Vec3::Y).normalize_or_zero();
+                    let root_right = (weapon_root.rotation * Vec3::X).normalize_or_zero();
                     let handle =
                         crate::weapon_grip::weapon_handle_position(presentation, weapon_root);
+                    let handle_rotation =
+                        crate::weapon_grip::weapon_handle_rotation(presentation, weapon_root);
+                    let handle_forward = (handle_rotation * Vec3::Z).normalize_or_zero();
+                    let handle_up = (handle_rotation * Vec3::Y).normalize_or_zero();
+                    let handle_right = (handle_rotation * Vec3::X).normalize_or_zero();
                     let left_grip = crate::weapon_grip::weapon_ready_left_grip_position(
                         presentation,
                         weapon_root,
@@ -649,16 +643,23 @@ fn update_weapon_attachment(
                     let muzzle =
                         crate::weapon_grip::weapon_muzzle_position(presentation, weapon_root);
                     newengine_ulog_api::ulog::info!(
-                        "WEAPON_BASIS root_pos={:?} root_rot={:?} runtime_forward={:?} runtime_up={:?} runtime_right={:?} runtime_up_dot_world_y={:.5} handle={:?} left_grip={:?} muzzle={:?}",
+                        "WEAPON_BASIS root_pos={:?} root_rot={:?} root_forward={:?} root_up={:?} root_right={:?} handle={:?} handle_rot={:?} handle_forward={:?} handle_up={:?} handle_right={:?} left_grip={:?} muzzle={:?} native_rig_to_runtime_basis={:?} authored_socket_to_weapon_handle_basis={:?} handle_from_root={:?} handle_rotation_from_root={:?}",
                         weapon_root.position,
                         weapon_root.rotation,
-                        forward,
-                        up,
-                        right,
-                        up.dot(Vec3::Y),
+                        root_forward,
+                        root_up,
+                        root_right,
                         handle,
+                        handle_rotation,
+                        handle_forward,
+                        handle_up,
+                        handle_right,
                         left_grip,
                         muzzle,
+                        presentation.native_rig_to_runtime_basis,
+                        presentation.authored_socket_to_weapon_handle_basis,
+                        presentation.handle_from_root,
+                        presentation.handle_rotation_from_root,
                     );
                 }
             }

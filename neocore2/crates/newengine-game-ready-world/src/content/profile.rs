@@ -48,6 +48,16 @@ pub(crate) struct GameReadyPlayerSpec {
     pub(crate) run_speed: f32,
     pub(crate) sprint_speed: f32,
     pub(crate) crouch_speed: f32,
+    pub(crate) combat_team: Option<u32>,
+    pub(crate) health_maximum: f32,
+    pub(crate) stamina_maximum: f32,
+    pub(crate) stamina_sprint_drain_per_second: f32,
+    pub(crate) stamina_regen_per_second: f32,
+    pub(crate) stamina_regen_delay_seconds: f32,
+    pub(crate) stamina_exhausted_resume_fraction: f32,
+    pub(crate) damage_response_tuning:
+        newengine_engine_runtime::gameplay::CharacterDamageResponseTuning,
+    pub(crate) death_policy: newengine_engine_runtime::gameplay::CharacterDeathPolicy,
     pub(crate) look_sens: f32,
     pub(crate) model: GameReadyPlayerModelSpec,
 }
@@ -442,9 +452,26 @@ pub(crate) struct GameReadyMissionPickupSpec {
 #[derive(Clone, Debug)]
 pub(crate) struct GameReadyMissionTargetSpec {
     pub(crate) id: String,
+    pub(crate) character_ref: Option<String>,
     pub(crate) position: Vec3,
     pub(crate) health: f32,
     pub(crate) scale: Vec3,
+    pub(crate) ai: Option<GameReadyEnemyAiSpec>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct GameReadyEnemyAiSpec {
+    pub(crate) combat_team: u32,
+    pub(crate) sight_range: f32,
+    pub(crate) field_of_view_degrees: f32,
+    pub(crate) memory_seconds: f32,
+    pub(crate) decision_interval_seconds: f32,
+    pub(crate) navigation: newengine_engine_runtime::gameplay::AINavigationTuning,
+    pub(crate) patrol_route: Vec<Vec3>,
+    pub(crate) patrol_looping: bool,
+    pub(crate) combat: newengine_gameplay_fps_api::FpsAiCombatTuning,
+    pub(crate) weapon_mount: newengine_gameplay_fps_api::FpsActorWeaponMountTuning,
+    pub(crate) loadout: String,
 }
 
 #[derive(Clone, Debug)]

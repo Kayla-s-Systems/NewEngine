@@ -4,11 +4,11 @@ use newengine_ecs::World;
 mod types;
 
 pub use types::{
-    BallisticShotProfile, Health, HitscanWeaponTuning, Interactable, InteractionEvent,
-    InteractionEventBus, PendingHitscan, PendingInteraction, PlayerInteractionTuning,
-    PlayerWeaponState, WeaponAccuracyModifiers, WeaponAccuracyState, WeaponActionKind,
-    WeaponActionRuntime, WeaponActionTimingSource, WeaponAttackKind, WeaponEvent, WeaponEventBus,
-    WeaponEventKind, WeaponFireControllerState, WeaponObstructionState,
+    BallisticShotProfile, CombatActuationState, HitscanWeaponTuning, Interactable,
+    InteractionEvent, InteractionEventBus, PendingHitscan, PendingInteraction,
+    PlayerInteractionTuning, PlayerWeaponState, WeaponAccuracyModifiers, WeaponAccuracyState,
+    WeaponActionKind, WeaponActionRuntime, WeaponActionTimingSource, WeaponAttackKind, WeaponEvent,
+    WeaponEventBus, WeaponEventKind, WeaponFireControllerState, WeaponObstructionState,
     WeaponReloadAnimationAuthority, WeaponReloadAnimationMarker, WeaponReloadAnimationMarkerInbox,
     WeaponReloadPhase, WEAPON_RELOAD_ANIMATION_REQUIRED_MARKER_MASK,
     WEAPON_RELOAD_MARKER_AMMO_COMMITTED, WEAPON_RELOAD_MARKER_CHAMBERED,

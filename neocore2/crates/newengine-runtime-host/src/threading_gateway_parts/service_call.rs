@@ -51,13 +51,14 @@ fn service_call_task_request(request: &TaskServiceCallRequestV1) -> TaskRequest 
 
 fn resolve_target_service_id(target_gateway: &str) -> Result<String, String> {
     if target_gateway.starts_with("engine.") {
-        return newengine_plugin_host::resolve_service_for_engine_gateway(target_gateway)
-            .ok_or_else(|| {
+        return newengine_core::resolve_service_for_engine_gateway(target_gateway).ok_or_else(
+            || {
                 format!(
                     "engine gateway '{}' has no active provider route in the current composition",
                     target_gateway
                 )
-            });
+            },
+        );
     }
     Ok(target_gateway.to_owned())
 }

@@ -102,6 +102,125 @@ pub fn inventory_quantity(world: &World, owner: EntityId, item: ItemId) -> u32 {
         .unwrap_or(0)
 }
 
+#[inline]
+pub fn inventory_capacity_state(world: &World, owner: EntityId) -> Option<InventoryCapacityState> {
+    let inventory = world.get::<PlayerInventory>(owner)?;
+    let catalog = world.resource::<ItemCatalog>()?;
+    Some(inventory.capacity_state(catalog))
+}
+
+pub fn reorder_inventory_instance(
+    world: &mut World,
+    owner: EntityId,
+    instance: ItemInstanceId,
+    target_index: usize,
+) -> Result<bool, String> {
+    let changed = world
+        .get_mut::<PlayerInventory>(owner)
+        .ok_or_else(|| "owner has no inventory".to_owned())?
+        .move_instance_to_index(instance, target_index)?;
+    if changed {
+        let item = world
+            .get::<PlayerInventory>(owner)
+            .and_then(|inventory| inventory.entry(instance))
+            .map(|entry| entry.item)
+            .unwrap_or_default();
+        emit_inventory_event(
+            world,
+            InventoryEvent {
+                kind: InventoryEventKind::ItemReordered,
+                owner,
+                item,
+                instance_id: Some(instance),
+                quantity: 0,
+                slot: None,
+                world_entity: None,
+                message: format!("inventory instance moved to index {target_index}"),
+            },
+        );
+    }
+    Ok(changed)
+}
+
+pub fn split_inventory_stack(
+    world: &mut World,
+    owner: EntityId,
+    instance: ItemInstanceId,
+    quantity: u32,
+) -> Result<ItemInstanceId, String> {
+    let catalog = world
+        .resource::<ItemCatalog>()
+        .cloned()
+        .ok_or_else(|| "item catalog is unavailable".to_owned())?;
+    let item = world
+        .get::<PlayerInventory>(owner)
+        .and_then(|inventory| inventory.entry(instance))
+        .map(|entry| entry.item)
+        .ok_or_else(|| "inventory instance is not present".to_owned())?;
+    let new_instance = world
+        .get_mut::<PlayerInventory>(owner)
+        .ok_or_else(|| "owner has no inventory".to_owned())?
+        .split_stack(owner, instance, quantity, &catalog)?;
+    emit_inventory_event(
+        world,
+        InventoryEvent {
+            kind: InventoryEventKind::StackSplit,
+            owner,
+            item,
+            instance_id: Some(new_instance),
+            quantity,
+            slot: None,
+            world_entity: None,
+            message: "inventory stack split".to_owned(),
+        },
+    );
+    Ok(new_instance)
+}
+
+pub fn merge_inventory_stacks(
+    world: &mut World,
+    owner: EntityId,
+    source: ItemInstanceId,
+    target: ItemInstanceId,
+) -> Result<InventoryMutation, String> {
+    let catalog = world
+        .resource::<ItemCatalog>()
+        .cloned()
+        .ok_or_else(|| "item catalog is unavailable".to_owned())?;
+    let item = world
+        .get::<PlayerInventory>(owner)
+        .and_then(|inventory| inventory.entry(source))
+        .map(|entry| entry.item)
+        .ok_or_else(|| "source inventory instance is not present".to_owned())?;
+    let mutation = world
+        .get_mut::<PlayerInventory>(owner)
+        .ok_or_else(|| "owner has no inventory".to_owned())?
+        .merge_stack_instances(source, target, &catalog)?;
+    if mutation.accepted > 0 {
+        emit_inventory_event(
+            world,
+            InventoryEvent {
+                kind: InventoryEventKind::StacksMerged,
+                owner,
+                item,
+                instance_id: Some(target),
+                quantity: mutation.accepted,
+                slot: None,
+                world_entity: None,
+                message: "inventory stacks merged".to_owned(),
+            },
+        );
+        let needs_weapon_selection = world
+            .get::<PlayerInventory>(owner)
+            .is_some_and(|inventory| inventory.active_slot.is_none());
+        if needs_weapon_selection {
+            select_highest_ranked_equipped_weapon(world, owner);
+        }
+        sync_equipped_weapon_runtime(world, owner);
+    }
+    Ok(mutation)
+}
+
 pub fn apply_loadout(world: &mut World, owner: EntityId, loadout: ItemId) -> Result<(), String> {
     ensure_player_inventory(world, owner);
     let loadout = world

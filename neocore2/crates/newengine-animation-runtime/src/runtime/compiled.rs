@@ -32,6 +32,21 @@ pub struct AnimationClipBinding {
     full_pose: bool,
 }
 
+impl AnimationClipBinding {
+    /// Skeleton joints authored by this clip, in clip channel order. Presentation systems use
+    /// this immutable compiled addressing to layer partial/full-body clips without assuming that
+    /// authored joint tags are dense skeleton indices.
+    #[inline]
+    pub fn skeleton_joint_indices(&self) -> &[usize] {
+        &self.clip_joint_to_skeleton
+    }
+
+    #[inline]
+    pub fn owns_skeleton_joint(&self, joint_index: usize) -> bool {
+        self.clip_joint_to_skeleton.contains(&joint_index)
+    }
+}
+
 #[inline]
 fn finite_matrix(matrix: Mat4) -> bool {
     matrix.to_cols_array().iter().all(|value| value.is_finite())
@@ -205,13 +220,12 @@ impl AnimationSkeletonRuntime {
 
         let mut bind_globals = vec![Mat4::IDENTITY; joint_count];
         for &index in &evaluation_order {
-            let local =
-                validated_local_matrix(
-                    bind_locals[index],
-                    skeleton.joints[index].scale_ls,
-                    index,
-                    true,
-                )?;
+            let local = validated_local_matrix(
+                bind_locals[index],
+                skeleton.joints[index].scale_ls,
+                index,
+                true,
+            )?;
             bind_globals[index] = parent_indices[index]
                 .map(|parent| bind_globals[parent] * local)
                 .unwrap_or(local);

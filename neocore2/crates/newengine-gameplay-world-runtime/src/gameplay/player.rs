@@ -11,13 +11,15 @@ use newengine_transform::{set_parent, Transform};
 
 use super::listeners::emit_player_event;
 use super::{
-    ensure_player_inventory, CharacterBody, CharacterMotionTuning, CollisionShapeDesc, DisplayMode,
-    DisplayVisibility, GameplayActor, Health, PhysicsBodyDesc, PhysicsSurface, PlayerActor,
-    PlayerAnimationState, PlayerCommandFrame, PlayerController, PlayerEventKind, PlayerFallState,
-    PlayerFirstPersonBodyBarrierProfile, PlayerFixedPoseHistory, PlayerGroundState,
-    PlayerLocomotionAnimation, PlayerLocomotionState, PlayerModelAssignment, PlayerModelBinding,
-    PlayerMovementSpeeds, PlayerRenderPose, PlayerStanceKind, PlayerStanceState, PlayerViewState,
-    PlayerViewVisibility, PlayerViewVisibilityPolicy, PlayerVisualKind, PlayerVisualPart,
+    ensure_player_inventory, AIController, CharacterBody, CharacterControlState,
+    CharacterExertionState, CharacterLifeState, CharacterMotionTuning, CollisionShapeDesc,
+    DisplayMode, DisplayVisibility, GameplayActor, Health, PhysicsBodyDesc, PhysicsSurface,
+    PlayerActor, PlayerAnimationState, PlayerCommandFrame, PlayerController, PlayerEventKind,
+    PlayerFallState, PlayerFirstPersonBodyBarrierProfile, PlayerFixedPoseHistory,
+    PlayerGroundState, PlayerLocomotionAnimation, PlayerLocomotionState, PlayerModelAssignment,
+    PlayerModelBinding, PlayerMovementSpeeds, PlayerRenderPose, PlayerStanceKind,
+    PlayerStanceState, PlayerViewState, PlayerViewVisibility, PlayerViewVisibilityPolicy,
+    PlayerVisualKind, PlayerVisualPart, Stamina, StaminaTuning,
 };
 
 #[path = "player/animation.rs"]
@@ -35,7 +37,9 @@ mod spawn;
 #[path = "player/stance.rs"]
 mod stance;
 
-pub use animation::{player_fall_is_confirmed, update_player_animation_states};
+pub use animation::{
+    player_fall_is_confirmed, update_character_animation_states, update_player_animation_states,
+};
 pub use camera::{
     attach_active_camera_to_player, detach_active_camera_from_player,
     display_shadow_caster_visible_in_mode, display_visible_in_mode,

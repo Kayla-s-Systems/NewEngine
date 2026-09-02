@@ -10,7 +10,7 @@ use newengine_engine_runtime::gameplay::{
     PlayerSkinPose, PlayerWeaponState, WeaponActionKind, WeaponActionRuntime,
     WeaponAnimationDefinition, WeaponEntitySockets, WeaponReloadAnimationAuthority,
     WeaponReloadAnimationMarker, WeaponReloadAnimationMarkerInbox, WeaponReloadPhase,
-    WeaponSocketPose, WEAPON_RELOAD_ANIMATION_REQUIRED_MARKER_MASK,
+    WeaponReloadTopology, WeaponSocketPose,
 };
 use newengine_math::Mat4;
 use newengine_model_skeleton_api::ModelSkeletonMetadata;
@@ -116,6 +116,7 @@ fn load_weapon_clip(
 
 fn authored_reload_marker_authority(
     weapon_instance_id: ItemInstanceId,
+    reload_topology: WeaponReloadTopology,
     reference: &str,
     clip: &AnimationClip,
 ) -> Result<Option<WeaponReloadAnimationAuthority>, String> {
@@ -146,22 +147,25 @@ fn authored_reload_marker_authority(
     if recognized == 0 {
         return Ok(None);
     }
-    if marker_mask & WEAPON_RELOAD_ANIMATION_REQUIRED_MARKER_MASK
-        != WEAPON_RELOAD_ANIMATION_REQUIRED_MARKER_MASK
-    {
+    let required_marker_mask = reload_topology.required_animation_marker_mask();
+    if marker_mask & required_marker_mask != required_marker_mask {
         return Ok(None);
     }
-    let times = phase_times.map(|value| value.expect("complete marker mask guarantees phase time"));
-    if times.windows(2).any(|pair| pair[1] < pair[0]) {
-        return Err(format!(
-            "reload clip authoritative markers are out of order clip='{}' times={times:?}",
-            reference
-        ));
+    let mut previous = None::<f32>;
+    for time in phase_times.into_iter().flatten() {
+        if previous.is_some_and(|previous| time < previous) {
+            return Err(format!(
+                "reload clip authoritative markers are out of order clip='{}'",
+                reference
+            ));
+        }
+        previous = Some(time);
     }
     Ok(Some(WeaponReloadAnimationAuthority {
         weapon_instance_id,
         clip_duration_seconds: clip.duration_seconds,
         marker_mask,
+        required_marker_mask,
     }))
 }
 
@@ -239,6 +243,7 @@ pub(crate) fn bind_equipped_weapon_animation(
     skeleton: ModelSkeletonMetadata,
     source_to_model: [f32; 16],
     definition: &WeaponAnimationDefinition,
+    reload_topology: WeaponReloadTopology,
     casing_ejection_joint: Option<&str>,
     initial_shot_sequence: u64,
 ) -> Result<(), String> {
@@ -277,7 +282,12 @@ pub(crate) fn bind_equipped_weapon_animation(
     let reload_authority = reload
         .as_ref()
         .map(|reload| {
-            authored_reload_marker_authority(instance_id, &reload.reference, &reload.clip)
+            authored_reload_marker_authority(
+                instance_id,
+                reload_topology,
+                &reload.reference,
+                &reload.clip,
+            )
         })
         .transpose()?
         .flatten();
@@ -673,14 +683,23 @@ mod tests {
     fn complete_reload_marker_set_admits_animation_authority() {
         let clip = test_reload_clip(complete_reload_markers());
         let instance = ItemInstanceId(81);
-        let authority = authored_reload_marker_authority(instance, "reload@test", &clip)
-            .expect("marker validation")
-            .expect("animation authority");
+        let authority = authored_reload_marker_authority(
+            instance,
+            WeaponReloadTopology::DetachableMagazine,
+            "reload@test",
+            &clip,
+        )
+        .expect("marker validation")
+        .expect("animation authority");
         assert_eq!(authority.weapon_instance_id, instance);
         assert_eq!(authority.clip_duration_seconds, 1.2);
         assert_eq!(
             authority.marker_mask,
-            WEAPON_RELOAD_ANIMATION_REQUIRED_MARKER_MASK
+            WeaponReloadTopology::DetachableMagazine.required_animation_marker_mask()
+        );
+        assert_eq!(
+            authority.required_marker_mask,
+            WeaponReloadTopology::DetachableMagazine.required_animation_marker_mask()
         );
         assert!(authority.is_complete());
     }
@@ -688,11 +707,14 @@ mod tests {
     #[test]
     fn markerless_and_partial_reload_clips_use_timeline_fallback() {
         let markerless = test_reload_clip(Vec::new());
-        assert!(
-            authored_reload_marker_authority(ItemInstanceId(82), "markerless", &markerless)
-                .expect("markerless validation")
-                .is_none()
-        );
+        assert!(authored_reload_marker_authority(
+            ItemInstanceId(82),
+            WeaponReloadTopology::DetachableMagazine,
+            "markerless",
+            &markerless,
+        )
+        .expect("markerless validation")
+        .is_none());
 
         let partial = test_reload_clip(vec![newengine_animation_runtime::AnimationEvent::new(
             0.2,
@@ -700,11 +722,47 @@ mod tests {
                 .animation_marker_tag()
                 .unwrap(),
         )]);
-        assert!(
-            authored_reload_marker_authority(ItemInstanceId(83), "partial", &partial)
-                .expect("partial validation")
-                .is_none()
+        assert!(authored_reload_marker_authority(
+            ItemInstanceId(83),
+            WeaponReloadTopology::DetachableMagazine,
+            "partial",
+            &partial,
+        )
+        .expect("partial validation")
+        .is_none());
+    }
+
+    #[test]
+    fn internal_magazine_requires_only_semantically_relevant_reload_markers() {
+        let clip = test_reload_clip(vec![
+            newengine_animation_runtime::AnimationEvent::new(
+                0.45,
+                WeaponReloadPhase::AmmoCommitted
+                    .animation_marker_tag()
+                    .unwrap(),
+            ),
+            newengine_animation_runtime::AnimationEvent::new(
+                0.85,
+                WeaponReloadPhase::Chambered.animation_marker_tag().unwrap(),
+            ),
+            newengine_animation_runtime::AnimationEvent::new(
+                1.00,
+                WeaponReloadPhase::Complete.animation_marker_tag().unwrap(),
+            ),
+        ]);
+        let authority = authored_reload_marker_authority(
+            ItemInstanceId(87),
+            WeaponReloadTopology::InternalMagazine,
+            "internal",
+            &clip,
+        )
+        .expect("internal marker validation")
+        .expect("internal marker authority");
+        assert_eq!(
+            authority.required_marker_mask,
+            WeaponReloadTopology::InternalMagazine.required_animation_marker_mask()
         );
+        assert!(authority.is_complete());
     }
 
     #[test]
@@ -720,11 +778,14 @@ mod tests {
             ),
         );
         let duplicate = test_reload_clip(duplicate_events);
-        assert!(
-            authored_reload_marker_authority(ItemInstanceId(84), "duplicate", &duplicate)
-                .expect_err("duplicate marker must fail")
-                .contains("duplicate authoritative marker")
-        );
+        assert!(authored_reload_marker_authority(
+            ItemInstanceId(84),
+            WeaponReloadTopology::DetachableMagazine,
+            "duplicate",
+            &duplicate,
+        )
+        .expect_err("duplicate marker must fail")
+        .contains("duplicate authoritative marker"));
 
         let out_of_order = test_reload_clip(vec![
             newengine_animation_runtime::AnimationEvent::new(
@@ -756,8 +817,9 @@ mod tests {
         ]);
         assert!(authored_reload_marker_authority(
             ItemInstanceId(85),
+            WeaponReloadTopology::DetachableMagazine,
             "out-of-order",
-            &out_of_order
+            &out_of_order,
         )
         .expect_err("out-of-order markers must fail")
         .contains("out of order"));

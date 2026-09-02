@@ -8,15 +8,80 @@ pub(super) fn equipment_animation_slot_from_attribute(attribute: &str) -> Option
     let body = normalized
         .strip_prefix("equipment_")?
         .strip_suffix("_animation")?;
-    let (family, stance) = body.rsplit_once('_')?;
-    if family.is_empty() || !matches!(stance, "ready" | "aim" | "reload") {
-        return None;
+
+    // Match the universal presentation grammar from the right so opaque family ids may contain `_`.
+    const SUFFIXES: &[(&str, &str)] = &[
+        ("transition_ready_to_aim", "transition.ready_to_aim"),
+        ("transition_aim_to_ready", "transition.aim_to_ready"),
+        ("grip_stand_ref", "grip.stand.ref"),
+        ("grip_stand_arms", "grip.stand.arms"),
+        ("grip_stand_hands", "grip.stand.hands"),
+        ("grip_stand_fingers", "grip.stand.fingers"),
+        ("grip_stand_add", "grip.stand.add"),
+        ("grip_crouch_ref", "grip.crouch.ref"),
+        ("grip_crouch_arms", "grip.crouch.arms"),
+        ("grip_crouch_hands", "grip.crouch.hands"),
+        ("grip_crouch_fingers", "grip.crouch.fingers"),
+        ("grip_crouch_add", "grip.crouch.add"),
+        ("grip_prone_ref", "grip.prone.ref"),
+        ("grip_prone_arms", "grip.prone.arms"),
+        ("grip_prone_hands", "grip.prone.hands"),
+        ("grip_prone_fingers", "grip.prone.fingers"),
+        ("grip_prone_add", "grip.prone.add"),
+        ("crouch_aim_blocked_add", "crouch.aim.blocked.add"),
+        ("crouch_aim_blocked_sub", "crouch.aim.blocked.sub"),
+        ("prone_aim_blocked_add", "prone.aim.blocked.add"),
+        ("prone_aim_blocked_sub", "prone.aim.blocked.sub"),
+        ("aim_blocked_add", "aim.blocked.add"),
+        ("aim_blocked_sub", "aim.blocked.sub"),
+        ("crouch_aim_move_b135r", "crouch.aim.move.b135r"),
+        ("crouch_aim_move_b135l", "crouch.aim.move.b135l"),
+        ("crouch_aim_move_fw45r", "crouch.aim.move.fw45r"),
+        ("crouch_aim_move_fw45l", "crouch.aim.move.fw45l"),
+        ("crouch_aim_move_b180", "crouch.aim.move.b180"),
+        ("crouch_aim_move_r90", "crouch.aim.move.r90"),
+        ("crouch_aim_move_l90", "crouch.aim.move.l90"),
+        ("crouch_aim_move_fw", "crouch.aim.move.fw"),
+        ("prone_aim_move_b135r", "prone.aim.move.b135r"),
+        ("prone_aim_move_b135l", "prone.aim.move.b135l"),
+        ("prone_aim_move_fw45r", "prone.aim.move.fw45r"),
+        ("prone_aim_move_fw45l", "prone.aim.move.fw45l"),
+        ("prone_aim_move_b180", "prone.aim.move.b180"),
+        ("prone_aim_move_r90", "prone.aim.move.r90"),
+        ("prone_aim_move_l90", "prone.aim.move.l90"),
+        ("prone_aim_move_fw", "prone.aim.move.fw"),
+        ("aim_move_b135r", "aim.move.b135r"),
+        ("aim_move_b135l", "aim.move.b135l"),
+        ("aim_move_fw45r", "aim.move.fw45r"),
+        ("aim_move_fw45l", "aim.move.fw45l"),
+        ("aim_move_b180", "aim.move.b180"),
+        ("aim_move_r90", "aim.move.r90"),
+        ("aim_move_l90", "aim.move.l90"),
+        ("aim_move_fw", "aim.move.fw"),
+        ("crouch_aim_idle", "crouch.aim.idle"),
+        ("prone_aim_idle", "prone.aim.idle"),
+        ("aim_idle", "aim.idle"),
+        ("ready", "ready"),
+        ("reload", "reload"),
+        ("aim", "aim"),
+    ];
+
+    for (suffix, semantic) in SUFFIXES {
+        let marker = format!("_{suffix}");
+        let Some(family) = body.strip_suffix(&marker) else {
+            continue;
+        };
+        let family = family.replace("-", "_");
+        if family.is_empty()
+            || !family
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+        {
+            return None;
+        }
+        return Some(format!("equipment.{family}.{semantic}"));
     }
-    let family = family.replace('-', "_");
-    family
-        .chars()
-        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
-        .then(|| format!("equipment.{family}.{stance}"))
+    None
 }
 
 /// Maps `equipment_<family>_ready_sample_phase` to the same open-ended normalized family id used
@@ -428,7 +493,15 @@ pub(super) fn apply_player_model_from_ytyp(
     .map(|key| value_path(model, &[key]).and_then(value_string));
     if let (
         Some(chain_joints),
-        [Some(head_joint), Some(head_base_joint), Some(upper_back_joint), Some(middle_back_joint), Some(lower_back_joint), Some(left_shoulder_joint), Some(right_shoulder_joint)],
+        [
+            Some(head_joint),
+            Some(head_base_joint),
+            Some(upper_back_joint),
+            Some(middle_back_joint),
+            Some(lower_back_joint),
+            Some(left_shoulder_joint),
+            Some(right_shoulder_joint),
+        ],
     ) = (braid_chain_joints, braid_collision_joints)
     {
         profile.player.model.braid_secondary_motion = Some(
@@ -699,8 +772,17 @@ pub(super) fn apply_player_model_from_ytyp(
         "equipment_arm_ik_left_palm",
     ]
     .map(|key| value_path(model, &[key]).and_then(value_string));
-    if let [Some(chest), Some(right_shoulder), Some(right_elbow), Some(right_wrist), Some(right_palm), Some(left_shoulder), Some(left_elbow), Some(left_wrist), Some(left_palm)] =
-        ik_required
+    if let [
+        Some(chest),
+        Some(right_shoulder),
+        Some(right_elbow),
+        Some(right_wrist),
+        Some(right_palm),
+        Some(left_shoulder),
+        Some(left_elbow),
+        Some(left_wrist),
+        Some(left_palm),
+    ] = ik_required
     {
         profile.player.model.equipment_arm_ik_rig = Some(
             newengine_engine_runtime::gameplay::PlayerWeaponArmIkRigDefinition {
@@ -916,6 +998,109 @@ pub(super) fn apply_player_model_from_ytyp(
         profile.player.crouch_speed = value.clamp(0.05, 50.0);
         applied += 1;
     }
+    if let Some(value) = value_path(player_values, &["combat_team"]).and_then(value_f32) {
+        let team = value.round();
+        if (1.0..=65_535.0).contains(&team) {
+            profile.player.combat_team = Some(team as u32);
+            applied += 1;
+        }
+    }
+    if let Some(value) = value_path(player_values, &["health_maximum"]).and_then(value_f32) {
+        profile.player.health_maximum = value.clamp(1.0, 1_000_000.0);
+        applied += 1;
+    }
+    if let Some(value) = value_path(player_values, &["stamina_maximum"]).and_then(value_f32) {
+        profile.player.stamina_maximum = value.clamp(0.0, 1_000_000.0);
+        applied += 1;
+    }
+    if let Some(value) =
+        value_path(player_values, &["stamina_sprint_drain_per_second"]).and_then(value_f32)
+    {
+        profile.player.stamina_sprint_drain_per_second = value.clamp(0.0, 10_000.0);
+        applied += 1;
+    }
+    if let Some(value) =
+        value_path(player_values, &["stamina_regen_per_second"]).and_then(value_f32)
+    {
+        profile.player.stamina_regen_per_second = value.clamp(0.0, 10_000.0);
+        applied += 1;
+    }
+    if let Some(value) =
+        value_path(player_values, &["stamina_regen_delay_seconds"]).and_then(value_f32)
+    {
+        profile.player.stamina_regen_delay_seconds = value.clamp(0.0, 60.0);
+        applied += 1;
+    }
+    if let Some(value) =
+        value_path(player_values, &["stamina_exhausted_resume_fraction"]).and_then(value_f32)
+    {
+        profile.player.stamina_exhausted_resume_fraction = value.clamp(0.0, 1.0);
+        applied += 1;
+    }
+    if let Some(value) =
+        value_path(player_values, &["damage_stagger_damage_fraction"]).and_then(value_f32)
+    {
+        profile
+            .player
+            .damage_response_tuning
+            .stagger_damage_fraction = value.clamp(0.0, 1.0);
+        applied += 1;
+    }
+    if let Some(value) =
+        value_path(player_values, &["damage_stagger_impulse_threshold"]).and_then(value_f32)
+    {
+        profile
+            .player
+            .damage_response_tuning
+            .stagger_impulse_threshold = value.clamp(0.0, 100_000.0);
+        applied += 1;
+    }
+    if let Some(value) =
+        value_path(player_values, &["damage_flinch_duration_seconds"]).and_then(value_f32)
+    {
+        profile
+            .player
+            .damage_response_tuning
+            .flinch_duration_seconds = value.clamp(0.0, 10.0);
+        applied += 1;
+    }
+    if let Some(value) =
+        value_path(player_values, &["damage_stagger_duration_seconds"]).and_then(value_f32)
+    {
+        profile
+            .player
+            .damage_response_tuning
+            .stagger_duration_seconds = value.clamp(0.0, 10.0);
+        applied += 1;
+    }
+    if let Some(value) = value_path(player_values, &["injured_health_fraction"]).and_then(value_f32)
+    {
+        profile
+            .player
+            .damage_response_tuning
+            .injured_health_fraction = value.clamp(0.0, 1.0);
+        applied += 1;
+    }
+    profile.player.damage_response_tuning = profile.player.damage_response_tuning.sanitized();
+    if let Some(value) =
+        value_path(player_values, &["drop_active_weapon_on_death"]).and_then(value_bool)
+    {
+        profile.player.death_policy.drop_active_weapon = value;
+        applied += 1;
+    }
+    if let Some(value) = value_path(player_values, &["death_presentation"]).and_then(value_string) {
+        profile.player.death_policy.presentation = match value.trim().to_ascii_lowercase().as_str()
+        {
+            "animation" => {
+                newengine_engine_runtime::gameplay::CharacterDeathPresentation::Animation
+            }
+            "ragdoll" => newengine_engine_runtime::gameplay::CharacterDeathPresentation::Ragdoll,
+            _ => {
+                newengine_engine_runtime::gameplay::CharacterDeathPresentation::AnimationThenRagdoll
+            }
+        };
+        applied += 1;
+    }
     // Sanitize the set as one unit so an authored typo cannot invert movement modes.
     profile.player.walk_speed = profile.player.walk_speed.min(profile.player.run_speed);
     profile.player.sprint_speed = profile.player.sprint_speed.max(profile.player.run_speed);
@@ -948,3 +1133,7 @@ pub(super) fn apply_player_model_from_ytyp(
     }
     applied
 }
+
+#[path = "assignment.rs"]
+mod assignment;
+pub(super) use assignment::character_model_assignment_from_ytyp_metadata;

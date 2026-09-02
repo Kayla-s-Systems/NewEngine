@@ -11,7 +11,7 @@ use newengine_engine_runtime::gameplay::{
     ItemId, PlayerController, PlayerInventory,
 };
 use newengine_gameplay_fps_api::{
-    FpsDemoRules, FpsGameplayPolicyProvider, FpsGameplayPolicySnapshot,
+    FpsActorLoadoutRequest, FpsDemoRules, FpsGameplayPolicyProvider, FpsGameplayPolicySnapshot,
 };
 use newengine_gameplay_script_api::ScriptedStateMachineEventRequest;
 use newengine_gameplay_script_runtime::{
@@ -329,6 +329,44 @@ fn install_policy_resources(world: &mut GameplayWorld, policy: &FpsGameplayPolic
     }
 }
 
+pub fn ensure_fps_actor_loadouts(world: &mut GameplayWorld) {
+    if world.resource::<ItemCatalog>().is_none()
+        || world.resource::<InventoryLoadoutCatalog>().is_none()
+    {
+        return;
+    }
+    let requests = world
+        .query::<FpsActorLoadoutRequest>()
+        .map(|(entity, request)| (entity, request.clone()))
+        .collect::<Vec<_>>();
+    for (actor, request) in requests {
+        let logical_name = request.loadout.trim();
+        let Some(loadout) = ItemId::from_name(logical_name) else {
+            newengine_ulog_api::ulog::error!(
+                "FPS actor loadout rejected actor={} loadout='{}' reason='empty logical id'",
+                actor.stable_u64(),
+                request.loadout,
+            );
+            let _ = world.remove::<FpsActorLoadoutRequest>(actor);
+            continue;
+        };
+        match apply_loadout(world, actor, loadout) {
+            Ok(()) => {
+                let _ = world.remove::<FpsActorLoadoutRequest>(actor);
+            }
+            Err(error) => {
+                newengine_ulog_api::ulog::error!(
+                    "FPS actor loadout rejected actor={} loadout='{}' err='{}' policy='no fallback loadout'",
+                    actor.stable_u64(),
+                    logical_name,
+                    error,
+                );
+                let _ = world.remove::<FpsActorLoadoutRequest>(actor);
+            }
+        }
+    }
+}
+
 pub fn ensure_fps_player_loadouts(world: &mut GameplayWorld) {
     if world.resource::<ItemCatalog>().is_none()
         || world.resource::<InventoryLoadoutCatalog>().is_none()
@@ -439,6 +477,26 @@ mod shared_weapon_catalog_tests {
             definition_ref: definition_ref.to_owned(),
             ..AuthoredItemDefinition::default()
         }
+    }
+
+    #[test]
+    fn authored_actor_loadout_request_applies_without_player_controller() {
+        let mut world = GameplayWorld::new();
+        let content = embedded_test_content_provider();
+        GameplayContentProvider::install(&content, &mut world).expect("install FPS test content");
+        let actor = world.spawn();
+        let _ = world.insert(actor, FpsActorLoadoutRequest::new("loadout.fps.default"));
+
+        ensure_fps_actor_loadouts(&mut world);
+
+        assert!(world.get::<FpsActorLoadoutRequest>(actor).is_none());
+        assert!(world.get::<PlayerController>(actor).is_none());
+        assert!(world.get::<PlayerInventory>(actor).is_some());
+        assert!(
+            newengine_engine_runtime::gameplay::active_equipped_weapon_binding(&world, actor)
+                .is_some(),
+            "authored actor loadout must enter the same equipped-weapon inventory runtime"
+        );
     }
 
     #[test]

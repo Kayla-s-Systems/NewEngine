@@ -7,7 +7,6 @@ use abi_stable::std_types::RString;
 use newengine_assets::{AssetDecodeRequest, AssetServiceClient};
 use newengine_assets_api::{
     AssetDocument, AssetEntryManifest, AssetFileManifest, ASSET_LIST_FILE_MANIFEST_OUTPUT,
-    LIST_FILE_CONTENT_KIND_NEMAT, LIST_FILE_CONTENT_KIND_YTD,
 };
 use newengine_material_client::MaterialGatewayClient;
 use newengine_materials::MaterialLoadRequest;

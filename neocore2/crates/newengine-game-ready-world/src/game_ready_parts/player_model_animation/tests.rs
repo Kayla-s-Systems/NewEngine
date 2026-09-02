@@ -851,6 +851,7 @@ mod transition_tests {
             0.0,
             Vec3::ZERO,
             true,
+            false,
             true,
             true,
         )
@@ -913,9 +914,151 @@ mod transition_tests {
         }
         assert!(final_result.error_m.is_finite());
 
-        // Full-body first person is deliberately different: authored arm locals are immutable.
-        // ADS rotates the weapon around the firing handle and camera follows the rendered sights;
-        // no shoulder/elbow solve is allowed to straighten the real avatar arms toward the camera.
+        // A prop attachment joint appearing in a generic authored hand pose is not sufficient to
+        // claim weapon-root ownership. The socket -> handle basis belongs to a qualified authored
+        // grip domain, so an unrelated attachment frame must be ignored until that domain opts in.
+        let unqualified_socket_rig = WeaponArmIkRig {
+            right_prop_attachment: Some(rig.right_wrist),
+            ..rig
+        };
+        let mut unqualified_socket_pose = authored_pose.clone();
+        let mut unqualified_socket_frames = Vec::new();
+        rebuild_model_joint_frames(
+            &animation_runtime,
+            &unqualified_socket_pose,
+            &mut unqualified_socket_frames,
+        )
+        .expect("unqualified socket initial frames");
+        let incompatible_socket_root = crate::weapon_grip::weapon_root_from_authored_prop_frame(
+            &presentation,
+            unqualified_socket_frames[unqualified_socket_rig
+                .right_prop_attachment
+                .expect("unqualified socket joint")],
+        )
+        .expect("incompatible authored socket root");
+        let unqualified_socket_result = apply_equipped_weapon_support_ik(
+            &presentation,
+            Some(&unqualified_socket_rig),
+            &skeleton,
+            &animation_runtime,
+            &mut unqualified_socket_pose,
+            &mut unqualified_socket_frames,
+            None,
+            None,
+            None,
+            false,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            Vec3::ZERO,
+            true,
+            false,
+            true,
+            true,
+        )
+        .expect("unqualified prop socket presentation")
+        .expect("fallback root");
+        assert!(
+            unqualified_socket_result
+                .base_root
+                .position
+                .distance(incompatible_socket_root.position)
+                > 1.0e-4,
+            "generic authored hand contact must not apply a socket basis from another authored domain"
+        );
+        assert_eq!(unqualified_socket_result.socket_position_error_m, 0.0);
+        assert_eq!(unqualified_socket_result.socket_angular_error_deg, 0.0);
+
+        // A native equipment prop socket owns the weapon root. Both physical hands are still a
+        // correction layer over that root: the firing hand is an identity solve at the authored
+        // contact, while the support hand may reduce residual without moving the weapon.
+        let socket_rig = WeaponArmIkRig {
+            right_prop_attachment: Some(rig.right_palm),
+            ..rig
+        };
+        let mut socket_presentation = presentation.clone();
+        socket_presentation.authored_socket_to_weapon_handle_basis = [0.0, 0.0, 0.0, 1.0];
+        socket_presentation.handle_rotation_from_root = [0.0, 0.0, 0.0, 1.0];
+        socket_presentation.ready_right_palm_to_weapon = [0.0, 0.0, 0.0, 1.0];
+        socket_presentation.right_palm_to_handle = [0.0; 3];
+        let mut socket_pose = authored_pose.clone();
+        let mut socket_frames = Vec::new();
+        rebuild_model_joint_frames(&animation_runtime, &socket_pose, &mut socket_frames)
+            .expect("socket initial frames");
+        let expected_socket_root = crate::weapon_grip::weapon_root_from_authored_prop_frame(
+            &socket_presentation,
+            socket_frames[socket_rig.right_prop_attachment.expect("socket joint")],
+        )
+        .expect("authored socket root");
+        let socket_pose_before = socket_pose.clone();
+        let socket_left_before = socket_frames[rig.left_palm].transform_point3(Vec3::ZERO);
+        let socket_left_target = crate::weapon_grip::weapon_ready_left_palm_position(
+            &socket_presentation,
+            expected_socket_root,
+        );
+        let socket_left_before_error = socket_left_before.distance(socket_left_target);
+        let socket_result = apply_equipped_weapon_support_ik(
+            &socket_presentation,
+            Some(&socket_rig),
+            &skeleton,
+            &animation_runtime,
+            &mut socket_pose,
+            &mut socket_frames,
+            None,
+            None,
+            None,
+            false,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            Vec3::ZERO,
+            true,
+            true,
+            true,
+            true,
+        )
+        .expect("authored socket presentation")
+        .expect("socket root");
+        assert!(
+            socket_result
+                .base_root
+                .position
+                .distance(expected_socket_root.position)
+                <= 1.0e-6
+        );
+        assert!(
+            socket_result
+                .base_root
+                .rotation
+                .dot(expected_socket_root.rotation)
+                .abs()
+                > 0.999_999
+        );
+        for index in [
+            rig.right_shoulder,
+            rig.right_elbow,
+            rig.right_wrist,
+            rig.right_palm,
+        ] {
+            assert_eq!(
+                socket_pose[index], socket_pose_before[index],
+                "canonical firing-hand contact must be an identity correction"
+            );
+        }
+        let socket_left_after = socket_frames[rig.left_palm].transform_point3(Vec3::ZERO);
+        assert!(
+            socket_left_after.distance(socket_left_target) <= socket_left_before_error + 1.0e-6,
+            "prop-owned root must still admit a non-worsening support-hand correction"
+        );
+        assert!(socket_result.right_error_m <= 1.0e-6);
+        assert!(socket_result.socket_position_error_m <= 1.0e-6);
+        assert!(socket_result.socket_angular_error_deg <= 0.001);
+
+        // Full-body first person keeps the authored right-palm handle as the kinematic weapon
+        // owner, but ADS is allowed to rotate the real arm chains so both palms follow the final
+        // sight-aligned weapon contacts. Limb translations/segment lengths remain anatomical.
         let mut fpp_pose = authored_pose.clone();
         let mut fpp_frames = Vec::new();
         rebuild_model_joint_frames(&animation_runtime, &fpp_pose, &mut fpp_frames)
@@ -925,7 +1068,28 @@ mod transition_tests {
             fpp_frames[rig.right_palm],
         )
         .expect("FPP authored handle");
-        let view = Quat::from_euler(newengine_math::EulerRot::YXZ, 0.31, -0.12, 0.0);
+        let authored_root = crate::weapon_grip::weapon_root_from_right_palm(
+            &presentation,
+            fpp_frames[rig.right_palm],
+        )
+        .expect("FPP authored weapon root");
+        let authored_sight = crate::weapon_grip::weapon_sight_forward(&presentation, authored_root);
+        let aim_delta = Quat::from_rotation_y(0.04) * Quat::from_rotation_x(-0.02);
+        let aimed_forward = (aim_delta * authored_sight).normalize_or_zero();
+        let view = Quat::from_rotation_arc(-Vec3::Z, aimed_forward).normalize_or_identity();
+        let expected_fpp_root = crate::weapon_grip::weapon_first_person_hand_anchored_root(
+            &presentation,
+            fpp_frames[rig.right_palm],
+            view,
+            1.0,
+            0.0,
+            0.0,
+        )
+        .expect("expected FPP hand-owned root");
+        let fpp_left_before = fpp_frames[rig.left_palm].transform_point3(Vec3::ZERO);
+        let fpp_left_target_before =
+            crate::weapon_grip::weapon_ready_left_palm_position(&presentation, expected_fpp_root);
+        let fpp_left_before_error = fpp_left_before.distance(fpp_left_target_before);
         let fpp_result = apply_equipped_weapon_support_ik(
             &presentation,
             Some(&rig),
@@ -943,15 +1107,39 @@ mod transition_tests {
             0.0,
             Vec3::ZERO,
             true,
+            false,
             true,
             true,
         )
         .expect("FPP authored hand presentation")
         .expect("FPP weapon root");
-        for (joint, (before, after)) in authored_pose.iter().zip(&fpp_pose).enumerate() {
-            assert_eq!(
-                before, after,
-                "FPP weapon presentation mutated authored arm/body local joint={joint}"
+        let right_target = crate::weapon_grip::weapon_hand_owned_right_palm_position(
+            &presentation,
+            fpp_result.base_root,
+        );
+        let left_target = crate::weapon_grip::weapon_ready_left_palm_position(
+            &presentation,
+            fpp_result.base_root,
+        );
+        let right_actual = fpp_frames[rig.right_palm].transform_point3(Vec3::ZERO);
+        let left_actual = fpp_frames[rig.left_palm].transform_point3(Vec3::ZERO);
+        assert!((right_actual.distance(right_target) - fpp_result.right_error_m).abs() <= 1.0e-5);
+        assert!((left_actual.distance(left_target) - fpp_result.left_error_m).abs() <= 1.0e-5);
+        assert!(
+            fpp_result.right_error_m <= 0.005,
+            "FPP firing-hand contact residual too large: {}",
+            fpp_result.right_error_m,
+        );
+        assert!(
+            fpp_result.left_error_m <= fpp_left_before_error + 1.0e-6,
+            "FPP support-hand solve may improve an authored contact but must never worsen it before={} after={}",
+            fpp_left_before_error,
+            fpp_result.left_error_m,
+        );
+        if (fpp_result.left_error_m - fpp_left_before_error).abs() <= 1.0e-6 {
+            assert!(
+                left_actual.distance(fpp_left_before) <= 1.0e-6,
+                "unreachable FPP support grip must preserve authored hand position instead of stretching the arm",
             );
         }
         let resolved_handle =
@@ -1117,6 +1305,63 @@ mod transition_tests {
     }
 
     #[test]
+    fn terminal_helper_sync_reprojects_post_ik_wrist_and_finger_locals() {
+        let identity = JointLocalPose {
+            translation: [0.0, 0.0, 0.0],
+            rotation: [0.0, 0.0, 0.0, 1.0],
+            scale: Some([1.0, 1.0, 1.0]),
+        };
+        let mut pose = vec![identity; 4];
+        let rules = [
+            ResolvedJointCopyRule {
+                source_index: 0,
+                target_index: 1,
+                channels: newengine_engine_runtime::gameplay::PlayerJointChannels::all(),
+            },
+            ResolvedJointCopyRule {
+                source_index: 2,
+                target_index: 3,
+                channels: newengine_engine_runtime::gameplay::PlayerJointChannels::all(),
+            },
+        ];
+
+        // Initial pre-IK helper projection.
+        synchronize_helper_pose(&rules, &mut pose);
+
+        // Simulate terminal weapon contact mutations on the anatomical wrist/finger branch.
+        let wrist_rotation = Quat::from_rotation_y(0.61) * Quat::from_rotation_x(-0.24);
+        pose[0].translation = [0.03, -0.02, 0.01];
+        pose[0].rotation = [
+            wrist_rotation.x,
+            wrist_rotation.y,
+            wrist_rotation.z,
+            wrist_rotation.w,
+        ];
+        let finger_rotation = Quat::from_rotation_x(0.93);
+        pose[2].translation = [0.0, 0.0, 0.045];
+        pose[2].rotation = [
+            finger_rotation.x,
+            finger_rotation.y,
+            finger_rotation.z,
+            finger_rotation.w,
+        ];
+
+        assert_ne!(pose[0], pose[1], "pre-IK helper wrist must now be stale");
+        assert_ne!(pose[2], pose[3], "pre-IK helper finger must now be stale");
+
+        synchronize_helper_pose(&rules, &mut pose);
+
+        assert_eq!(
+            pose[0], pose[1],
+            "final wrist helper must match post-IK wrist"
+        );
+        assert_eq!(
+            pose[2], pose[3],
+            "final finger helper must match post-IK finger"
+        );
+    }
+
+    #[test]
     fn detached_control_and_face_share_the_same_canonical_headb_delta() {
         let rig = DetachedHeadFollowRig {
             driver_joint: 0,
@@ -1166,5 +1411,75 @@ mod transition_tests {
         let error = validate_eye_palette(Some(&contract), &palette)
             .expect_err("extra eye deformation must be rejected");
         assert!(error.contains("eye palette drift"));
+    }
+}
+
+#[cfg(test)]
+fn resolve_equipment_presentation_stance(
+    weapon_type: Option<newengine_engine_runtime::gameplay::WeaponType>,
+    weapon_state: Option<newengine_engine_runtime::gameplay::PlayerWeaponState>,
+    authored_presentation: bool,
+) -> EquipmentPresentationStance {
+    if !authored_presentation
+        || weapon_type != Some(newengine_engine_runtime::gameplay::WeaponType::Firearm)
+    {
+        return EquipmentPresentationStance::None;
+    }
+    let Some(state) = weapon_state else {
+        return EquipmentPresentationStance::Ready;
+    };
+    if state.reload_remaining > 0.0 {
+        EquipmentPresentationStance::Reload
+    } else if state.aiming {
+        EquipmentPresentationStance::Aim
+    } else {
+        EquipmentPresentationStance::Ready
+    }
+}
+
+#[cfg(test)]
+mod equipment_stance_tests {
+    use super::*;
+    use newengine_engine_runtime::gameplay::{PlayerWeaponState, WeaponType};
+
+    #[test]
+    fn firearm_equipment_stance_resolves_ready_aim_reload() {
+        let mut state = PlayerWeaponState::melee();
+        assert_eq!(
+            resolve_equipment_presentation_stance(Some(WeaponType::Firearm), Some(state), true),
+            EquipmentPresentationStance::Ready
+        );
+        state.aiming = true;
+        assert_eq!(
+            resolve_equipment_presentation_stance(Some(WeaponType::Firearm), Some(state), true),
+            EquipmentPresentationStance::Aim
+        );
+        state.reload_remaining = 0.5;
+        assert_eq!(
+            resolve_equipment_presentation_stance(Some(WeaponType::Firearm), Some(state), true),
+            EquipmentPresentationStance::Reload
+        );
+    }
+
+    #[test]
+    fn unarmed_and_melee_never_activate_firearm_presentation() {
+        for weapon_type in [WeaponType::Unarmed, WeaponType::Melee] {
+            assert_eq!(
+                resolve_equipment_presentation_stance(
+                    Some(weapon_type),
+                    Some(PlayerWeaponState::melee()),
+                    true,
+                ),
+                EquipmentPresentationStance::None
+            );
+        }
+        assert_eq!(
+            resolve_equipment_presentation_stance(
+                Some(WeaponType::Firearm),
+                Some(PlayerWeaponState::melee()),
+                false,
+            ),
+            EquipmentPresentationStance::None
+        );
     }
 }

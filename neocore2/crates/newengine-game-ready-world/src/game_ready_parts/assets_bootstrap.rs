@@ -503,6 +503,40 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
     }
     .sanitized();
     let _ = world.insert(player, movement_speeds);
+    let _ = world.insert(
+        player,
+        newengine_engine_runtime::gameplay::Health::new(map.player.health_maximum),
+    );
+    if let Some(combat_team) = map.player.combat_team {
+        let _ = world.insert(
+            player,
+            newengine_engine_runtime::gameplay::CombatTeam::new(combat_team),
+        );
+    }
+    let _ = world.insert(
+        player,
+        newengine_engine_runtime::gameplay::Stamina::new(map.player.stamina_maximum),
+    );
+    let _ = world.insert(
+        player,
+        newengine_engine_runtime::gameplay::StaminaTuning {
+            sprint_drain_per_second: map.player.stamina_sprint_drain_per_second,
+            regen_per_second: map.player.stamina_regen_per_second,
+            regen_delay_seconds: map.player.stamina_regen_delay_seconds,
+            exhausted_resume_fraction: map.player.stamina_exhausted_resume_fraction,
+        }
+        .sanitized(),
+    );
+    let _ = world.insert(
+        player,
+        newengine_engine_runtime::gameplay::DamageReceiver::character(),
+    );
+    let _ = world.insert(player, map.player.damage_response_tuning);
+    let _ = world.insert(player, map.player.death_policy);
+    let _ = world.insert(
+        player,
+        newengine_engine_runtime::gameplay::CharacterInjuryState::default(),
+    );
     if let Some(motion) =
         world.get_mut::<newengine_engine_runtime::gameplay::CharacterMotionTuning>(player)
     {
@@ -545,6 +579,66 @@ pub(crate) fn bootstrap_game_ready_world_scene_impl(
             return None;
         }
     };
+    // Mission character assignments are authored during mission spawn, after the playable avatar
+    // has already passed its bootstrap bind. Admit those NPC character models immediately so the
+    // public launch gate can never expose the diagnostic capsule for a character-backed target.
+    let mission_character_assignments = world
+        .query::<newengine_engine_runtime::gameplay::PlayerModelAssignment>()
+        .filter_map(|(entity, assignment)| {
+            (world.get::<FpsDemoTarget>(entity).is_some()
+                && assignment.enabled
+                && !assignment.source.trim().is_empty())
+            .then_some((entity, assignment.clone()))
+        })
+        .collect::<Vec<_>>();
+    if !mission_character_assignments.is_empty() {
+        player_model::tick_player_model_assignments(world, prims, mats);
+
+        let mut failed = Vec::new();
+        for (entity, assignment) in mission_character_assignments {
+            let bound = world
+                .get::<newengine_engine_runtime::gameplay::PlayerModelBinding>(entity)
+                .filter(|binding| {
+                    binding.assignment_revision == assignment.revision
+                        && binding.source == assignment.source
+                        && binding.visual_root.is_some_and(|root| world.exists(root))
+                });
+            if let Some(binding) = bound {
+                let bound_source = binding.source.clone();
+                let bound_revision = binding.assignment_revision;
+                let bound_visual_root = binding.visual_root;
+                // The capsule remains authoritative for physics only. Once the authored character
+                // visual is live, remove its diagnostic render primitive so two bodies cannot overlap.
+                let _ = world.remove::<Primitive>(entity);
+                newengine_ulog_api::ulog::info!(
+                    "game-ready mission character model bound entity={} source='{}' revision={} visual_root={:?} policy='bootstrap-bound before launch; capsule physics retained; capsule render removed'",
+                    entity.stable_u64(),
+                    bound_source,
+                    bound_revision,
+                    bound_visual_root,
+                );
+            } else {
+                failed.push(format!(
+                    "entity={} source='{}' revision={}",
+                    entity.stable_u64(),
+                    assignment.source,
+                    assignment.revision
+                ));
+            }
+        }
+        if !failed.is_empty() {
+            let detail = failed.join(", ");
+            newengine_ulog_api::ulog::error!(
+                "game-ready mission character bootstrap binding failed targets=[{}] policy='authored character targets must bind before public Play'",
+                detail
+            );
+            newengine_core::crash::record_breadcrumb(format!(
+                "game-ready mission character bootstrap binding failed: {detail}"
+            ));
+            return None;
+        }
+    }
+
     world.insert_resource(FpsDemoState::from_rules_with_targets(
         mission.pickups,
         mission.targets,

@@ -7,7 +7,8 @@ use newengine_scene::components::Name;
 use newengine_sim::{AngularVelocity, Velocity};
 use newengine_transform::{set_parent, Transform};
 
-use super::combat::{Health, HitscanWeaponTuning, Interactable, PlayerWeaponState};
+use super::combat::{HitscanWeaponTuning, Interactable, PlayerWeaponState};
+use super::Health;
 use super::{
     attach_scene_object_core, CollisionShapeDesc, DisplayMode, DisplayVisibility, GameplayActor,
     PhysicsBodyDesc, PhysicsSurface,
@@ -31,20 +32,22 @@ pub use definitions::{
     WeaponComponentInstance, WeaponComponentModifiers, WeaponComponentPointDefinition,
     WeaponFireMode, WeaponHandlingProfile, WeaponItemDefinition, WeaponPresentationDefinition,
     WeaponRecoilProfile, WeaponRecoilStateProfile, WeaponReloadTimelineProfile,
-    WeaponRuntimeProfiles, WeaponSpreadDistribution, WeaponSpreadProfile, WeaponSpreadStateProfile,
-    WeaponStatId, WeaponStatModifier, WeaponStatModifierOp, WeaponStatModifierStack,
-    WeaponSwayProfile, WeaponType, WeaponVfxDefinition, WorldItemDefinition, WorldItemPresentation,
-    WorldItemRuntime, WorldItemVisualPart, SHARED_UNARMED_WEAPON_ITEM_NAME,
+    WeaponReloadTopology, WeaponRuntimeProfiles, WeaponSpreadDistribution, WeaponSpreadProfile,
+    WeaponSpreadStateProfile, WeaponStatId, WeaponStatModifier, WeaponStatModifierOp,
+    WeaponStatModifierStack, WeaponSwayProfile, WeaponType, WeaponVfxDefinition,
+    WorldItemDefinition, WorldItemPresentation, WorldItemRuntime, WorldItemVisualPart,
+    SHARED_UNARMED_WEAPON_ITEM_NAME,
 };
 pub use loadouts::{InventoryLoadout, InventoryLoadoutCatalog, InventoryLoadoutEntry};
 pub use operations::{
     apply_loadout, drain_inventory_events, ensure_inventory_runtime, ensure_player_inventory,
-    give_item, inventory_quantity, remove_item,
+    give_item, inventory_capacity_state, inventory_quantity, merge_inventory_stacks, remove_item,
+    reorder_inventory_instance, split_inventory_stack,
 };
 pub use storage::{
-    EquippedWeaponBinding, EquippedWeaponEntity, EquippedWeaponMuzzle, InventoryEntry,
-    InventoryEvent, InventoryEventBus, InventoryEventKind, InventoryMutation, ItemPickup,
-    PlayerInventory, WeaponEntityRuntime, WeaponEntitySockets, WeaponSocketPose,
+    EquippedWeaponBinding, EquippedWeaponEntity, EquippedWeaponMuzzle, InventoryCapacityState,
+    InventoryEntry, InventoryEvent, InventoryEventBus, InventoryEventKind, InventoryMutation,
+    ItemPickup, PlayerInventory, WeaponEntityRuntime, WeaponEntitySockets, WeaponSocketPose,
 };
 
 pub use inventory_equipment::{
@@ -56,11 +59,12 @@ pub use inventory_equipment::{
     install_weapon_component, persist_equipped_weapon_state, play_equipped_weapon_audio,
     play_weapon_item_audio, preload_weapon_audio_definition, remove_weapon_component,
     select_equipment_slot, select_highest_ranked_equipped_weapon, sync_equipped_weapon_runtime,
-    unequip_slot, use_item,
+    unequip_slot, use_item, use_item_instance,
 };
 pub use inventory_world::try_collect_item_pickup;
 pub use inventory_world::{
-    drop_item, spawn_item_pickup, spawn_persistent_item_pickup, step_world_items,
+    drop_item, drop_item_instance, spawn_item_pickup, spawn_persistent_item_pickup,
+    step_world_items,
 };
 
 fn normalize_item_name(raw: &str) -> Option<String> {

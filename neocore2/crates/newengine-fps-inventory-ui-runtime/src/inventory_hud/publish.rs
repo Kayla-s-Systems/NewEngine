@@ -25,6 +25,7 @@ pub(super) fn publish_inventory_hud_state(
         let mission = world.resource::<FpsDemoState>();
         let weapon_state = world.get::<PlayerWeaponState>(player).copied();
         let binding = world.get::<EquippedWeaponBinding>(player).copied();
+        let vitals = character_vitals_hud_model(world, player);
 
         let empty_inventory = PlayerInventory::default();
         let empty_catalog = ItemCatalog::default();
@@ -38,6 +39,7 @@ pub(super) fn publish_inventory_hud_state(
             inventory,
             mission,
             weapon_state,
+            vitals,
             total_weight,
             catalog,
         );
@@ -314,12 +316,20 @@ fn base_patch(
     inventory: &PlayerInventory,
     mission: Option<&FpsDemoState>,
     weapon_state: Option<PlayerWeaponState>,
+    vitals: Option<CharacterVitalsHudModel>,
     total_weight: f32,
     catalog: &ItemCatalog,
 ) -> UiStatePatch {
-    let selected_definition = state.selected_instance.and_then(|instance| {
-        let entry = inventory.entry(instance)?;
-        catalog.get(entry.item)
+    let selected_entry = state
+        .selected_instance
+        .and_then(|instance| inventory.entry(instance));
+    let selected_definition = selected_entry.and_then(|entry| catalog.get(entry.item));
+    let capacity = inventory.capacity_state(catalog);
+    let selected_equipped_slot = selected_entry.and_then(|entry| {
+        inventory
+            .equipped
+            .iter()
+            .find_map(|(slot, instance)| (*instance == entry.instance_id).then_some(*slot))
     });
     UiStatePatch::new(frame_index, INVENTORY_HUD_SURFACE_ID)
         .with_change("hud", "visible", serde_json::json!(state.visible))
@@ -337,9 +347,28 @@ fn base_patch(
             "slots_label",
             serde_json::json!(format!(
                 "{} / {} slots",
-                inventory.used_slots(),
-                inventory.slot_capacity
+                capacity.used_slots, capacity.slot_capacity
             )),
+        )
+        .with_change(
+            "inventory",
+            "slots_normalized",
+            serde_json::json!(capacity.slot_fill()),
+        )
+        .with_change(
+            "inventory",
+            "weight_normalized",
+            serde_json::json!(capacity.weight_fill()),
+        )
+        .with_change(
+            "inventory",
+            "free_slots",
+            serde_json::json!(capacity.free_slots()),
+        )
+        .with_change(
+            "inventory",
+            "free_weight",
+            serde_json::json!(capacity.free_weight()),
         )
         .with_change(
             "inventory",
@@ -384,12 +413,118 @@ fn base_patch(
                 .unwrap_or("")),
         )
         .with_change(
+            "inventory",
+            "selected_quantity",
+            serde_json::json!(selected_entry.map_or(0, |entry| entry.quantity)),
+        )
+        .with_change(
+            "inventory",
+            "selected_condition",
+            serde_json::json!(selected_entry.map_or(0.0, |entry| entry.condition)),
+        )
+        .with_change(
+            "inventory",
+            "selected_kind",
+            serde_json::json!(selected_definition
+                .map(|definition| item_kind_name(definition.kind))
+                .unwrap_or("")),
+        )
+        .with_change(
+            "inventory",
+            "selected_unit_weight",
+            serde_json::json!(selected_definition.map_or(0.0, |definition| definition.unit_weight)),
+        )
+        .with_change(
+            "inventory",
+            "selected_stack_weight",
+            serde_json::json!(selected_entry
+                .zip(selected_definition)
+                .map_or(0.0, |(entry, definition)| definition.unit_weight
+                    * entry.quantity as f32)),
+        )
+        .with_change(
+            "inventory",
+            "selected_equipped",
+            serde_json::json!(selected_equipped_slot.is_some()),
+        )
+        .with_change(
+            "inventory",
+            "selected_equipment_slot",
+            serde_json::json!(selected_equipped_slot
+                .map(equipment_slot_name)
+                .unwrap_or("")),
+        )
+        .with_change(
             "player",
             "ammo_label",
             serde_json::json!(weapon_state.map_or_else(
                 || "-- / --".to_owned(),
                 |weapon| format!("{} / {}", weapon.ammo_in_magazine, weapon.reserve_ammo)
             )),
+        )
+        .with_change(
+            "player",
+            "health_normalized",
+            serde_json::json!(vitals.map_or(0.0, |vitals| vitals.health_normalized)),
+        )
+        .with_change(
+            "player",
+            "health_label",
+            serde_json::json!(vitals.map_or_else(
+                || "-- / --".to_owned(),
+                |vitals| format!(
+                    "{:.0} / {:.0}",
+                    vitals.health_current, vitals.health_maximum
+                )
+            )),
+        )
+        .with_change(
+            "player",
+            "stamina_visible",
+            serde_json::json!(vitals.is_some_and(|vitals| vitals.stamina_available)),
+        )
+        .with_change(
+            "player",
+            "stamina_normalized",
+            serde_json::json!(vitals.map_or(0.0, |vitals| vitals.stamina_normalized)),
+        )
+        .with_change(
+            "player",
+            "stamina_label",
+            serde_json::json!(vitals.map_or_else(
+                || "-- / --".to_owned(),
+                |vitals| format!(
+                    "{:.0} / {:.0}",
+                    vitals.stamina_current, vitals.stamina_maximum
+                )
+            )),
+        )
+        .with_change(
+            "player",
+            "stamina_exhausted",
+            serde_json::json!(vitals.is_some_and(|vitals| vitals.stamina_exhausted)),
+        )
+        .with_change(
+            "player",
+            "injured",
+            serde_json::json!(vitals.is_some_and(|vitals| vitals.injured)),
+        )
+        .with_change(
+            "player",
+            "damage_flash",
+            serde_json::json!(vitals.is_some_and(|vitals| vitals.damage_flash)),
+        )
+        .with_change(
+            "player",
+            "dead",
+            serde_json::json!(vitals.is_some_and(|vitals| !vitals.alive)),
+        )
+        .with_change(
+            "player",
+            "hit_reaction",
+            serde_json::json!(vitals
+                .map(|vitals| vitals.hit_reaction.as_str())
+                .unwrap_or("none")),
         )
 }
 
@@ -696,6 +831,28 @@ pub(super) fn inventory_hud_fingerprint(world: &World, player: EntityId) -> u64 
                 }
             }
         }
+    }
+    if let Some(vitals) = character_vitals_hud_model(world, player) {
+        push(vitals.entity);
+        push(vitals.alive as u64);
+        push(vitals.control_enabled as u64);
+        push(u64::from(vitals.health_current.to_bits()));
+        push(u64::from(vitals.health_maximum.to_bits()));
+        push(u64::from(vitals.stamina_current.to_bits()));
+        push(u64::from(vitals.stamina_maximum.to_bits()));
+        push(vitals.stamina_exhausted as u64);
+        push(vitals.injured as u64);
+        push(match vitals.hit_reaction {
+            newengine_engine_runtime::gameplay::CharacterHitReactionKind::None => 0,
+            newengine_engine_runtime::gameplay::CharacterHitReactionKind::Flinch => 1,
+            newengine_engine_runtime::gameplay::CharacterHitReactionKind::Stagger => 2,
+        });
+        push(vitals.damage_flash as u64);
+        push(match vitals.death_phase {
+            None => 0,
+            Some(newengine_engine_runtime::gameplay::CharacterDeathPhase::TransitionRequested) => 1,
+            Some(newengine_engine_runtime::gameplay::CharacterDeathPhase::Corpse) => 2,
+        });
     }
     if let Some(weapon) = world.get::<PlayerWeaponState>(player) {
         push(u64::from(weapon.ammo_in_magazine));
