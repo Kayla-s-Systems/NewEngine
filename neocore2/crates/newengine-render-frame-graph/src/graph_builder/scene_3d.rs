@@ -97,14 +97,29 @@ impl FrameGraphBuilder {
         self
     }
 
-
     #[inline]
     pub fn particle_gbuffer(mut self) -> Self {
         for (id, label, semantic) in [
-            (RG_PARTICLE_ACCUM, "particle_accum", RenderGraphResourceSemantic::ParticleAccum),
-            (RG_PARTICLE_NORMAL, "particle_normal", RenderGraphResourceSemantic::ParticleNormal),
-            (RG_PARTICLE_MATERIAL, "particle_material", RenderGraphResourceSemantic::ParticleMaterial),
-            (RG_PARTICLE_DEPTH, "particle_depth", RenderGraphResourceSemantic::ParticleDepth),
+            (
+                RG_PARTICLE_ACCUM,
+                "particle_accum",
+                RenderGraphResourceSemantic::ParticleAccum,
+            ),
+            (
+                RG_PARTICLE_NORMAL,
+                "particle_normal",
+                RenderGraphResourceSemantic::ParticleNormal,
+            ),
+            (
+                RG_PARTICLE_MATERIAL,
+                "particle_material",
+                RenderGraphResourceSemantic::ParticleMaterial,
+            ),
+            (
+                RG_PARTICLE_DEPTH,
+                "particle_depth",
+                RenderGraphResourceSemantic::ParticleDepth,
+            ),
         ] {
             if !self.has_resource(id) {
                 self.graph.resources.push(
@@ -123,14 +138,26 @@ impl FrameGraphBuilder {
         self.add_phase_pass(StandardRenderPhase::ParticleGBuffer, |pass| {
             let pass = pass
                 .with_domain(RenderGraphPassDomain::Render3d)
-                .reads(RG_VFX_PARTICLE_STATE, RenderGraphResourceUsage::StorageBuffer)
+                .reads(
+                    RG_VFX_PARTICLE_STATE,
+                    RenderGraphResourceUsage::StorageBuffer,
+                )
                 .writes(RG_PARTICLE_ACCUM, RenderGraphResourceUsage::ColorAttachment)
-                .writes(RG_PARTICLE_NORMAL, RenderGraphResourceUsage::ColorAttachment)
-                .writes(RG_PARTICLE_MATERIAL, RenderGraphResourceUsage::ColorAttachment)
+                .writes(
+                    RG_PARTICLE_NORMAL,
+                    RenderGraphResourceUsage::ColorAttachment,
+                )
+                .writes(
+                    RG_PARTICLE_MATERIAL,
+                    RenderGraphResourceUsage::ColorAttachment,
+                )
                 .writes(RG_PARTICLE_DEPTH, RenderGraphResourceUsage::ColorAttachment)
                 .draw_list(DrawListKind::ParticleGBuffer);
             if let Some(scene_depth) = scene_depth {
-                pass.reads(scene_depth, RenderGraphResourceUsage::DepthAttachmentSampled)
+                pass.reads(
+                    scene_depth,
+                    RenderGraphResourceUsage::DepthAttachmentSampled,
+                )
             } else {
                 pass
             }
@@ -145,7 +172,10 @@ impl FrameGraphBuilder {
             pass.with_domain(RenderGraphPassDomain::Render3d)
                 .reads(RG_PARTICLE_ACCUM, RenderGraphResourceUsage::SampledTexture)
                 .reads(RG_PARTICLE_NORMAL, RenderGraphResourceUsage::SampledTexture)
-                .reads(RG_PARTICLE_MATERIAL, RenderGraphResourceUsage::SampledTexture)
+                .reads(
+                    RG_PARTICLE_MATERIAL,
+                    RenderGraphResourceUsage::SampledTexture,
+                )
                 .reads(RG_PARTICLE_DEPTH, RenderGraphResourceUsage::SampledTexture)
                 .writes(viewport_color, RenderGraphResourceUsage::ColorAttachment)
         });
@@ -161,7 +191,10 @@ impl FrameGraphBuilder {
         self.add_phase_pass(StandardRenderPhase::Transparent, |pass| {
             let pass = pass.with_domain(RenderGraphPassDomain::Render3d);
             let pass = if let Some(scene_depth) = scene_depth {
-                pass.reads(scene_depth, RenderGraphResourceUsage::DepthAttachmentSampled)
+                pass.reads(
+                    scene_depth,
+                    RenderGraphResourceUsage::DepthAttachmentSampled,
+                )
             } else {
                 pass
             };

@@ -6,7 +6,10 @@ pub(crate) fn load_xmlcentral(
 ) -> Result<(String, Vec<String>, ResolvedUiRef), String> {
     let resolved = resolve_ui_ref(request)?;
     let descriptor = state.client.resolve_file_type_v1(&resolved.logical_path)?;
-    if !descriptor.semantic_gateway.eq_ignore_ascii_case("engine.assets.ui") {
+    if !descriptor
+        .semantic_gateway
+        .eq_ignore_ascii_case("engine.assets.ui")
+    {
         return Err(format!(
             "engine.assets.ui rejected format module='{}' kind='{}' gateway='{}' path='{}'",
             descriptor.module_id,

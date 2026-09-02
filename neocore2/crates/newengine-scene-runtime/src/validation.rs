@@ -15,17 +15,13 @@ pub(crate) fn normalize_scene_path(path: &str) -> String {
 }
 
 pub(crate) fn reject_ytyp_scene_path(path: &str) -> Result<(), String> {
-    let client = newengine_assets_api::AssetServiceClient::new(
-        newengine_plugin_host::default_host_api(),
-    );
+    let client =
+        newengine_assets_api::AssetServiceClient::new(newengine_plugin_host::default_host_api());
     let probe = client.file_type_probe_v1(path).map_err(|error| {
-        format!(
-            "engine.scene cannot validate asset ownership for scene path='{path}': {error}"
-        )
+        format!("engine.scene cannot validate asset ownership for scene path='{path}': {error}")
     })?;
     if probe.descriptor.as_ref().is_some_and(|descriptor| {
-        descriptor.semantic_gateway
-            == newengine_assets_api::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID
+        descriptor.semantic_gateway == newengine_assets_api::ENGINE_ASSETS_DEFINITIONS_SERVICE_ID
     }) {
         return Err(format!(
             "engine.scene load_json_v1 cannot load '{path}' as a scene path: registered definition assets are owned by engine.assets.definitions, not engine.scene"
@@ -69,9 +65,8 @@ fn call_gateway_json(
 
 pub(crate) fn validate_definition_ref_through_gateways(definition_ref: &str) -> Result<(), String> {
     let normalized = normalize_scene_path(definition_ref);
-    let client = newengine_assets_api::AssetServiceClient::new(
-        newengine_plugin_host::default_host_api(),
-    );
+    let client =
+        newengine_assets_api::AssetServiceClient::new(newengine_plugin_host::default_host_api());
     let (reference, _descriptor) = client
         .require_semantic_asset_reference_v1(
             &normalized,

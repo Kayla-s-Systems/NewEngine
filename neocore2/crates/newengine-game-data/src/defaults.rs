@@ -16,11 +16,14 @@ impl GameData {
                 self.version, GAME_DATA_VERSION
             ));
         }
-        self.audio.mix_graph.validate().map_err(|error| {
-            format!("audio.mix_graph invalid: {error}")
-        })?;
+        self.audio
+            .mix_graph
+            .validate()
+            .map_err(|error| format!("audio.mix_graph invalid: {error}"))?;
         if self.audio.mix_graph.buses.is_empty() {
-            return Err("audio.mix_graph must declare at least one project-authored route".to_owned());
+            return Err(
+                "audio.mix_graph must declare at least one project-authored route".to_owned(),
+            );
         }
         if self.runtime.fixed_dt_ms == 0 {
             return Err("runtime.fixed_dt_ms must be greater than zero".to_owned());
@@ -65,10 +68,15 @@ impl GameData {
                 || !self.world.terrain.base_height.is_finite()
                 || !self.world.terrain.height_scale.is_finite()
             {
-                return Err("enabled world.terrain requires positive cells/size and finite height values".to_owned());
+                return Err(
+                    "enabled world.terrain requires positive cells/size and finite height values"
+                        .to_owned(),
+                );
             }
             if self.world.terrain.generator.id.trim().is_empty() {
-                return Err("enabled world.terrain requires project-authored generator.id".to_owned());
+                return Err(
+                    "enabled world.terrain requires project-authored generator.id".to_owned(),
+                );
             }
         }
 
@@ -110,12 +118,21 @@ impl GameData {
             || self.gameplay.projectile.speed < 0.0
             || self.gameplay.projectile.lifetime_seconds <= 0.0
         {
-            return Err("gameplay.projectile requires radius/lifetime > 0 and speed >= 0".to_owned());
+            return Err(
+                "gameplay.projectile requires radius/lifetime > 0 and speed >= 0".to_owned(),
+            );
         }
         if !(1..=256).contains(&self.gameplay.inventory.hud_slots) {
             return Err("gameplay.inventory.hud_slots must be in [1, 256]".to_owned());
         }
-        match self.world.shadows.filter.trim().to_ascii_lowercase().as_str() {
+        match self
+            .world
+            .shadows
+            .filter
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
             "hard" | "none" | "pcf" | "pcss" => {}
             other => {
                 return Err(format!(

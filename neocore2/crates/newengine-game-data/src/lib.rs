@@ -38,11 +38,14 @@ mod tests {
         data.runtime.app_dir_name = "test-project".to_owned();
         data.runtime.window_title = "Test Project".to_owned();
         data.runtime.default_profile_asset = "maps/test.ymap".to_owned();
-        data.audio.mix_graph.buses.push(newengine_audio_api::AudioMixBusSpec {
-            id: newengine_audio_api::AudioRouteId::new("test.output"),
-            parent: None,
-            gain_db: 0.0,
-        });
+        data.audio
+            .mix_graph
+            .buses
+            .push(newengine_audio_api::AudioMixBusSpec {
+                id: newengine_audio_api::AudioRouteId::new("test.output"),
+                parent: None,
+                gain_db: 0.0,
+            });
         data.player.spawn = [0.0, 1.0, 0.0];
         data.player.yaw = 0.0;
         data.player.look_sensitivity = 0.002;

@@ -15,8 +15,8 @@ fn run() -> Result<(), String> {
         .nth(1)
         .map(PathBuf::from)
         .ok_or_else(|| "usage: inspect_ysncd_payloads <file.ysncd>".to_owned())?;
-    let bytes = fs::read(&path)
-        .map_err(|error| format!("read '{}' failed: {error}", path.display()))?;
+    let bytes =
+        fs::read(&path).map_err(|error| format!("read '{}' failed: {error}", path.display()))?;
     let dictionary = decode_ysncd_nef8(
         &bytes,
         &path.to_string_lossy(),

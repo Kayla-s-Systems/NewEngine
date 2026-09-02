@@ -2,7 +2,10 @@ use std::{env, fs, path::PathBuf};
 
 fn main() -> Result<(), String> {
     let mut args = env::args().skip(1);
-    let path = PathBuf::from(args.next().ok_or("usage: dump_ytd_rgba FILE.ytd ENTRY OUT.rgba")?);
+    let path = PathBuf::from(
+        args.next()
+            .ok_or("usage: dump_ytd_rgba FILE.ytd ENTRY OUT.rgba")?,
+    );
     let entry_name = args.next().ok_or("missing entry")?;
     let out = PathBuf::from(args.next().ok_or("missing output")?);
     let bytes = fs::read(&path).map_err(|e| e.to_string())?;
@@ -27,6 +30,14 @@ fn main() -> Result<(), String> {
         src.to_vec()
     };
     fs::write(&out, &rgba).map_err(|e| e.to_string())?;
-    println!("{} {}x{} {} bytes={} out={}", entry.meta.name, entry.meta.width, entry.meta.height, entry.meta.format, rgba.len(), out.display());
+    println!(
+        "{} {}x{} {} bytes={} out={}",
+        entry.meta.name,
+        entry.meta.width,
+        entry.meta.height,
+        entry.meta.format,
+        rgba.len(),
+        out.display()
+    );
     Ok(())
 }

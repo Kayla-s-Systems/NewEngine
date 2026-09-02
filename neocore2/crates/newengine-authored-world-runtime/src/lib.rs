@@ -53,7 +53,7 @@ pub type AuthoredDefinitionEntry = newengine_definitions_runtime::DefinitionEntr
 pub struct AuthoredGroundPlacementSurface;
 
 pub use world_runtime::{
-    install_default_authored_world_streaming_runtime_adapter,
-    install_authored_world_streaming_runtime_adapter, AuthoredWorldStreamingRuntimeAdapter,
+    install_authored_world_streaming_runtime_adapter,
+    install_default_authored_world_streaming_runtime_adapter, AuthoredWorldStreamingRuntimeAdapter,
     AuthoredWorldStreamingRuntimeBinding, AuthoredWorldStreamingWorldRuntimeProvider,
 };

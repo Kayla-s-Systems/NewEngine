@@ -161,12 +161,19 @@ impl AnimationSemanticEventV1 {
     }
 
     pub fn validate(&self) -> Result<(), String> {
-        for (label, value) in [("channel", self.channel.trim()), ("event", self.event.trim())] {
+        for (label, value) in [
+            ("channel", self.channel.trim()),
+            ("event", self.event.trim()),
+        ] {
             if value.is_empty() || value.len() > 256 {
-                return Err(format!("animation semantic {label} must contain 1..=256 bytes"));
+                return Err(format!(
+                    "animation semantic {label} must contain 1..=256 bytes"
+                ));
             }
             if value.chars().any(char::is_control) {
-                return Err(format!("animation semantic {label} contains control characters: '{value}'"));
+                return Err(format!(
+                    "animation semantic {label} contains control characters: '{value}'"
+                ));
             }
         }
         let payload_bytes = serde_json::to_vec(&self.parameters)
@@ -339,5 +346,4 @@ mod tests {
         );
         assert!(invalid.validate().is_err());
     }
-
 }

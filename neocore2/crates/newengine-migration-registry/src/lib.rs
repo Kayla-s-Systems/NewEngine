@@ -105,10 +105,7 @@ pub const MIGRATIONS: &[MigrationSpec] = &[
         migration_version: 1,
         id: "asset.ytd.schema.v2_to_v1",
         source: MigrationContractRef::major("asset.ytd.schema", 2),
-        target: MigrationContractRef::major(
-            "asset.ytd.schema",
-            1,
-        ),
+        target: MigrationContractRef::major("asset.ytd.schema", 1),
         strategy: MigrationStrategy::EnvelopeSchemaRewrite,
         tool: MIGRATION_TOOL,
         reversibility: MigrationReversibility::ExactPayloadPreserving,

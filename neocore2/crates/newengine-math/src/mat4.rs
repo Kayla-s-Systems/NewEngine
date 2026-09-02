@@ -405,7 +405,6 @@ impl Mul<Vec4> for Mat4 {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -420,7 +419,10 @@ mod tests {
             .map(|(a, b)| (a - b).abs())
             .fold(0.0_f32, f32::max);
         assert!(error <= 1.0e-6, "reflected SRT round-trip error={error}");
-        assert!(scale.z < 0.0, "reflection must remain encoded in signed scale: {scale:?}");
+        assert!(
+            scale.z < 0.0,
+            "reflection must remain encoded in signed scale: {scale:?}"
+        );
     }
 
     #[test]

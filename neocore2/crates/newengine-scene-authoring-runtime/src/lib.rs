@@ -15,9 +15,9 @@ use parking_lot::Mutex;
 
 mod xml_edit;
 
-use xml_edit::{clone_tag_by_id, patch_authored_transform, remove_tag_by_id};
 #[cfg(test)]
 use xml_edit::patch_tag_attributes_by_id;
+use xml_edit::{clone_tag_by_id, patch_authored_transform, remove_tag_by_id};
 
 #[derive(Clone, Debug)]
 struct AuthoredPlacementEdit {

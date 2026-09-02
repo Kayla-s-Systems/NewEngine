@@ -228,4 +228,3 @@ pub(super) fn finite_speed(value: f32) -> f32 {
         1.0
     }
 }
-
