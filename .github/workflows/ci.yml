@@ -33,6 +33,10 @@ jobs:
         with:
           workspaces: neocore2
 
+      - name: Cargo workspace metadata preflight
+        run: cargo metadata --format-version 1 --no-deps > /dev/null
+        shell: bash
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
@@ -91,6 +95,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: neocore2
+      - name: Cargo workspace metadata preflight
+        run: cargo metadata --format-version 1 --no-deps > /dev/null
       - run: cargo miri setup
       - run: cargo miri test --workspace --lib --no-fail-fast
 
@@ -105,8 +111,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: neocore2
+      - name: Cargo workspace metadata preflight
+        run: cargo metadata --format-version 1 --no-deps > /dev/null
       - uses: taiki-e/install-action@cargo-tarpaulin
-      - run: cargo tarpaulin --workspace --out Xml --exclude-files '*/tests/*'
+      - name: Coverage
+        run: cargo tarpaulin --workspace --out Xml --exclude-files '*/tests/*'
       - uses: codecov/codecov-action@v3
         with:
           files: neocore2/cobertura.xml
