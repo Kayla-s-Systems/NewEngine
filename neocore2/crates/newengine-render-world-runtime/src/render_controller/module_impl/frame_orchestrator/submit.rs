@@ -2,14 +2,20 @@ use super::*;
 
 #[path = "submit/finalize.rs"]
 mod finalize;
+#[path = "submit/gpu_features.rs"]
+mod gpu_features;
 #[path = "submit/shadow_debug.rs"]
 mod shadow_debug;
 #[path = "submit/shadow_setup.rs"]
 mod shadow_setup;
+#[path = "submit/submit_policy.rs"]
+mod submit_policy;
 
 use finalize::{finalize_successful_submit, SuccessfulSubmit};
+use gpu_features::record_runtime_gpu_features;
 use shadow_debug::shadow_receiver_debug_mode;
 use shadow_setup::{prepare_shadow_setup, ShadowSetup};
+use submit_policy::{submit_prepared_frame, PreparedFrameSubmit};
 
 #[inline]
 fn unexpected_zero_pass_submit(
@@ -342,104 +348,17 @@ impl RenderFrameOrchestrator {
             let mut build_ctx = DrawListBuildCtx::new(controller, r, features.draw_lists());
             features.extract_external_providers(&extraction, &frame_plan, &mut build_ctx)?;
         }
-        if hair_enabled {
-            match controller.gpu.hair.record_frame(
-                r,
-                scene.world(),
-                controller.frame.frame_index,
-                scope.dt,
-                viewproj,
-                view.view,
-                view.position_ws,
-                view.forward_ws,
-                shadow_frame,
-                shadow_plan.extent(),
-                shadows_enabled && render_shadow_map,
-                scene_color_format,
-                scope.vp_w,
-                scope.vp_h,
-                world_lights.dir_dir_intensity,
-                world_lights.dir_color,
-                world_lights.ambient,
-            ) {
-                Ok(report) => {
-                    if scope.trace_frame && report.active_instances > 0 {
-                        newengine_ulog_api::ulog::debug!(
-                            "hair gpu: instances={} guide_points={} guide_strands={} render_segments={} shadow_cascades={} shadow_segments={} topology_uploads={}",
-                            report.active_instances,
-                            report.guide_points,
-                            report.guide_strands,
-                            report.rendered_segments,
-                            report.shadow_cascades,
-                            report.shadow_segments,
-                            report.topology_uploads,
-                        );
-                    }
-                }
-                Err(error) if is_transient_shader_pipeline_error(&error) => {
-                    newengine_ulog_api::ulog::debug!(
-                        "hair gpu: shader/pipeline not ready; frame skipped without disabling scene rendering: {}",
-                        error
-                    );
-                }
-                Err(error) => {
-                    newengine_ulog_api::ulog::warn!(
-                        "hair gpu: frame realization skipped without disabling scene rendering: {}",
-                        error
-                    );
-                }
-            }
-        }
-        let vfx_texture_paths = scene
-            .world()
-            .resource::<newengine_vfx_api::VfxGpuTextureRegistry>()
-            .map(|registry| registry.slots().clone())
-            .unwrap_or_default();
-        let mut vfx_texture_slots = [None; newengine_vfx_api::VFX_GPU_TEXTURE_SLOT_CAPACITY];
-        for (index, path) in vfx_texture_paths.iter().enumerate() {
-            let Some(path) = path.as_deref() else {
-                continue;
-            };
-            vfx_texture_slots[index] =
-                controller.material_texture_if_ready(r, path, "render.vfx.project_texture");
-        }
-        match controller.gpu.vfx_particles.record_frame(
+        record_runtime_gpu_features(
+            controller,
             r,
-            scene.world(),
-            controller.frame.frame_index,
-            scope.dt,
-            viewproj,
+            scene,
+            &extraction,
             view.view,
-            view.position_ws,
             scene_color_format,
-            scope.vp_w,
-            scope.vp_h,
-            vfx_texture_slots,
-        ) {
-            Ok(report) => {
-                if scope.trace_frame && report.high_water > 0 {
-                    newengine_ulog_api::ulog::debug!(
-                        "vfx gpu particles: high_water={} uploaded={} killed={} capacity_drops={}",
-                        report.high_water,
-                        report.uploaded_spawns,
-                        report.killed_particles,
-                        report.capacity_drops,
-                    );
-                }
-            }
-            Err(error) if is_transient_shader_pipeline_error(&error) => {
-                newengine_ulog_api::ulog::debug!(
-                    "vfx gpu particles: shader/pipeline not ready; semantic GPU spawns remain queued: {}",
-                    error
-                );
-            }
-            Err(error) => {
-                newengine_ulog_api::ulog::warn!(
-                    "vfx gpu particles: frame realization skipped without disabling scene rendering: {}",
-                    error
-                );
-            }
-        }
+            scope,
+            hair_enabled,
+            shadows_enabled && render_shadow_map,
+        );
         // UI domain draw streams travel inside RenderFrameEnvelope.ui_layers.
         // No renderer state is mutated out-of-band before graph submission.
         cpu_profile.mark("frame_plan_external");
@@ -486,195 +405,25 @@ impl RenderFrameOrchestrator {
             "Render submit is consuming the prepared frame envelope. Heavy world construction must happen before this point in RenderPrep/Streaming/AssetIo jobs.",
             None,
         );
-        let submit_report = match submit_frame_envelope(r, frame_envelope, scope.trace_frame) {
-            Ok(report) => report,
-            Err(e) if is_transient_shader_pipeline_error(&e) => {
-                // Graph execution may already have recorded native Vulkan commands.
-                // Never present this partial frame: abort the opened backend frame and
-                // retry from a fresh command buffer once the async shader becomes ready.
-                Self::abort_viewport_after_transient_pipeline_wait(controller, r, scope, e)?;
+        let submit_report = match submit_prepared_frame(
+            controller,
+            r,
+            frame_envelope,
+            &frame_plan,
+            &draw_list_descs,
+            scope,
+            rt,
+            shadow_rt_for_graph,
+            local_shadow_plan.render_target(),
+        )? {
+            PreparedFrameSubmit::Submitted(report) => report,
+            PreparedFrameSubmit::EndedEarly => {
                 return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: None });
             }
-            Err(e) => {
-                let message = e.to_string();
-                controller.disable_viewport_pass("render_graph.submit_frame", &message);
-                let pass_detail = frame_plan
-                    .graph
-                    .passes
-                    .iter()
-                    .map(|pass| {
-                        format!(
-                            "id={} label='{}' kind={:?} domain={:?} queue={:?} reads={:?} writes={:?} creates={:?} draw_lists={:?}",
-                            pass.id.0,
-                            pass.label,
-                            pass.kind,
-                            pass.domain,
-                            pass.queue,
-                            pass.reads,
-                            pass.writes,
-                            pass.creates,
-                            pass.draw_lists,
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" | ");
-                let resource_detail = frame_plan
-                    .graph
-                    .resources
-                    .iter()
-                    .map(|resource| {
-                        format!(
-                            "id={} label={:?} semantic={:?} usage={:?} lifetime={:?} extent={:?} format={:?} samples={} external={:?}",
-                            resource.id.0,
-                            resource.label,
-                            resource.semantic,
-                            resource.usage,
-                            resource.lifetime,
-                            resource.extent,
-                            resource.format,
-                            resource.sample_count,
-                            resource.external,
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" | ");
-                let expected_draw_lists = draw_list_descs
-                    .iter()
-                    .map(|desc| {
-                        format!(
-                            "{}:draw={} indexed={} triangles={} instances={}",
-                            desc.kind.label(),
-                            desc.stats.draw_calls,
-                            desc.stats.indexed_draw_calls,
-                            desc.stats.triangle_count,
-                            desc.stats.instance_count,
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .join(",");
-                newengine_ulog_api::ulog::error!(
-                    "CRITICAL render regression: viewport scene pass disabled frame={} viewport={}x{} surface={}x{} direct_surface={} viewport_rt={:?} shadow_rt={:?} local_shadow_rt={:?} graph_passes={} graph_resources={} expected_draw_lists='{}' fallback='degraded-ui-safe-present' reason='{}'",
-                    controller.frame.frame_index,
-                    scope.vp_w,
-                    scope.vp_h,
-                    scope.w,
-                    scope.h,
-                    scope.direct_surface_viewport,
-                    rt,
-                    shadow_rt_for_graph,
-                    local_shadow_plan.render_target(),
-                    frame_plan.graph.passes.len(),
-                    frame_plan.graph.resources.len(),
-                    expected_draw_lists,
-                    message,
-                );
-                newengine_ulog_api::ulog::error!(
-                    "CRITICAL render regression graph passes: {}",
-                    pass_detail
-                );
-                newengine_ulog_api::ulog::error!(
-                    "CRITICAL render regression graph resources: {}",
-                    resource_detail
-                );
-                newengine_ulog_api::ulog::error!(
-                    "render controller: frame graph submit failed; viewport pass disabled and renderer continues in degraded UI/safe-present mode: {}",
-                    message
-                );
-                // Any error returned after submit_frame started consuming the graph
-                // may leave native commands in the backend command buffer. Abort rather
-                // than attempting to present a partially recorded frame.
-                let abort_result = r.abort_frame();
-                if is_backend_device_lost_error(&e) {
-                    if let Err(abort_error) = abort_result {
-                        newengine_ulog_api::ulog::warn!(
-                            "render controller: abort after device loss also failed: {}",
-                            abort_error
-                        );
-                    }
-                    controller.record_render_backend_error("render_graph.submit_frame", e)?;
-                } else {
-                    abort_result?;
-                }
-                return Ok(PlayableFrameOutcome::EndedEarly { ui_telemetry: None });
+            PreparedFrameSubmit::BackendDeferred => {
+                return Ok(PlayableFrameOutcome::BackendDeferred)
             }
         };
-
-        if submit_report.backend_deferred {
-            if scope.trace_frame
-                || controller.frame.frame_index <= 3
-                || controller.frame.frame_index.is_multiple_of(120)
-            {
-                newengine_ulog_api::ulog::debug!(
-                    "render controller: backend deferred frame={} graph_passes={} skipped_passes={} viewport={}x{} direct_surface={} policy='bounded backend/WSI back-pressure; return to host event loop and retry next redraw'",
-                    controller.frame.frame_index,
-                    frame_plan.graph.passes.len(),
-                    submit_report.skipped_passes,
-                    scope.vp_w,
-                    scope.vp_h,
-                    scope.direct_surface_viewport,
-                );
-            }
-            Self::publish_render_task_pass_event(
-                controller.frame.frame_index,
-                newengine_task_api::task_pass::RENDER_SUBMIT,
-                newengine_task_api::EngineTaskPhase::Completed,
-                "Render submit deferred by backend",
-                "Backend did not acquire/open a native frame within its bounded scheduling window; no graph failure occurred and the next host redraw will retry.",
-                None,
-            );
-            return Ok(PlayableFrameOutcome::BackendDeferred);
-        }
-
-        let expected_opaque_draws = draw_list_descs
-            .iter()
-            .find(|desc| desc.kind == newengine_core::render::RenderDrawListKind::OpaqueForward)
-            .map(|desc| {
-                desc.stats
-                    .draw_calls
-                    .saturating_add(desc.stats.indexed_draw_calls)
-            })
-            .unwrap_or(0);
-        if expected_opaque_draws > 0 {
-            let opaque_stats = submit_report.draw_list_stats.iter().find(|stats| {
-                stats.draw_list == newengine_core::render::RenderDrawListKind::OpaqueForward
-            });
-            let recorded_opaque_draws = opaque_stats
-                .map(|stats| stats.draw_calls.saturating_add(stats.indexed_draw_calls))
-                .unwrap_or(0);
-            if recorded_opaque_draws == 0 {
-                let skipped = opaque_stats
-                    .map(|stats| stats.skipped_commands)
-                    .unwrap_or(0);
-                let invalid = opaque_stats
-                    .map(|stats| stats.invalid_draw_calls)
-                    .unwrap_or(0);
-                newengine_ulog_api::ulog::error!(
-                    "CRITICAL render regression: scene-present invariant violated frame={} expected_opaque_draws={} recorded_opaque_draws=0 skipped_commands={} invalid_draw_calls={} executed_passes={} skipped_passes={} viewport={}x{} direct_surface={} viewport_rt={:?}",
-                    controller.frame.frame_index,
-                    expected_opaque_draws,
-                    skipped,
-                    invalid,
-                    submit_report.executed_passes,
-                    submit_report.skipped_passes,
-                    scope.vp_w,
-                    scope.vp_h,
-                    scope.direct_surface_viewport,
-                    rt,
-                );
-            }
-        }
-        if unexpected_zero_pass_submit(frame_plan.graph.passes.len(), &submit_report) {
-            newengine_ulog_api::ulog::error!(
-                "CRITICAL render regression: non-empty frame graph executed zero passes frame={} declared_passes={} declared_resources={} skipped_passes={} viewport={}x{} direct_surface={}",
-                controller.frame.frame_index,
-                frame_plan.graph.passes.len(),
-                frame_plan.graph.resources.len(),
-                submit_report.skipped_passes,
-                scope.vp_w,
-                scope.vp_h,
-                scope.direct_surface_viewport,
-            );
-        }
 
         cpu_profile.mark("submit");
         Self::publish_render_task_pass_event(
@@ -712,27 +461,5 @@ impl RenderFrameOrchestrator {
 
 #[cfg(test)]
 mod submit_disposition_tests {
-    use super::unexpected_zero_pass_submit;
-
-    #[test]
-    fn backend_deferred_zero_pass_is_not_a_render_regression() {
-        let report = newengine_core::render::RenderGraphSubmitReport {
-            executed_passes: 0,
-            skipped_passes: 7,
-            backend_deferred: true,
-            ..Default::default()
-        };
-        assert!(!unexpected_zero_pass_submit(7, &report));
-    }
-
-    #[test]
-    fn admitted_non_empty_graph_with_zero_passes_is_still_a_regression() {
-        let report = newengine_core::render::RenderGraphSubmitReport {
-            executed_passes: 0,
-            skipped_passes: 7,
-            backend_deferred: false,
-            ..Default::default()
-        };
-        assert!(unexpected_zero_pass_submit(7, &report));
-    }
+    include!("submit/tests.rs");
 }

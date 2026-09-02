@@ -129,7 +129,6 @@ pub(super) fn pattern_for_observation(
     }
 }
 
-
 pub(super) fn enrich_tags(
     weather: &mut WeatherStateDto,
     phase: TimeOfDayPhase,

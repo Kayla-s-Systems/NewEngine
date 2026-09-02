@@ -9,7 +9,7 @@ mod decode;
 mod encode;
 mod types;
 
-pub use decode::decode_ydd_binary_body;
+pub use decode::{decode_ydd_binary_body, decode_ydd_binary_entries, decode_ydd_binary_entry};
 pub use encode::encode_ydd_binary_body;
 pub use types::{
     YddBinaryDocument, YddBinaryEntry, YddBinaryMesh, YddBinarySkinVertex, YddBinaryVertex,

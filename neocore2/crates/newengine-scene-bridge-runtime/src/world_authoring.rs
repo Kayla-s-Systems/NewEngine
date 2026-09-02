@@ -52,6 +52,59 @@ pub fn apply_primitive_material_instance(
     crate::scene_bridge::apply_primitive_instance(world, materials, entity, base, color);
 }
 
+#[derive(Clone)]
+pub struct PrimitiveSpawnSpec<'a> {
+    pub parent: EntityId,
+    pub primitive_id: PrimitiveId,
+    pub material_id: MaterialId,
+    pub name: &'a str,
+    pub position: Vec3,
+    pub scale: Vec3,
+    pub color: [f32; 4],
+    pub render_options: newengine_model_domain_api::MeshRenderOptions,
+}
+
+/// Generic primitive scene admission used by domain runtimes. This owns only scene/material/
+/// bounds invariants; product/domain crates remain responsible for choosing identities, materials
+/// and authored placement policy.
+pub fn spawn_primitive(
+    world: &mut World,
+    primitives: &PrimitiveRegistry,
+    materials: &MaterialRegistry,
+    spec: PrimitiveSpawnSpec<'_>,
+) -> EntityId {
+    let entity = newengine_scene::spawn_named(world, spec.name);
+    let _ = newengine_transform::set_parent(world, entity, Some(spec.parent));
+    let _ = world.insert(
+        entity,
+        newengine_primitives::Primitive {
+            id: spec.primitive_id,
+            color: spec.color,
+        },
+    );
+    if let Some(bounds) = primitive_bounds(primitives, spec.primitive_id) {
+        let _ = world.insert(entity, bounds);
+    }
+    ensure_primitive_material_base(world, entity, spec.material_id);
+    apply_primitive_material_instance(world, materials, entity, spec.material_id, spec.color);
+    let _ = world.insert(entity, spec.render_options);
+    if let Some(transform) = world.get_mut_tracked::<newengine_transform::Transform>(entity) {
+        transform.position = spec.position;
+        transform.scale = spec.scale;
+    }
+    attach_scene_object(
+        world,
+        entity,
+        spec.position,
+        Vec3::new(
+            spec.scale.x.abs().max(0.25),
+            spec.scale.y.abs().max(0.25),
+            spec.scale.z.abs().max(0.25),
+        ),
+    );
+    entity
+}
+
 #[inline]
 pub fn apply_exact_material(
     world: &mut World,

@@ -39,6 +39,7 @@ pub struct EngineRuntimeSection {
     pub plugin_target: String,
     pub headless: bool,
     pub startup_window: bool,
+    pub startup_intro: Option<String>,
 }
 
 impl Default for EngineRuntimeSection {
@@ -49,6 +50,7 @@ impl Default for EngineRuntimeSection {
             plugin_target: "runtime".to_owned(),
             headless: false,
             startup_window: true,
+            startup_intro: None,
         }
     }
 }
@@ -92,6 +94,14 @@ impl EngineRuntimeConfig {
         if self.runtime.plugin_target.trim().is_empty() {
             errors.push("runtime.plugin_target must not be empty".to_owned());
         }
+        if self
+            .runtime
+            .startup_intro
+            .as_deref()
+            .is_some_and(|value| value.trim().is_empty())
+        {
+            errors.push("runtime.startup_intro must not be empty when declared".to_owned());
+        }
         if errors.is_empty() {
             Ok(())
         } else {
@@ -120,6 +130,22 @@ impl EngineRuntimeConfig {
             std::env::remove_var("NEWENGINE_STARTUP_WINDOW_SKIP");
         } else {
             std::env::set_var("NEWENGINE_STARTUP_WINDOW_DISABLED", "1");
+        }
+        if let Some(descriptor) = self
+            .runtime
+            .startup_intro
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            std::env::set_var(
+                newengine_core::startup_intro::ENGINE_STARTUP_INTRO_DESCRIPTOR_ENV,
+                descriptor,
+            );
+        } else {
+            std::env::remove_var(
+                newengine_core::startup_intro::ENGINE_STARTUP_INTRO_DESCRIPTOR_ENV,
+            );
         }
         Ok(())
     }

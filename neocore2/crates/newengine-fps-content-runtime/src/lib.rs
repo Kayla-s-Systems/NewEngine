@@ -2,7 +2,14 @@
 
 //! FPS content/policy bridge. Concrete items, loadouts, characters and mission text come from the active project policy.
 
+pub mod authored_world_profile;
+mod env_config;
+mod mission;
+mod world_runtime;
+
 mod project_vfx;
+
+pub use mission::{instantiate_authored_mission, AuthoredMissionSpawnSummary};
 
 use std::{collections::BTreeSet, sync::Arc};
 
@@ -26,7 +33,7 @@ use newengine_item_assets_runtime::{
     AuthoredItemPackage,
 };
 
-#[cfg_attr(feature = "test-support", allow(dead_code))]
+#[cfg(not(any(test, feature = "test-support")))]
 const SHARED_WEAPON_CATALOG_PATH: &str = "items/shared_weapons.neitems";
 
 #[cfg_attr(feature = "test-support", allow(dead_code))]
@@ -554,3 +561,8 @@ mod shared_weapon_catalog_tests {
         );
     }
 }
+
+pub use world_runtime::{
+    install_fps_content_world_runtime, install_fps_content_world_runtime_adapter,
+    FpsContentWorldRuntimeAdapter, FpsContentWorldRuntimeBinding, FpsContentWorldRuntimeProvider,
+};

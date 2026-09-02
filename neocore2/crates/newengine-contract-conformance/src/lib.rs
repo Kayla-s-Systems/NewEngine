@@ -395,7 +395,10 @@ mod tests {
         .expect("fixture encode")
     }
 
-    fn provider_descriptor(kind: u32, schema: u16) -> newengine_assets_api::AssetFileTypeDescriptor {
+    fn provider_descriptor(
+        kind: u32,
+        schema: u16,
+    ) -> newengine_assets_api::AssetFileTypeDescriptor {
         newengine_assets_api::AssetFileTypeDescriptor {
             module_id: "test.provider.format".to_owned(),
             extension: "provider".to_owned(),
@@ -430,7 +433,9 @@ mod tests {
         let descriptor = provider_descriptor(0xE001, 7);
         let bytes = encoded_listfile(0xE002, 7);
         let errors = validate_list_file_descriptor_contract(&bytes, &descriptor).unwrap_err();
-        assert!(errors.iter().any(|error| error.contains("content kind mismatch")));
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("content kind mismatch")));
     }
 
     #[test]
@@ -438,7 +443,8 @@ mod tests {
         let descriptor = provider_descriptor(0xE001, 7);
         let bytes = encoded_listfile(0xE001, 9);
         let errors = validate_list_file_descriptor_contract(&bytes, &descriptor).unwrap_err();
-        assert!(errors.iter().any(|error| error.contains("content schema version")));
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("content schema version")));
     }
-
 }

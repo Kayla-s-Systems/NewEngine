@@ -105,6 +105,53 @@ impl newengine_input_actions_api::InputFrameSource for PressedKeyboardKey {
     }
 }
 
+struct HeldKeyboardWithPressed {
+    held: u32,
+    pressed: u32,
+}
+
+impl newengine_input_actions_api::InputFrameSource for HeldKeyboardWithPressed {
+    fn is_key_down(&self, key: u32) -> bool {
+        key == self.held
+    }
+    fn is_key_pressed(&self, key: u32) -> bool {
+        key == self.pressed
+    }
+    fn is_key_released(&self, _key: u32) -> bool {
+        false
+    }
+    fn is_mouse_down(&self, _button: u32) -> bool {
+        false
+    }
+    fn is_mouse_pressed(&self, _button: u32) -> bool {
+        false
+    }
+    fn is_mouse_released(&self, _button: u32) -> bool {
+        false
+    }
+}
+
+#[test]
+fn game_profile_space_is_jump_only_and_preserves_held_forward() {
+    let profile = game_ready_game_input_profile();
+    let frame = profile.resolve(&HeldKeyboardWithPressed {
+        held: newengine_input_api::key_code::KEY_W,
+        pressed: newengine_input_api::key_code::SPACE,
+    });
+
+    assert!(frame.contains_action(action::PLAYER_MOVE_FORWARD));
+    assert!(frame.contains_action(action::PLAYER_JUMP));
+    assert!(!frame.contains_action(action::UI_NAVIGATION_ACCEPT));
+    assert!(!frame.ui_accept);
+    assert_ne!(
+        frame.move_mask & newengine_input_actions_api::move_mask::FORWARD,
+        0
+    );
+    let commands = frame.command_actions();
+    assert!(commands.is_held(action::PLAYER_MOVE_FORWARD));
+    assert!(commands.is_pressed(action::PLAYER_JUMP));
+}
+
 #[test]
 fn game_profile_resolves_v_to_camera_view_cycle() {
     let profile = game_ready_game_input_profile();

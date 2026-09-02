@@ -5,6 +5,7 @@
 //! Environment is world state. Render is one consumer of resolved DTO packets;
 //! providers never receive native ECS ids, renderer handles or GPU history.
 
+pub mod authored_profile;
 mod celestial;
 mod client;
 mod consumers;

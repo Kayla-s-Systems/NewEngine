@@ -2,6 +2,8 @@
 
 use std::sync::Arc;
 
+mod authored_world_assembly;
+
 use newengine_fps_content_runtime::FpsContentProvider;
 use newengine_fps_inventory_ui_runtime::{
     FpsInventoryHudProvider, ScriptFpsCharacterMenuPolicyProvider,
@@ -16,15 +18,41 @@ use newengine_game_module_fps_contract::descriptor_v2;
 pub use newengine_game_module_fps_contract::{FPS_GAME_MODULE_ID, FPS_GAME_MODULE_VERSION};
 use newengine_gameplay_fps::FpsGameplayProvider;
 use newengine_gameplay_fps_api::{FpsCharacterMenuPolicyProvider, FpsGameplayPolicyProvider};
-use newengine_gameplay_fps_lua::{
-    LuaFpsGameplayPolicyProvider, LUA_FPS_GAMEPLAY_PROVIDER_ID, SCRIPT_FPS_GAMEPLAY_PROVIDER_ID,
-};
+use newengine_gameplay_fps_lua::{LuaFpsGameplayPolicyProvider, SCRIPT_FPS_GAMEPLAY_PROVIDER_ID};
 use newengine_gameplay_script_api::ScriptedGameplayProvider;
 use newengine_project_runtime::RuntimeCompositionContext;
 
 struct FpsGameModule {
     policy: Arc<LuaFpsGameplayPolicyProvider>,
     character_menu_policy: Option<Arc<ScriptFpsCharacterMenuPolicyProvider>>,
+}
+
+/// FPS-owned authored-scene assembly contribution. Generic authored-world resolution supplies
+/// the map context; the selected game module composes FPS character, environment and objective
+/// admission without a separate product-world compatibility crate.
+struct FpsAuthoredWorldAssemblyContributor;
+
+impl newengine_authored_world_runtime::AuthoredMapSceneBootstrapContributor
+    for FpsAuthoredWorldAssemblyContributor
+{
+    fn id(&self) -> &'static str {
+        "newengine.game-module.fps.authored-world-assembly"
+    }
+
+    fn contribute(
+        &self,
+        ctx: &mut newengine_engine_runtime::SceneBootstrapContext<'_>,
+        resolved_map: &newengine_authored_world_runtime::ResolvedAuthoredMapBootstrap,
+    ) -> Result<newengine_engine_runtime::SceneBootstrapResult, String> {
+        authored_world_assembly::bootstrap_authored_fps_scene_with_resolved_map(
+            ctx.scene,
+            ctx.primitives,
+            ctx.materials,
+            resolved_map,
+        )
+        .map(|entity| newengine_engine_runtime::SceneBootstrapResult::new(Some(entity)))
+        .ok_or_else(|| "FPS authored world assembly returned no primary entity".to_owned())
+    }
 }
 
 impl GameModuleComposition for FpsGameModule {
@@ -40,6 +68,9 @@ impl GameModuleComposition for FpsGameModule {
         let scripts_for_queries: Arc<dyn ScriptedGameplayProvider> = self.policy.clone();
 
         let mut providers = GameModuleProviderSet::default();
+        providers
+            .scene_bootstrap
+            .push(Arc::new(FpsAuthoredWorldAssemblyContributor));
         providers
             .gameplay_content
             .push(FpsContentProvider::shared(policy_for_content));
@@ -82,12 +113,6 @@ fn create_fps_module(
         .scripts
         .binding(SCRIPT_FPS_GAMEPLAY_PROVIDER_ID)
         .map(|binding| (SCRIPT_FPS_GAMEPLAY_PROVIDER_ID, binding))
-        .or_else(|| {
-            runtime
-                .scripts
-                .binding(LUA_FPS_GAMEPLAY_PROVIDER_ID)
-                .map(|binding| (LUA_FPS_GAMEPLAY_PROVIDER_ID, binding))
-        })
         .ok_or_else(|| {
             format!(
                 "FPS game module requires runtime scripting binding for consumer '{}'",
@@ -238,7 +263,7 @@ runtime = "lua"
 fps_runtime = "scripts:/fps_gameplay.ysc"
 character_menu = "scripts:/character_menu.ysc"
 
-[scripting.bindings."newengine.gameplay.fps.lua-policy"]
+[scripting.bindings."newengine.gameplay.fps.script-policy"]
 module = "fps_runtime"
 operation = "gameplay_policy"
 

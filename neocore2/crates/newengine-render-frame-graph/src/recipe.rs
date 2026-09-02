@@ -250,6 +250,14 @@ mod tests {
             .iter()
             .position(|phase| *phase == StandardRenderPhase::ViewportForward)
             .expect("forward phase");
+        let particle_gbuffer = phases
+            .iter()
+            .position(|phase| *phase == StandardRenderPhase::ParticleGBuffer)
+            .expect("particle gbuffer phase");
+        let particle_composite = phases
+            .iter()
+            .position(|phase| *phase == StandardRenderPhase::ParticleComposite)
+            .expect("particle composite phase");
         let transparent = phases
             .iter()
             .position(|phase| *phase == StandardRenderPhase::Transparent)
@@ -259,14 +267,20 @@ mod tests {
             particle < forward,
             "compute must finish before surface raster begins"
         );
-        assert!(
-            forward < transparent,
-            "transparent must continue the opaque surface scope"
+        assert_eq!(
+            particle_gbuffer,
+            forward + 1,
+            "particle GBuffer is the first graphics phase after opaque"
+        );
+        assert_eq!(
+            particle_composite,
+            particle_gbuffer + 1,
+            "particle composite must immediately consume the particle GBuffer"
         );
         assert_eq!(
             transparent,
-            forward + 1,
-            "no phase may split the direct-surface raster chain"
+            particle_composite + 1,
+            "transparent continues after the LOAD-preserving particle composite"
         );
     }
 
@@ -305,6 +319,14 @@ mod tests {
             .iter()
             .position(|phase| *phase == StandardRenderPhase::ViewportForward)
             .expect("forward phase");
+        let particle_gbuffer = phases
+            .iter()
+            .position(|phase| *phase == StandardRenderPhase::ParticleGBuffer)
+            .expect("particle gbuffer phase");
+        let particle_composite = phases
+            .iter()
+            .position(|phase| *phase == StandardRenderPhase::ParticleComposite)
+            .expect("particle composite phase");
         let transparent = phases
             .iter()
             .position(|phase| *phase == StandardRenderPhase::Transparent)
@@ -314,10 +336,8 @@ mod tests {
             hair < forward,
             "hair compute must finish before surface raster begins"
         );
-        assert_eq!(
-            transparent,
-            forward + 1,
-            "hair compute must not split the direct-surface raster chain"
-        );
+        assert_eq!(particle_gbuffer, forward + 1);
+        assert_eq!(particle_composite, particle_gbuffer + 1);
+        assert_eq!(transparent, particle_composite + 1);
     }
 }

@@ -110,17 +110,13 @@ impl GameReadyFpsApp {
     #[inline]
     pub fn new() -> Self {
         Self {
-            profile: GameReadyRuntimeProfile::standalone_game()
-                .with_game_module_factory(newengine_game_module_fps::factory_registration()),
+            profile: GameReadyRuntimeProfile::standalone_game(),
         }
     }
 
     #[inline]
     pub fn with_profile(profile: GameReadyRuntimeProfile) -> Self {
-        Self {
-            profile: profile
-                .with_game_module_factory(newengine_game_module_fps::factory_registration()),
-        }
+        Self { profile }
     }
 
     #[inline]
@@ -221,67 +217,15 @@ impl WindowedRuntimeHostProfile for GameReadyFpsApp {
     }
 }
 
-#[inline]
-pub fn run_game_ready_fps_process() -> ! {
-    GameReadyFpsApp::default().run_process()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::collections::HashSet;
 
     #[test]
-    fn canonical_fps_game_module_requirements_are_satisfied_by_game_ready_inventory() {
+    fn generic_game_ready_app_does_not_preinstall_a_concrete_game_module() {
         let app = GameReadyFpsApp::new();
-        assert_eq!(app.profile.game_module_factory_count(), 1);
-
-        let runtime = newengine_project_runtime::RuntimeCompositionContext {
-            manifest_path: std::path::PathBuf::from("game.toml"),
-            runtime_root: std::path::PathBuf::from("."),
-            runtime_profile: crate::GAME_READY_RUNTIME_PROFILE_ID.to_owned(),
-            game_module: Some(newengine_game_module_fps::FPS_GAME_MODULE_ID.to_owned()),
-            launch_profile: newengine_project_api::RuntimeLaunchProfile::Game,
-            startup_scene: Some("game:/maps/test.ymap".to_owned()),
-            startup_presentation_state: None,
-            definitions: Vec::new(),
-            mounts: newengine_project_api::ContentMountRegistry::default(),
-            scripts: newengine_project_api::ProjectScriptRegistry::default(),
-        };
-        let requirements = app
-            .runtime_unit_requirements_for_runtime(Some(&runtime))
-            .expect("construction-free FPS descriptor requirements");
-        let provided = app
-            .runtime_unit_registrations()
-            .iter()
-            .flat_map(|registration| registration.spec.provides.iter().copied())
-            .collect::<std::collections::BTreeSet<_>>();
-
-        for capability in [
-            newengine_service_api::runtime_unit_capability::GAME_SCENE_BOOTSTRAP,
-            newengine_service_api::runtime_unit_capability::GAME_WORLD_RUNTIME,
-            newengine_service_api::runtime_unit_capability::GAME_INPUT_PROFILE,
-            newengine_service_api::runtime_unit_capability::RENDER_FEATURE,
-        ] {
-            assert!(
-                requirements
-                    .iter()
-                    .any(|requirement| requirement.capability == capability),
-                "FPS descriptor missing requirement {capability}"
-            );
-            assert!(
-                provided.contains(capability),
-                "GameReady inventory missing producer for {capability}"
-            );
-        }
-        let render = requirements
-            .iter()
-            .find(|requirement| {
-                requirement.capability
-                    == newengine_service_api::runtime_unit_capability::RENDER_FEATURE
-            })
-            .expect("render feature requirement");
-        assert_eq!(render.cardinality, newengine_service_api::Cardinality::Many);
+        assert_eq!(app.profile.game_module_factory_count(), 0);
     }
 
     #[test]

@@ -6,7 +6,7 @@ use newengine_core::host_events::{
 };
 use newengine_core::{Engine, EngineError, EngineResult};
 use newengine_platform_api::{
-    PlatformDisplayConfigV1, PlatformHostApiV1, PlatformHostJobCallbackV1,
+    NativeWindowBackendV1, PlatformDisplayConfigV1, PlatformHostApiV1, PlatformHostJobCallbackV1,
     PlatformHostTaskRequestV1, PlatformHostTaskTicketV1, PlatformRuntimeDescriptorV1Fn,
     PlatformRuntimeRunFnV1, PlatformStepResultV1, PlatformSurfaceMetricsV1, PlatformWindowReadyV1,
     PLATFORM_RUNTIME_DESCRIPTOR_V1_SYMBOL_BYTES_NUL,
@@ -14,7 +14,10 @@ use newengine_platform_api::{
 use newengine_plugin_api::PluginInfo;
 use newengine_ui::{create_provider, UiBuildFn, UiProvider, UiProviderKind, UiProviderOptions};
 use newengine_ui_api::UiLayerDomain;
-use std::path::Path;
+use std::{
+    path::Path,
+    sync::mpsc::{self, Receiver},
+};
 
 use crate::platform_runtime::bootstrap_overlay::{
     RuntimeBootstrapOverlayState, RuntimeBootstrapStage,
@@ -75,6 +78,8 @@ pub struct HostPlatformRuntime {
     debug_ui_cache: RetainedUiLayerCache,
     ui_frame_policy: UiGatewayFramePolicy,
     runtime_bootstrap_overlay_enabled: bool,
+    startup_intro_result_rx:
+        Option<Receiver<Option<newengine_core::startup_intro::StartupIntroReport>>>,
 }
 
 impl HostPlatformRuntime {
@@ -133,6 +138,7 @@ impl HostPlatformRuntime {
             ),
             runtime_bootstrap_overlay_enabled:
                 crate::platform_runtime::config::runtime_bootstrap_overlay_enabled(),
+            startup_intro_result_rx: None,
         }
     }
 
@@ -339,6 +345,9 @@ impl HostPlatformRuntime {
 
         self.surface = ready.surface;
         self.display = ready.display;
+
+        // Register only window/host prerequisites here. Engine plugin/world/scene loading
+        // remains gated behind RuntimeBootstrapStage::StartupIntro.
         newengine_time_runtime::register_time_gateway_best_effort();
         newengine_schema_runtime::register_schema_gateway_best_effort();
         register_threading_gateway_service_best_effort(
@@ -347,7 +356,6 @@ impl HostPlatformRuntime {
         );
         register_platform_window_service_best_effort(ready);
         let (display, window) = native_to_raw_handles(ready.handles)?;
-
         self.engine
             .resources_mut()
             .insert(WindowHandles { window, display });
@@ -356,19 +364,61 @@ impl HostPlatformRuntime {
             height: ready.surface.height,
         });
 
-        self.window_ready_emitted = false;
-        self.bootstrap_stage = RuntimeBootstrapStage::AnnounceLoadEnginePlugins;
-        self.set_bootstrap_overlay(
-            "Platform window ready.",
-            "Preparing staged engine bootstrap and loading screen.",
-            0.10,
-        );
-        newengine_ulog_api::ulog::info!(
-            "platform runtime bootstrap: staged startup armed size={}x{}",
-            ready.surface.width,
-            ready.surface.height
+        let intro_backend = match ready.handles.backend {
+            NativeWindowBackendV1::Win32 => {
+                newengine_core::startup_intro::StartupIntroNativeBackend::Win32
+            }
+            NativeWindowBackendV1::Wayland => {
+                newengine_core::startup_intro::StartupIntroNativeBackend::Wayland
+            }
+            NativeWindowBackendV1::Xlib => {
+                newengine_core::startup_intro::StartupIntroNativeBackend::Xlib
+            }
+            NativeWindowBackendV1::Xcb => {
+                newengine_core::startup_intro::StartupIntroNativeBackend::Xcb
+            }
+            NativeWindowBackendV1::Unknown => {
+                newengine_core::startup_intro::StartupIntroNativeBackend::Unknown
+            }
+        };
+        let intro_target = newengine_core::startup_intro::StartupIntroNativeWindow::new(
+            intro_backend,
+            ready.handles.window,
+            ready.handles.display,
         );
 
+        let (tx, rx) = mpsc::sync_channel(1);
+        match std::thread::Builder::new()
+            .name("northstar-core-startup-intro".to_owned())
+            .spawn(move || {
+                let result = newengine_core::startup_intro::present_in_game_window_if_configured(
+                    intro_target,
+                );
+                let _ = tx.send(result);
+            }) {
+            Ok(_) => {
+                self.startup_intro_result_rx = Some(rx);
+                self.bootstrap_stage = RuntimeBootstrapStage::StartupIntro;
+                self.set_bootstrap_overlay(
+                    "Startup intro...",
+                    "Engine loading is gated until the authored game startup intro completes.",
+                    0.10,
+                );
+                newengine_ulog_api::ulog::info!(
+                    "platform runtime bootstrap: game intro stage armed; event loop remains live and engine loading is blocked"
+                );
+            }
+            Err(error) => {
+                self.startup_intro_result_rx = None;
+                self.bootstrap_stage = RuntimeBootstrapStage::AnnounceLoadEnginePlugins;
+                newengine_ulog_api::ulog::warn!(
+                    "platform runtime bootstrap: startup intro worker unavailable error='{}'; continuing to engine loading",
+                    error
+                );
+            }
+        }
+
+        self.window_ready_emitted = false;
         Ok(())
     }
 

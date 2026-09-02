@@ -38,6 +38,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 mod adapter;
 mod asset_graph_gateway;
 mod skeleton_metadata;
+pub mod ydd_runtime;
 
 pub use adapter::ModelAssetAdapter;
 pub use asset_graph_gateway::register_asset_graph_gateway_best_effort;

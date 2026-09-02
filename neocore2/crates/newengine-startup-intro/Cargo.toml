@@ -1,0 +1,10 @@
+[package]
+name = "newengine-startup-intro"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "Data-driven startup intro sequence orchestration for North Star"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "1.1.4"

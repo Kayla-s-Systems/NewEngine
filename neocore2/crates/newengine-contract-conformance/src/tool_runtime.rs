@@ -1,6 +1,5 @@
 use std::collections::BTreeSet;
 
-
 pub const TOOL_RUNTIME_CONFORMANCE_REGISTRY_SCHEMA: &str = "northstar.tool_runtime_conformance.v1";
 pub const TOOL_RUNTIME_CONFORMANCE_REGISTRY_VERSION: u16 = 1;
 
@@ -228,43 +227,102 @@ const NEUI_COMMANDS: &[ToolRuntimeCommandSpec] = &[
 
 pub const TOOL_RUNTIME_CONFORMANCE_SPECS: &[ToolRuntimeConformanceSpec] = &[
     ToolRuntimeConformanceSpec {
-        id: "ytyp", tool_key: "ytyp",
-        fixture: ToolRuntimeFixtureSpec::file("p3_ytyp_fixture.ytyp.xml", "Source/p3_ytyp_fixture.ytyp.xml"),
-        output_relative: "Content/p3_ytyp_fixture.ytyp", commands: YTYP_COMMANDS,
-        asset_manager_decode: Some(AssetManagerDecodeSpec::new("newengine-codec-listfile", "p4_decode_assetmanager_native_dto", newengine_assets_api::ASSET_LIST_FILE_MANIFEST_OUTPUT)),
-        runtime_decode: Some(RuntimeDecodeSpec::new(ConformanceWorkspace::NeoCore, "newengine-definitions-runtime", "p4_decode_ytyp_native_dto")),
+        id: "ytyp",
+        tool_key: "ytyp",
+        fixture: ToolRuntimeFixtureSpec::file(
+            "p3_ytyp_fixture.ytyp.xml",
+            "Source/p3_ytyp_fixture.ytyp.xml",
+        ),
+        output_relative: "Content/p3_ytyp_fixture.ytyp",
+        commands: YTYP_COMMANDS,
+        asset_manager_decode: Some(AssetManagerDecodeSpec::new(
+            "newengine-codec-listfile",
+            "p4_decode_assetmanager_native_dto",
+            newengine_assets_api::ASSET_LIST_FILE_MANIFEST_OUTPUT,
+        )),
+        runtime_decode: Some(RuntimeDecodeSpec::new(
+            ConformanceWorkspace::NeoCore,
+            "newengine-definitions-runtime",
+            "p4_decode_ytyp_native_dto",
+        )),
         canonical_projection: Some(CanonicalProjection::YtypDefinitionEntriesV1),
     },
     ToolRuntimeConformanceSpec {
-        id: "ydd", tool_key: "ydd",
+        id: "ydd",
+        tool_key: "ydd",
         fixture: ToolRuntimeFixtureSpec::file("p3_ydd_fixture.obj", "Source/p3_ydd_fixture.obj"),
-        output_relative: "Content/p3_ydd_fixture.ydd", commands: YDD_COMMANDS,
-        asset_manager_decode: Some(AssetManagerDecodeSpec::new("newengine-codec-listfile", "p4_decode_assetmanager_native_dto", "asset.drawable_manifest_v1")),
-        runtime_decode: Some(RuntimeDecodeSpec::new(ConformanceWorkspace::NeoCore, "newengine-asset-format-nef8", "p4_decode_ydd_native_dto")),
+        output_relative: "Content/p3_ydd_fixture.ydd",
+        commands: YDD_COMMANDS,
+        asset_manager_decode: Some(AssetManagerDecodeSpec::new(
+            "newengine-codec-listfile",
+            "p4_decode_assetmanager_native_dto",
+            "asset.drawable_manifest_v1",
+        )),
+        runtime_decode: Some(RuntimeDecodeSpec::new(
+            ConformanceWorkspace::NeoCore,
+            "newengine-asset-format-nef8",
+            "p4_decode_ydd_native_dto",
+        )),
         canonical_projection: Some(CanonicalProjection::YddDrawableDictionaryV1),
     },
     ToolRuntimeConformanceSpec {
-        id: "ytd", tool_key: "ytd",
+        id: "ytd",
+        tool_key: "ytd",
         fixture: ToolRuntimeFixtureSpec::generated_directory("Source/textures"),
-        output_relative: "Content/p3_ytd_fixture.ytd", commands: YTD_COMMANDS,
-        asset_manager_decode: Some(AssetManagerDecodeSpec::new("newengine-codec-listfile", "p4_decode_assetmanager_native_dto", "asset.texture_dictionary_manifest_v1")),
-        runtime_decode: Some(RuntimeDecodeSpec::new(ConformanceWorkspace::NeoCore, "newengine-texture-container", "p4_decode_ytd_native_dto")),
+        output_relative: "Content/p3_ytd_fixture.ytd",
+        commands: YTD_COMMANDS,
+        asset_manager_decode: Some(AssetManagerDecodeSpec::new(
+            "newengine-codec-listfile",
+            "p4_decode_assetmanager_native_dto",
+            "asset.texture_dictionary_manifest_v1",
+        )),
+        runtime_decode: Some(RuntimeDecodeSpec::new(
+            ConformanceWorkspace::NeoCore,
+            "newengine-texture-container",
+            "p4_decode_ytd_native_dto",
+        )),
         canonical_projection: Some(CanonicalProjection::YtdTextureDictionaryV1),
     },
     ToolRuntimeConformanceSpec {
-        id: "nemat", tool_key: "nemat",
-        fixture: ToolRuntimeFixtureSpec::file("p3_nemat_fixture.nemat.xml", "Source/p3_nemat_fixture.nemat.xml"),
-        output_relative: "Content/p3_nemat_fixture.nemat", commands: NEMAT_COMMANDS,
-        asset_manager_decode: Some(AssetManagerDecodeSpec::new("newengine-codec-listfile", "p4_decode_assetmanager_native_dto", newengine_assets_api::ASSET_LIST_FILE_MANIFEST_OUTPUT)),
-        runtime_decode: Some(RuntimeDecodeSpec::new(ConformanceWorkspace::NeoCore, "newengine-material-runtime", "p4_decode_nemat_native_dto")),
+        id: "nemat",
+        tool_key: "nemat",
+        fixture: ToolRuntimeFixtureSpec::file(
+            "p3_nemat_fixture.nemat.xml",
+            "Source/p3_nemat_fixture.nemat.xml",
+        ),
+        output_relative: "Content/p3_nemat_fixture.nemat",
+        commands: NEMAT_COMMANDS,
+        asset_manager_decode: Some(AssetManagerDecodeSpec::new(
+            "newengine-codec-listfile",
+            "p4_decode_assetmanager_native_dto",
+            newengine_assets_api::ASSET_LIST_FILE_MANIFEST_OUTPUT,
+        )),
+        runtime_decode: Some(RuntimeDecodeSpec::new(
+            ConformanceWorkspace::NeoCore,
+            "newengine-material-runtime",
+            "p4_decode_nemat_native_dto",
+        )),
         canonical_projection: Some(CanonicalProjection::NematMaterialLibraryV1),
     },
     ToolRuntimeConformanceSpec {
-        id: "neui", tool_key: "neui",
-        fixture: ToolRuntimeFixtureSpec::file("p3_neui_fixture.neui.xml", "Source/p3_neui_fixture.neui.xml"),
-        output_relative: "Content/p3_neui_fixture.neui", commands: NEUI_COMMANDS,
-        asset_manager_decode: Some(AssetManagerDecodeSpec::new("newengine-codec-listfile", "p4_decode_assetmanager_native_dto", newengine_assets_api::ASSET_LIST_FILE_MANIFEST_OUTPUT)),
-        runtime_decode: Some(RuntimeDecodeSpec::new(ConformanceWorkspace::NeoCore, "newengine-assets-ui-runtime", "p4_decode_neui_native_dto")),
+        id: "neui",
+        tool_key: "neui",
+        fixture: ToolRuntimeFixtureSpec::file(
+            "p3_neui_fixture.neui.xml",
+            "Source/p3_neui_fixture.neui.xml",
+        ),
+        output_relative: "Content/p3_neui_fixture.neui",
+        commands: NEUI_COMMANDS,
+        asset_manager_decode: Some(AssetManagerDecodeSpec::new(
+            "newengine-codec-listfile",
+            "p4_decode_assetmanager_native_dto",
+            newengine_assets_api::ASSET_LIST_FILE_MANIFEST_OUTPUT,
+        )),
+        runtime_decode: Some(RuntimeDecodeSpec::new(
+            ConformanceWorkspace::NeoCore,
+            "newengine-assets-ui-runtime",
+            "p4_decode_neui_native_dto",
+        )),
         canonical_projection: Some(CanonicalProjection::NeuiSelectorSurfaceV1),
     },
 ];
@@ -444,7 +502,9 @@ mod tests {
     fn producer_specs_do_not_duplicate_asset_format_metadata() {
         for spec in TOOL_RUNTIME_CONFORMANCE_SPECS {
             assert!(!spec.output_relative.trim().is_empty());
-            assert!(std::path::Path::new(spec.output_relative).extension().is_some());
+            assert!(std::path::Path::new(spec.output_relative)
+                .extension()
+                .is_some());
         }
     }
 

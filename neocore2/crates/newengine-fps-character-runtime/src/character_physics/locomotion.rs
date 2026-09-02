@@ -450,6 +450,7 @@ fn update_player_locomotion(world: &mut World, key_to_entity: &BTreeMap<u64, Ent
             locomotion.airborne_time = 0.0;
             locomotion.max_downward_speed = 0.0;
             locomotion.jump_started = false;
+            locomotion.jump_takeoff_horizontal_velocity = newengine_math::Vec3::ZERO;
         } else {
             if locomotion.was_grounded {
                 emitted.push((PlayerEventKind::GroundStateChanged, "airborne".to_owned()));

@@ -5,6 +5,7 @@
 //! Source image names are importer inputs, never runtime texture references.
 
 mod adapter;
+pub mod authored_registration;
 mod binding;
 mod cache;
 mod nemat;
@@ -18,11 +19,13 @@ pub use service::{
     MaterialsServiceInfo,
 };
 
+#[cfg(test)]
+pub(crate) use nemat::decode_material_entry_payload;
 pub use nemat::decode_nemat_material_library_from_body;
 pub(crate) use nemat::{
-    collect_texture_refs, decode_material_entry_payload, material_cache_key,
-    material_response_from_authored, normalize_material_logical_path,
-    preview_material_name_from_body, split_nemat_selector, validate_material_body_schema,
+    collect_texture_refs, material_cache_key, material_response_from_authored,
+    normalize_material_logical_path, preview_material_name_from_body,
+    select_material_entry_from_library, split_nemat_selector, validate_material_body_schema,
 };
 
 pub const RUNTIME_UNIT_SPEC: newengine_runtime_unit_api::EngineRuntimeUnitSpec =

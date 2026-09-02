@@ -10,6 +10,23 @@ default = []
 test-support = ["newengine-item-assets-runtime/test-support"]
 
 [dependencies]
+newengine-material-domain-api = { path = "../newengine-material-domain-api" }
+serde = { version = "1", features = ["derive"] }
+newengine-authored-xml = { path = "../newengine-authored-xml" }
+newengine-assets = { path = "../newengine-assets" }
+newengine-audio-api = { path = "../newengine-audio-api" }
+newengine-authored-world-runtime = { path = "../newengine-authored-world-runtime" }
+newengine-world-environment-api = { path = "../newengine-world-environment-api" }
+newengine-lighting = { path = "../newengine-lighting" }
+newengine-math = { path = "../newengine-math" }
+newengine-model-domain-api = { path = "../newengine-model-domain-api" }
+newengine-project-api = { path = "../newengine-project-api" }
+newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-primitives = { path = "../newengine-primitives" }
+newengine-core = { path = "../newengine-core" }
+newengine-materials = { path = "../newengine-materials" }
+newengine-world-runtime-api = { path = "../newengine-world-runtime-api" }
 newengine-assets-api = { path = "../newengine-assets-api" }
 newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
 newengine-plugin-host = { path = "../newengine-plugin-host" }
@@ -25,6 +42,14 @@ newengine-gameplay-script-runtime = { path = "../newengine-gameplay-script-runti
 newengine-item-assets-runtime = { path = "../newengine-item-assets-runtime" }
 newengine-ulog-api = { path = "../newengine-ulog-api" }
 
+newengine-bounds = { path = "../newengine-bounds" }
+newengine-material-runtime = { path = "../newengine-material-runtime" }
+newengine-model-runtime = { path = "../newengine-model-runtime" }
+newengine-physics-contracts = { path = "../newengine-physics-contracts" }
+newengine-sim = { path = "../newengine-sim" }
+newengine-transform = { path = "../newengine-transform" }
+newengine-world-environment-runtime = { path = "../newengine-world-environment-runtime" }
+
 [[test]]
 name = "inventory_integration"
 path = "tests/inventory_integration.rs"
@@ -35,4 +60,3 @@ newengine-ecs = { path = "../newengine-ecs" }
 newengine-item-assets-runtime = { path = "../newengine-item-assets-runtime", features = ["test-support"] }
 newengine-math = { path = "../newengine-math" }
 newengine-primitives = { path = "../newengine-primitives" }
-newengine-sim = { path = "../newengine-sim" }

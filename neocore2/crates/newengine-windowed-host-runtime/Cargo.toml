@@ -44,11 +44,15 @@ newengine-ui-api = { path = "../newengine-ui-api" }
 newengine-ui-notify-runtime = { path = "../newengine-ui-notify-runtime" }
 newengine-world-api = { path = "../newengine-world-api" }
 newengine-startup-window-egui = { path = "../newengine-startup-window-egui", optional = true }
+newengine-startup-intro = { path = "../newengine-startup-intro" }
 abi_stable = "0.11"
 libloading = "0.9.0"
 raw-window-handle = "0.6.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+[target.'cfg(windows)'.dependencies]
+newengine-startup-intro-mf = { path = "../newengine-startup-intro-mf" }
 
 [dev-dependencies]
 newengine-contract-conformance = { path = "../newengine-contract-conformance" }

@@ -75,6 +75,11 @@ impl GameReadyRuntimeProfile {
     }
 
     #[inline]
+    pub(crate) fn game_module_factory_registry(&self) -> GameModuleFactoryRegistry {
+        self.game_module_factories.clone()
+    }
+
+    #[inline]
     pub fn game_data_provider_id(&self) -> Option<&'static str> {
         self.game_data_provider
             .as_ref()

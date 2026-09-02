@@ -215,8 +215,24 @@ impl GameplayCapabilityProvider for AudioPlayCapability {
             .get("cue")
             .and_then(serde_json::Value::as_str)
             .map(str::trim)
-            .filter(|cue| !cue.is_empty())
-            .ok_or("engine.audio.play.v1 requires non-empty payload.cue")?;
+            .filter(|cue| !cue.is_empty());
+        let clip = payload
+            .get("clip")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|clip| !clip.is_empty());
+        if cue.is_none() && clip.is_none() {
+            return Err(
+                "engine.audio.play.v1 requires non-empty payload.clip (native XVAG) or legacy payload.cue"
+                    .to_owned(),
+            );
+        }
+        if cue.is_some() && clip.is_some() {
+            return Err(
+                "engine.audio.play.v1 payload must choose exactly one of payload.clip or payload.cue"
+                    .to_owned(),
+            );
+        }
 
         let route = payload
             .get("route")
@@ -224,21 +240,75 @@ impl GameplayCapabilityProvider for AudioPlayCapability {
             .map(str::trim)
             .filter(|route| !route.is_empty())
             .ok_or("engine.audio.play.v1 requires non-empty project-authored payload.route")?;
+        let position = payload
+            .get("position")
+            .map(|position| {
+                serde_json::from_value::<[f32; 3]>(position.clone())
+                    .map_err(|error| format!("invalid audio position: {error}"))
+            })
+            .transpose()?;
+        let gain = payload
+            .get("gain")
+            .and_then(serde_json::Value::as_f64)
+            .unwrap_or(1.0) as f32;
+        let pitch = payload
+            .get("pitch")
+            .and_then(serde_json::Value::as_f64)
+            .unwrap_or(1.0) as f32;
+
+        if let Some(clip) = clip {
+            let mut play = newengine_audio_api::AudioPlayRequest::new(clip.to_owned());
+            play.route = newengine_audio_api::AudioRouteId::new(route.to_owned());
+            play.route.validate()?;
+            play.gain = gain;
+            play.speed = pitch;
+            play.looping = payload
+                .get("looping")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false);
+            play.spatial =
+                position.map(|position| newengine_audio_api::AudioSpatialParams { position });
+            if let Some(attenuation) = payload.get("attenuation") {
+                play.attenuation = Some(
+                    serde_json::from_value::<newengine_audio_api::AudioAttenuationSettings>(
+                        attenuation.clone(),
+                    )
+                    .map_err(|error| format!("invalid audio attenuation: {error}"))?
+                    .sanitized(),
+                );
+            }
+            let play = play.sanitized();
+            return match newengine_audio_client::play_audio_clip(&play).map_err(|error| {
+                format!("audio gateway failed clip='{clip}' route='{route}': {error}")
+            })? {
+                Some(ack) if ack.accepted => {
+                    newengine_ulog_api::ulog::trace!(
+                        "gameplay audio XVAG accepted clip='{}' route='{}' provider='{}' voice_id={:?} virtualized={}",
+                        clip,
+                        route,
+                        ack.provider,
+                        ack.voice_id,
+                        ack.virtualized,
+                    );
+                    Ok(())
+                }
+                Some(ack) => Err(format!(
+                    "audio play rejected clip='{clip}' route='{route}' provider='{}' message='{}'",
+                    ack.provider, ack.message
+                )),
+                None => Err(format!(
+                    "audio play capability unavailable clip='{clip}' route='{route}'"
+                )),
+            };
+        }
+
+        let cue = cue.expect("cue/clip exclusivity validated above");
         let mut play = newengine_audio_api::AudioCuePlayRequest::new(cue.to_owned());
         play.route = newengine_audio_api::AudioRouteId::new(route.to_owned());
         play.route.validate()?;
-        if let Some(position) = payload.get("position") {
-            play.position = Some(
-                serde_json::from_value::<[f32; 3]>(position.clone())
-                    .map_err(|error| format!("invalid audio position: {error}"))?,
-            );
-        }
-        if let Some(gain) = payload.get("gain").and_then(serde_json::Value::as_f64) {
-            play.gain = gain as f32;
-        }
-        if let Some(pitch) = payload.get("pitch").and_then(serde_json::Value::as_f64) {
-            play.pitch = pitch as f32;
-        }
+        play.position = position;
+        play.gain = gain;
+        play.pitch = pitch;
         play.seed = payload.get("seed").and_then(serde_json::Value::as_u64);
         if let Some(parameters) = payload.get("parameters") {
             let parameters = parameters
@@ -264,12 +334,12 @@ impl GameplayCapabilityProvider for AudioPlayCapability {
         }
         play.scope_id = request.source.filter(|source| *source != 0);
         let play = play.sanitized();
-        match newengine_audio_client::play_audio_cue(&play)
-            .map_err(|error| format!("audio gateway failed cue='{cue}' route='{route}': {error}"))?
-        {
+        match newengine_audio_client::play_audio_cue(&play).map_err(|error| {
+            format!("audio gateway failed legacy cue='{cue}' route='{route}': {error}")
+        })? {
             Some(ack) if ack.accepted => {
                 newengine_ulog_api::ulog::trace!(
-                    "gameplay audio play accepted cue='{}' route='{}' provider='{}' voice_id={:?} voice_ids={:?} virtualized={}",
+                    "gameplay audio legacy YSNCD accepted cue='{}' route='{}' provider='{}' voice_id={:?} voice_ids={:?} virtualized={}",
                     cue,
                     route,
                     ack.provider,
@@ -280,11 +350,11 @@ impl GameplayCapabilityProvider for AudioPlayCapability {
                 Ok(())
             }
             Some(ack) => Err(format!(
-                "audio play rejected cue='{cue}' route='{route}' provider='{}' message='{}'",
+                "audio play rejected legacy cue='{cue}' route='{route}' provider='{}' message='{}'",
                 ack.provider, ack.message
             )),
             None => Err(format!(
-                "audio play capability unavailable cue='{cue}' route='{route}'"
+                "audio play capability unavailable legacy cue='{cue}' route='{route}'"
             )),
         }
     }
@@ -383,6 +453,23 @@ mod tests {
             .invoke(&mut world, &request)
             .expect_err("missing project route must fail before audio gateway");
         assert!(error.contains("project-authored payload.route"));
+    }
+
+    #[test]
+    fn project_audio_capability_rejects_mixed_native_clip_and_legacy_cue() {
+        let mut world = World::new();
+        let request = GameplayCapabilityRequest::new(
+            GAMEPLAY_CAPABILITY_AUDIO_PLAY_V1,
+            serde_json::json!({
+                "clip": "audio/footsteps/stone/walk_01.xvag",
+                "cue": "shared/audio/footsteps/footsteps.ysncd@stone_walk",
+                "route": "room.world.foley"
+            }),
+        );
+        let error = AudioPlayCapability
+            .invoke(&mut world, &request)
+            .expect_err("mixed native/legacy reference must be rejected");
+        assert!(error.contains("exactly one"));
     }
 
     #[test]

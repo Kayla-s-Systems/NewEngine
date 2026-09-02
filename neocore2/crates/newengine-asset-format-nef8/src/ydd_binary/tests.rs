@@ -158,6 +158,35 @@ fn binary_ydd_decodes_strict_v2_body() {
 }
 
 #[test]
+fn binary_ydd_subset_decoder_materializes_only_requested_entries() {
+    let mut base = decode_ydd_binary_body(&test_body(YDD_BINARY_SCHEMA_VERSION_V2, false))
+        .expect("decode base entry")
+        .entries
+        .remove(0);
+    base.name = "entry_a".to_owned();
+    let mut other = base.clone();
+    other.name = "entry_b".to_owned();
+    other.source_path = "source_b.gltf".to_owned();
+    other.meshes[0].name = "mesh_b".to_owned();
+    let encoded = encode_ydd_binary_body(&YddBinaryDocument {
+        entries: vec![base, other.clone()],
+    })
+    .expect("encode two-entry dictionary");
+
+    let selected = decode_ydd_binary_entries(&encoded, &["entry_b".to_owned()])
+        .expect("decode selected entry");
+    assert_eq!(selected.entries, vec![other]);
+}
+
+#[test]
+fn binary_ydd_subset_decoder_rejects_unknown_selector() {
+    let encoded = test_body(YDD_BINARY_SCHEMA_VERSION_V2, false);
+    let error = decode_ydd_binary_entries(&encoded, &["missing".to_owned()])
+        .expect_err("missing selector must fail");
+    assert!(error.contains("selector 'missing' was not found"));
+}
+
+#[test]
 fn binary_ydd_decodes_v3_skin_stream_and_source_space_transform() {
     let document = decode_ydd_binary_body(&test_body(YDD_BINARY_SCHEMA_VERSION_V3, true))
         .expect("decode binary YDD v3");

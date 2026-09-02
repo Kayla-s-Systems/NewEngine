@@ -23,12 +23,18 @@ fn main() {
         process::exit(2);
     });
     let descriptor_bytes = fs::read(&descriptor_path).unwrap_or_else(|error| {
-        eprintln!("{}: descriptor read failed: {error}", descriptor_path.display());
+        eprintln!(
+            "{}: descriptor read failed: {error}",
+            descriptor_path.display()
+        );
         process::exit(2);
     });
     let mut descriptor: newengine_assets_api::AssetFileTypeDescriptor =
         serde_json::from_slice(&descriptor_bytes).unwrap_or_else(|error| {
-            eprintln!("{}: descriptor JSON invalid: {error}", descriptor_path.display());
+            eprintln!(
+                "{}: descriptor JSON invalid: {error}",
+                descriptor_path.display()
+            );
             process::exit(2);
         });
     descriptor.normalize_layer_contract();
@@ -36,7 +42,8 @@ fn main() {
         eprintln!("{}: descriptor invalid: {error}", descriptor_path.display());
         process::exit(2);
     }
-    match newengine_contract_conformance::validate_tool_runtime_artifact(spec, &descriptor, &bytes) {
+    match newengine_contract_conformance::validate_tool_runtime_artifact(spec, &descriptor, &bytes)
+    {
         Ok(report) => println!(
             "PASS path={} spec={} module={} wire={} content_kind={} schema={} contract={}",
             path.display(),

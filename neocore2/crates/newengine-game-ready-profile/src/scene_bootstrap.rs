@@ -5,30 +5,32 @@ use std::sync::Arc;
 use newengine_core::Resources;
 use newengine_game_data::GameDataProvider;
 
-/// Transitional assembler while authored player/sky/mission enrichment is extracted into generic
-/// runtime units. Lifecycle/readiness ownership already lives in `newengine-authored-world-runtime`.
-pub(crate) struct GameReadyWorldSceneBootstrapProvider {
+/// Profile-owned GameData acquisition stage. The generic authored-world provider already owns
+/// scene reset/foundation and map resolution; this contributor only publishes the immutable
+/// project policy snapshot consumed by later domain contributors.
+pub(crate) struct ProjectGameDataBootstrapContributor {
     game_data_provider: Arc<dyn GameDataProvider>,
 }
 
-impl GameReadyWorldSceneBootstrapProvider {
-    #[inline]
+impl ProjectGameDataBootstrapContributor {
     pub(crate) fn shared(
         game_data_provider: Arc<dyn GameDataProvider>,
-    ) -> Arc<dyn newengine_engine_runtime::SceneBootstrapProvider> {
+    ) -> Arc<dyn newengine_authored_world_runtime::AuthoredMapSceneBootstrapContributor> {
         Arc::new(Self { game_data_provider })
     }
 }
 
-impl newengine_engine_runtime::SceneBootstrapProvider for GameReadyWorldSceneBootstrapProvider {
-    #[inline]
+impl newengine_authored_world_runtime::AuthoredMapSceneBootstrapContributor
+    for ProjectGameDataBootstrapContributor
+{
     fn id(&self) -> &'static str {
-        "app.game-ready.world-bootstrap"
+        "project.game-data"
     }
 
-    fn bootstrap(
+    fn contribute(
         &self,
         ctx: &mut newengine_engine_runtime::SceneBootstrapContext<'_>,
+        _resolved_map: &newengine_authored_world_runtime::ResolvedAuthoredMapBootstrap,
     ) -> Result<newengine_engine_runtime::SceneBootstrapResult, String> {
         let provider_id = self.game_data_provider.id();
         let snapshot = self
@@ -41,15 +43,8 @@ impl newengine_engine_runtime::SceneBootstrapProvider for GameReadyWorldSceneBoo
                 provider_id
             )
         })?;
-        let primary = newengine_game_ready_world::bootstrap_world_scene_with_data(
-            ctx.scene,
-            ctx.primitives,
-            ctx.materials,
-            snapshot,
-        );
-        primary
-            .map(|entity| newengine_engine_runtime::SceneBootstrapResult::new(Some(entity)))
-            .ok_or_else(|| "authored world bootstrap returned no primary entity".to_owned())
+        ctx.scene.world_mut().insert_resource(snapshot);
+        Ok(newengine_engine_runtime::SceneBootstrapResult::new(None))
     }
 }
 

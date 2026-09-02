@@ -40,6 +40,7 @@ pub mod runtime_data;
 pub mod sched;
 pub mod services_registry;
 pub mod startup;
+pub mod startup_intro;
 pub mod startup_status;
 pub mod startup_window;
 pub mod sync;

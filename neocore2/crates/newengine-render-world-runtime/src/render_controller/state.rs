@@ -644,10 +644,6 @@ impl RenderDiagnosticsRuntimeState {
 
 pub(super) struct RenderUiSurfaceRuntimeState {
     pub(super) primary: super::module_impl::ui_node_surface::RenderUiNodeSurfaceState,
-    /// Full provider image payloads may be repeated every loading frame. Keep a
-    /// content fingerprint so only changed UI textures reach backend again.
-    pub(super) prelaunch_texture_fingerprints: FxHashMap<u32, u64>,
-    pub(super) prelaunch_patch_fingerprints: FxHashMap<(u32, u32, u32, u32, u32), u64>,
 }
 
 impl RenderUiSurfaceRuntimeState {
@@ -655,8 +651,6 @@ impl RenderUiSurfaceRuntimeState {
     pub(super) fn new() -> Self {
         Self {
             primary: super::module_impl::ui_node_surface::RenderUiNodeSurfaceState::new(),
-            prelaunch_texture_fingerprints: FxHashMap::default(),
-            prelaunch_patch_fingerprints: FxHashMap::default(),
         }
     }
 }

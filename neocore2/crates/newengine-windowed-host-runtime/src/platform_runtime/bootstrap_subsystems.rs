@@ -54,7 +54,9 @@ pub(crate) fn build_bootstrap_subsystems(
         .unwrap_or_else(|| "Engine plugin services are not loaded yet.".to_owned());
 
     match input.bootstrap_stage {
-        RuntimeBootstrapStage::AwaitingWindow => awaiting_window_subsystems(),
+        RuntimeBootstrapStage::AwaitingWindow | RuntimeBootstrapStage::StartupIntro => {
+            awaiting_window_subsystems()
+        }
         RuntimeBootstrapStage::AnnounceLoadEnginePlugins
         | RuntimeBootstrapStage::LoadEnginePlugins => {
             loading_engine_plugins_subsystems(input.bootstrap_progress)

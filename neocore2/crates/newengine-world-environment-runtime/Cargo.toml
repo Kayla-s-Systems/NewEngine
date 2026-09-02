@@ -7,6 +7,26 @@ description = "Runtime-hosted baseline providers for engine.world.environment"
 license = "Proprietary"
 
 [dependencies]
+newengine-sim = { path = "../newengine-sim" }
+newengine-task-api = { path = "../newengine-task-api" }
+newengine-runtime-env = { path = "../newengine-runtime-env" }
+newengine-procedural-noise = { path = "../newengine-procedural-noise" }
+newengine-project-api = { path = "../newengine-project-api" }
+newengine-transform = { path = "../newengine-transform", features = ["ecs"], default-features = false }
+newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
+newengine-render-api = { path = "../newengine-render-api" }
+newengine-model-domain-api = { path = "../newengine-model-domain-api" }
+newengine-math = { path = "../newengine-math" }
+newengine-lighting = { path = "../newengine-lighting" }
+newengine-game-data = { path = "../newengine-game-data" }
+newengine-engine-runtime = { path = "../newengine-engine-runtime" }
+newengine-bounds = { path = "../newengine-bounds" }
+newengine-assets = { path = "../newengine-assets" }
+newengine-core = { path = "../newengine-core" }
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-materials = { path = "../newengine-materials" }
+newengine-primitives = { path = "../newengine-primitives" }
+newengine-world-runtime-api = { path = "../newengine-world-runtime-api" }
 newengine-runtime-unit-api = { path = "../newengine-runtime-unit-api" }
 newengine-console-api = { path = "../newengine-console-api" }
 newengine-ulog-api = { path = "../newengine-ulog-api" }
@@ -22,3 +42,13 @@ newengine-service-api = { path = "../newengine-service-api" }
 newengine-service-kit = { path = "../newengine-service-kit" }
 newengine-world-environment-api = { path = "../newengine-world-environment-api" }
 newengine-world-api = { path = "../newengine-world-api" }
+
+newengine-material-domain-api = { path = "../newengine-material-domain-api" }
+
+newengine-material-runtime = { path = "../newengine-material-runtime" }
+
+newengine-authored-world-runtime = { path = "../newengine-authored-world-runtime" }
+
+newengine-model-client = { path = "../newengine-model-client" }
+
+newengine-model-runtime = { path = "../newengine-model-runtime" }

@@ -127,6 +127,16 @@ where
     P: WindowedRuntimeHostProfile,
 {
     fn prepare_startup(&self, _profile: &P, spec: &RuntimeHostLaunchSpec) -> EngineResult<()> {
+        #[cfg(windows)]
+        {
+            let first_install = newengine_startup_intro_mf::install();
+            crate::platform_early_log!(
+                "startup.intro.presenter.mf app={} registered={} first_install={}",
+                spec.app_name,
+                newengine_startup_intro::startup_intro_presenter_registered(),
+                first_install,
+            );
+        }
         #[cfg(feature = "prestart-window-egui")]
         {
             let first_install = newengine_startup_window_egui::install();

@@ -63,6 +63,19 @@ mod terrain;
 
 pub use terrain::draw_procedural_terrain_shadow;
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PrimitiveShadowPassProfile {
+    pub total_ms: f32,
+    pub skinned_ms: f32,
+    pub models_ms: f32,
+    pub static_ms: f32,
+    pub static_body_ms: f32,
+    pub static_scan_ms: f32,
+    pub static_plan_ms: f32,
+    pub static_upload_ms: f32,
+    pub static_replay_ms: f32,
+}
+
 pub fn draw_primitives_shadow(
     this: &mut RuntimeRenderController,
     r: &mut dyn newengine_core::render::RenderApi,
@@ -75,12 +88,13 @@ pub fn draw_primitives_shadow(
     cascade_index: usize,
     cascade_texel_world_size: f32,
     shadow_ubo_view: ShadowUboViewKey,
-) -> newengine_core::EngineResult<()> {
+) -> newengine_core::EngineResult<PrimitiveShadowPassProfile> {
     let stage_profile = runtime
         && (this.frame.frame_index <= 3 || this.frame.frame_index.is_multiple_of(30))
         && newengine_runtime_policy::render_runtime_policy().primitive_stage_log;
-    let total_started = stage_profile.then(std::time::Instant::now);
-    let started = stage_profile.then(std::time::Instant::now);
+    let total_started = std::time::Instant::now();
+
+    let started = std::time::Instant::now();
     skinned::draw_skinned_player_primitives_shadow(
         this,
         r,
@@ -94,10 +108,9 @@ pub fn draw_primitives_shadow(
         cascade_texel_world_size,
         shadow_ubo_view,
     )?;
-    let skinned_ms = started
-        .map(|v| v.elapsed().as_secs_f64() * 1000.0)
-        .unwrap_or(0.0);
-    let started = stage_profile.then(std::time::Instant::now);
+    let skinned_ms = started.elapsed().as_secs_f32() * 1000.0;
+
+    let started = std::time::Instant::now();
     models::draw_model_components_shadow(
         this,
         r,
@@ -111,11 +124,10 @@ pub fn draw_primitives_shadow(
         cascade_texel_world_size,
         shadow_ubo_view,
     )?;
-    let models_ms = started
-        .map(|v| v.elapsed().as_secs_f64() * 1000.0)
-        .unwrap_or(0.0);
-    let started = stage_profile.then(std::time::Instant::now);
-    let result = primitives::draw_primitives_shadow_body(
+    let models_ms = started.elapsed().as_secs_f32() * 1000.0;
+
+    let started = std::time::Instant::now();
+    let static_profile = primitives::draw_primitives_shadow_body(
         this,
         r,
         scene,
@@ -126,22 +138,33 @@ pub fn draw_primitives_shadow(
         camera_position,
         cascade_index,
         cascade_texel_world_size,
-    );
-    let static_ms = started
-        .map(|v| v.elapsed().as_secs_f64() * 1000.0)
-        .unwrap_or(0.0);
+    )?;
+    let static_ms = started.elapsed().as_secs_f32() * 1000.0;
+    let total_ms = total_started.elapsed().as_secs_f32() * 1000.0;
+
     if stage_profile {
         newengine_ulog_api::ulog::info!(
             "primitive.shadow.provider.profile: frame={} cascade={} total_ms={:.3} skinned_ms={:.3} models_ms={:.3} static_ms={:.3}",
             this.frame.frame_index,
             cascade_index,
-            total_started.map(|v| v.elapsed().as_secs_f64() * 1000.0).unwrap_or(0.0),
+            total_ms,
             skinned_ms,
             models_ms,
             static_ms,
         );
     }
-    result
+
+    Ok(PrimitiveShadowPassProfile {
+        total_ms,
+        skinned_ms,
+        models_ms,
+        static_ms,
+        static_body_ms: static_profile.total_ms,
+        static_scan_ms: static_profile.scan_ms,
+        static_plan_ms: static_profile.plan_ms,
+        static_upload_ms: static_profile.upload_ms,
+        static_replay_ms: static_profile.replay_ms,
+    })
 }
 
 #[cfg(test)]

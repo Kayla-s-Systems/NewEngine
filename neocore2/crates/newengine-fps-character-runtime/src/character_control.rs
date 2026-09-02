@@ -1,13 +1,69 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_ecs::World;
+use newengine_ecs::{EntityId, World};
 use newengine_engine_runtime::gameplay::{
-    apply_player_stance_geometry, is_player_controller_enabled, update_player_stance_camera,
-    CharacterBody, CharacterMotionTuning, PlayerCommandFrame, PlayerController, PlayerGroundState,
-    PlayerLocomotionState, PlayerStanceKind, PlayerStanceState,
+    apply_player_stance_geometry, emit_gameplay_event, is_player_controller_enabled,
+    update_player_stance_camera, CharacterBody, CharacterMotionTuning, PhysicsSurface,
+    PlayerCommandFrame, PlayerController, PlayerGroundState, PlayerLocomotionState,
+    PlayerStanceKind, PlayerStanceState,
 };
 use newengine_gameplay_fps_api::{FpsActionFrame, FpsGameplayPolicySnapshot};
 use newengine_sim::{MotorInput, Velocity};
+use newengine_transform::Transform;
+
+fn publish_jump_surface_event(
+    world: &mut World,
+    player: EntityId,
+    ground_key: Option<u64>,
+    source_frame: u64,
+    jump_speed: f32,
+) {
+    let Some(ground_key) = ground_key else {
+        return;
+    };
+    let surface = world
+        .query::<PhysicsSurface>()
+        .find(|(entity, _)| entity.stable_u64() == ground_key)
+        .map(|(entity, surface)| (entity, surface.clone()));
+    let Some((surface_entity, surface)) = surface else {
+        return;
+    };
+    let Some(event_id) = surface.event_for("jump").map(str::to_owned) else {
+        return;
+    };
+    let position = world
+        .get::<Transform>(player)
+        .map(|transform| {
+            [
+                transform.position.x,
+                transform.position.y,
+                transform.position.z,
+            ]
+        })
+        .unwrap_or([0.0; 3]);
+    if let Err(error) = emit_gameplay_event(
+        world,
+        event_id.clone(),
+        Some(player),
+        serde_json::json!({
+            "source_kind": "character_control",
+            "phase": "lift",
+            "mode": "jump",
+            "surface": surface.id,
+            "surface_entity": surface_entity.stable_u64(),
+            "position": position,
+            "sequence": source_frame,
+            "jump_speed": jump_speed,
+        }),
+    ) {
+        newengine_ulog_api::ulog::warn!(
+            "jump surface event publish rejected event='{}' player={} err='{}'",
+            event_id,
+            player.stable_u64(),
+            error,
+        );
+    }
+}
 
 /// FPS-owned interpretation of generic semantic command transport.
 /// The engine owns stance geometry/motion components; this package owns what jump/crouch mean.
@@ -86,10 +142,33 @@ pub fn apply_fps_character_commands(world: &mut World, dt: f32, fixed_tick: u64)
             }
         }
 
-        let grounded = world
+        let ground_state = world
             .get::<PlayerGroundState>(player)
-            .map(|state| state.grounded)
+            .copied()
+            .unwrap_or_default();
+        let grounded = ground_state.grounded;
+
+        // CharacterMotor is intentionally input-driven and can produce zero lateral velocity
+        // for a zero movement sample. During an explicit jump that must not erase takeoff
+        // momentum: preserve X/Z until the player supplies new horizontal air input.
+        let locomotion_state = world
+            .get::<PlayerLocomotionState>(player)
+            .copied()
+            .unwrap_or_default();
+        let air_input_active = world
+            .get::<MotorInput>(player)
+            .map(|input| {
+                let horizontal = newengine_math::Vec2::new(input.move_axis.x, input.move_axis.z);
+                horizontal.length_squared() > 1.0e-6
+            })
             .unwrap_or(false);
+        if !grounded && locomotion_state.jump_started && !air_input_active {
+            if let Some(velocity) = world.get_mut::<Velocity>(player) {
+                velocity.0.x = locomotion_state.jump_takeoff_horizontal_velocity.x;
+                velocity.0.z = locomotion_state.jump_takeoff_horizontal_velocity.z;
+            }
+        }
+
         let jump_pressed = if actions.jump_pressed {
             let already_consumed = world
                 .get::<PlayerLocomotionState>(player)
@@ -107,7 +186,15 @@ pub fn apply_fps_character_commands(world: &mut World, dt: f32, fixed_tick: u64)
             false
         };
         if player_policy.allow_jump && jump_pressed && grounded && motion.jump_speed > 0.0 {
+            publish_jump_surface_event(
+                world,
+                player,
+                ground_state.ground_entity,
+                source_frame,
+                motion.jump_speed,
+            );
             let mut velocity = world.get::<Velocity>(player).copied().unwrap_or_default();
+            let takeoff_horizontal = newengine_math::Vec3::new(velocity.0.x, 0.0, velocity.0.z);
             velocity.0.y = motion.jump_speed;
             let _ = world.insert(player, velocity);
             if let Some(state) = world.get_mut::<PlayerGroundState>(player) {
@@ -118,6 +205,7 @@ pub fn apply_fps_character_commands(world: &mut World, dt: f32, fixed_tick: u64)
             }
             if let Some(state) = world.get_mut::<PlayerLocomotionState>(player) {
                 state.jump_started = true;
+                state.jump_takeoff_horizontal_velocity = takeoff_horizontal;
                 state.airborne_time = 0.0;
                 state.max_downward_speed = 0.0;
             }
@@ -131,7 +219,8 @@ pub fn apply_fps_character_commands(world: &mut World, dt: f32, fixed_tick: u64)
 mod tests {
     use super::*;
     use newengine_engine_runtime::gameplay::{
-        spawn_default_player, CharacterBody, PlayerGroundState, PlayerStanceKind, PlayerStanceState,
+        drain_gameplay_events, spawn_default_player, CharacterBody, PhysicsSurface,
+        PlayerGroundState, PlayerStanceKind, PlayerStanceState,
     };
     use newengine_gameplay_fps_api::action;
     use newengine_input_actions_api::ActionCommandFrame;
@@ -177,6 +266,87 @@ mod tests {
                 .jump_started,
             "gameplay jump must publish explicit airborne origin for animation semantics"
         );
+    }
+
+    #[test]
+    fn explicit_jump_preserves_takeoff_momentum_across_zero_air_input_frame() {
+        let mut world = World::new();
+        let player = spawn_default_player(&mut world, None, "fps-jump-momentum", Vec3::ZERO);
+        if let Some(ground) = world.get_mut::<PlayerGroundState>(player) {
+            ground.grounded = true;
+            ground.walkable = true;
+        }
+        let _ = world.insert(player, Velocity(Vec3::new(4.0, 0.0, 1.5)));
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands.source_frame = 42;
+            commands.actions = ActionCommandFrame {
+                pressed: vec![action::PLAYER_JUMP.into()],
+                ..ActionCommandFrame::default()
+            };
+        }
+
+        apply_fps_character_commands(&mut world, 1.0 / 60.0, 7);
+        let takeoff = world
+            .get::<Velocity>(player)
+            .copied()
+            .expect("takeoff velocity")
+            .0;
+        assert!((takeoff.x - 4.0).abs() <= 1.0e-6);
+        assert!((takeoff.z - 1.5).abs() <= 1.0e-6);
+        assert!(takeoff.y > 0.0);
+
+        // Simulate one zero movement packet on the next airborne fixed tick.
+        let _ = world.insert(player, Velocity(Vec3::new(0.0, takeoff.y - 0.2, 0.0)));
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands.source_frame = 43;
+            commands.actions = ActionCommandFrame::default();
+        }
+        if let Some(input) = world.get_mut::<MotorInput>(player) {
+            input.move_axis = Vec3::ZERO;
+        }
+        apply_fps_character_commands(&mut world, 1.0 / 60.0, 8);
+        let airborne = world
+            .get::<Velocity>(player)
+            .copied()
+            .expect("airborne velocity")
+            .0;
+        assert!((airborne.x - 4.0).abs() <= 1.0e-6);
+        assert!((airborne.z - 1.5).abs() <= 1.0e-6);
+        assert!((airborne.y - (takeoff.y - 0.2)).abs() <= 1.0e-6);
+    }
+
+    #[test]
+    fn accepted_jump_publishes_authored_surface_signal_before_ground_clear() {
+        let mut world = World::new();
+        let player = spawn_default_player(&mut world, None, "fps-jump-audio", Vec3::ZERO);
+        let ground = world.spawn();
+        let _ = world.insert(
+            ground,
+            PhysicsSurface::default().with_event("jump", "room.audio.footstep.jump"),
+        );
+        if let Some(ground_state) = world.get_mut::<PlayerGroundState>(player) {
+            ground_state.grounded = true;
+            ground_state.walkable = true;
+            ground_state.ground_entity = Some(ground.stable_u64());
+        }
+        if let Some(commands) = world.get_mut::<PlayerCommandFrame>(player) {
+            commands.source_frame = 77;
+            commands.actions = ActionCommandFrame {
+                pressed: vec![action::PLAYER_JUMP.into()],
+                ..ActionCommandFrame::default()
+            };
+        }
+
+        apply_fps_character_commands(&mut world, 1.0 / 60.0, 7);
+
+        let events = drain_gameplay_events(&mut world);
+        let jump = events
+            .iter()
+            .find(|event| event.id == "room.audio.footstep.jump")
+            .expect("accepted jump must publish authored surface signal");
+        assert_eq!(jump.source, Some(player.stable_u64()));
+        assert_eq!(jump.payload["sequence"], 77);
+        assert_eq!(jump.payload["phase"], "lift");
     }
 
     #[test]

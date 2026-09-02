@@ -18,7 +18,6 @@ use newengine_gameplay_script_api::{
 use newengine_scripting_client::AssetBackedScriptClient;
 
 pub const SCRIPT_FPS_GAMEPLAY_PROVIDER_ID: &str = "newengine.gameplay.fps.script-policy";
-pub const LUA_FPS_GAMEPLAY_PROVIDER_ID: &str = "newengine.gameplay.fps.lua-policy";
 
 pub struct LuaFpsGameplayPolicyProvider {
     client: AssetBackedScriptClient,
@@ -201,7 +200,7 @@ mod tests {
             .with_policy_operation("custom_policy_export");
         assert_eq!(
             newengine_gameplay_fps_api::FpsGameplayPolicyProvider::id(&provider),
-            LUA_FPS_GAMEPLAY_PROVIDER_ID
+            SCRIPT_FPS_GAMEPLAY_PROVIDER_ID
         );
         assert_eq!(provider.script_ref(), "scripts/custom_policy.ysc");
         assert!(!provider.script_ref().contains('@'));

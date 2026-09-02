@@ -9,6 +9,22 @@
 
 use std::fmt;
 
+/// Backend-neutral authored material reference/tuning used by project parsers and runtime
+/// material admission. Asset identity remains the canonical `.nemat@entry`; inline texture fields
+/// are compatibility/diagnostic authoring data, not an alternate runtime material source.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AuthoredMaterialSpec {
+    pub asset: Option<String>,
+    pub base_color_texture: Option<String>,
+    pub normal_texture: Option<String>,
+    pub roughness_texture: Option<String>,
+    pub uv_scale: [f32; 2],
+    pub uv_offset: [f32; 2],
+    pub roughness: f32,
+    pub normal_scale: f32,
+    pub occlusion_strength: f32,
+}
+
 use newengine_render_api::{
     BindGroupLayoutDesc, BindGroupLayoutId, PipelineDesc, PipelineId, SamplerDesc, SamplerId,
     ShaderDesc, ShaderId, TextureDesc, TextureFormat, TextureId,

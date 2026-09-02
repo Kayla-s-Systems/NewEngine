@@ -5,6 +5,7 @@ edition = "2021"
 description = "In-process game-module provider composition registry for NewEngine"
 
 [dependencies]
+newengine-authored-world-runtime = { path = "../newengine-authored-world-runtime" }
 newengine-engine-runtime = { path = "../newengine-engine-runtime" }
 newengine-game-module-api = { path = "../newengine-game-module-api" }
 newengine-project-api = { path = "../newengine-project-api" }

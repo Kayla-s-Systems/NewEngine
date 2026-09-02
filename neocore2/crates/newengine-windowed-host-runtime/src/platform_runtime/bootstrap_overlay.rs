@@ -12,6 +12,7 @@ pub(crate) const OVERLAY_LOG_PROGRESS_EPSILON: f32 = 0.01;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RuntimeBootstrapStage {
     AwaitingWindow,
+    StartupIntro,
     AnnounceLoadEnginePlugins,
     LoadEnginePlugins,
     AnnounceStartEngine,

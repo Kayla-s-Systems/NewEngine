@@ -20,8 +20,8 @@ impl ModelAssetAdapter {
                 logical_path: source.to_owned(),
                 output_kind: newengine_assets_api::ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
                 selector: serde_json::Value::Null,
-                            format_descriptor: None,
-})
+                format_descriptor: None,
+            })
             .map_err(|e| {
                 format!(
                     "engine.assets decode_v1 failed path='{source}' output='{}' err='{e}'",
@@ -206,8 +206,8 @@ impl ModelAssetAdapter {
                 logical_path: path.to_owned(),
                 output_kind: newengine_assets_api::ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
                 selector: serde_json::Value::Null,
-                            format_descriptor: None,
-})
+                format_descriptor: None,
+            })
             .map_err(|e| {
                 format!(
                     "engine.assets decode_v1 failed path='{path}' output='{}' err='{e}'",

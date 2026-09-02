@@ -319,6 +319,181 @@ pub fn decode_ydd_binary_body(body: &[u8]) -> Result<YddBinaryDocument, String> 
     Ok(YddBinaryDocument { entries })
 }
 
+/// Decode only the requested entry payloads from a binary YDD body.
+///
+/// The YDD wire format already carries a fixed-size entry table and per-entry payload
+/// offsets. We preserve the strict canonical decoder by constructing a bounded subset
+/// body containing the original string table plus only the selected payload ranges,
+/// then pass that subset through `decode_ydd_binary_body`. This avoids materializing
+/// unrelated geometry while keeping one validation implementation authoritative.
+pub fn decode_ydd_binary_entries(
+    body: &[u8],
+    selectors: &[String],
+) -> Result<YddBinaryDocument, String> {
+    if selectors.is_empty() {
+        return Ok(YddBinaryDocument {
+            entries: Vec::new(),
+        });
+    }
+    if body
+        .iter()
+        .copied()
+        .find(|byte| !byte.is_ascii_whitespace())
+        == Some(b'{')
+    {
+        return Err(
+            "JSON YDD geometry is unsupported; migrate the asset to newengine.ydd.binary_mesh"
+                .to_owned(),
+        );
+    }
+    if body.len() < BODY_HEADER_LEN {
+        return Err(format!(
+            "binary YDD body too small bytes={} expected>={BODY_HEADER_LEN}",
+            body.len()
+        ));
+    }
+    let version = read_u32(body, 0)?;
+    if !matches!(
+        version,
+        YDD_BINARY_SCHEMA_VERSION_V2 | YDD_BINARY_SCHEMA_VERSION_V3 | YDD_BINARY_SCHEMA_VERSION
+    ) {
+        return Err(format!(
+            "unsupported binary YDD schema version={version} supported=[{YDD_BINARY_SCHEMA_VERSION_V2},{YDD_BINARY_SCHEMA_VERSION_V3},{YDD_BINARY_SCHEMA_VERSION}]"
+        ));
+    }
+    let entry_count = read_u32(body, 4)? as usize;
+    if entry_count == 0 {
+        return Err("binary YDD contains no entries".to_owned());
+    }
+    let table_offset = usize_from_u64(read_u64(body, 8)?, "entry table offset")?;
+    let string_offset = usize_from_u64(read_u64(body, 16)?, "string table offset")?;
+    let string_len = usize_from_u64(read_u64(body, 24)?, "string table length")?;
+    let payload_floor = usize_from_u64(read_u64(body, 32)?, "payload floor")?;
+    let table_len = entry_count
+        .checked_mul(ENTRY_RECORD_LEN)
+        .ok_or("binary YDD entry table size overflow")?;
+    checked_slice(body, table_offset, table_len, "entry table")?;
+    let strings = checked_slice(body, string_offset, string_len, "string table")?;
+    if payload_floor > body.len() {
+        return Err("binary YDD payload floor outside body".to_owned());
+    }
+
+    let mut requested = Vec::<String>::new();
+    for selector in selectors {
+        let selector = selector.trim();
+        if selector.is_empty() {
+            return Err("binary YDD subset selector is empty".to_owned());
+        }
+        if !requested
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(selector))
+        {
+            requested.push(selector.to_owned());
+        }
+    }
+
+    let mut selected = Vec::<(usize, usize, usize)>::with_capacity(requested.len());
+    for selector in &requested {
+        let mut found = None;
+        for entry_index in 0..entry_count {
+            let record = table_offset + entry_index * ENTRY_RECORD_LEN;
+            let name = read_string(strings, read_u32(body, record + 8)?)?;
+            if !name.eq_ignore_ascii_case(selector) {
+                continue;
+            }
+            let payload_offset =
+                usize_from_u64(read_u64(body, record + 64)?, "entry payload offset")?;
+            let payload_len = usize_from_u64(read_u64(body, record + 72)?, "entry payload length")?;
+            if payload_offset < payload_floor {
+                return Err(format!(
+                    "binary YDD entry payload precedes payload table entry='{name}'"
+                ));
+            }
+            let payload_end = payload_offset
+                .checked_add(payload_len)
+                .ok_or("binary YDD entry payload range overflow")?;
+            if payload_end > body.len() {
+                return Err(format!(
+                    "binary YDD entry payload outside body entry='{name}'"
+                ));
+            }
+            found = Some((record, payload_offset, payload_len));
+            break;
+        }
+        selected
+            .push(found.ok_or_else(|| format!("binary YDD selector '{selector}' was not found"))?);
+    }
+
+    let subset_table_offset = BODY_HEADER_LEN;
+    let subset_table_len = selected
+        .len()
+        .checked_mul(ENTRY_RECORD_LEN)
+        .ok_or("binary YDD subset entry table size overflow")?;
+    let subset_string_offset = subset_table_offset
+        .checked_add(subset_table_len)
+        .ok_or("binary YDD subset string table offset overflow")?;
+    let subset_payload_floor = subset_string_offset
+        .checked_add(string_len)
+        .ok_or("binary YDD subset payload floor overflow")?;
+    let subset_payload_len = selected.iter().try_fold(0usize, |total, (_, _, len)| {
+        total
+            .checked_add(*len)
+            .ok_or("binary YDD subset payload length overflow")
+    })?;
+    let subset_len = subset_payload_floor
+        .checked_add(subset_payload_len)
+        .ok_or("binary YDD subset body length overflow")?;
+
+    let mut subset = Vec::with_capacity(subset_len);
+    subset.extend_from_slice(&version.to_le_bytes());
+    subset.extend_from_slice(&(selected.len() as u32).to_le_bytes());
+    subset.extend_from_slice(&(subset_table_offset as u64).to_le_bytes());
+    subset.extend_from_slice(&(subset_string_offset as u64).to_le_bytes());
+    subset.extend_from_slice(&(string_len as u64).to_le_bytes());
+    subset.extend_from_slice(&(subset_payload_floor as u64).to_le_bytes());
+    debug_assert_eq!(subset.len(), BODY_HEADER_LEN);
+
+    for (record, _, _) in &selected {
+        subset.extend_from_slice(checked_slice(
+            body,
+            *record,
+            ENTRY_RECORD_LEN,
+            "selected entry record",
+        )?);
+    }
+    subset.extend_from_slice(strings);
+    debug_assert_eq!(subset.len(), subset_payload_floor);
+
+    let mut next_payload_offset = subset_payload_floor;
+    for (index, (_, payload_offset, payload_len)) in selected.iter().enumerate() {
+        let subset_record = subset_table_offset + index * ENTRY_RECORD_LEN;
+        let payload_offset_field = subset_record + 64;
+        subset[payload_offset_field..payload_offset_field + 8]
+            .copy_from_slice(&(next_payload_offset as u64).to_le_bytes());
+        subset.extend_from_slice(checked_slice(
+            body,
+            *payload_offset,
+            *payload_len,
+            "selected entry payload",
+        )?);
+        next_payload_offset = next_payload_offset
+            .checked_add(*payload_len)
+            .ok_or("binary YDD subset payload cursor overflow")?;
+    }
+    debug_assert_eq!(subset.len(), subset_len);
+
+    decode_ydd_binary_body(&subset)
+}
+
+pub fn decode_ydd_binary_entry(body: &[u8], selector: &str) -> Result<YddBinaryEntry, String> {
+    let selectors = [selector.to_owned()];
+    let mut document = decode_ydd_binary_entries(body, &selectors)?;
+    document
+        .entries
+        .pop()
+        .ok_or_else(|| format!("binary YDD selector '{selector}' produced no entry"))
+}
+
 #[inline]
 fn checked_slice<'a>(
     bytes: &'a [u8],

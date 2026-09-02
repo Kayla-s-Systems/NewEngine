@@ -5,6 +5,9 @@
 //! Providers expose resolved environment DTOs through the gateway registry and
 //! do not mutate ECS/world storage or inspect renderer/GPU state.
 
+pub mod authored_foliage;
+pub mod authored_materials;
+pub mod authored_sky;
 mod celestial;
 mod constants;
 mod consumer_packets;
@@ -15,7 +18,11 @@ mod profile_catalog;
 mod provider_state;
 mod registration;
 mod router;
+pub mod shadow_validation;
+pub mod terrain_heightmap;
+pub mod terrain_streaming;
 mod visual_asset_catalog;
+mod world_runtime;
 
 pub use constants::{
     WORLD_ENVIRONMENT_DEFAULT_PROVIDER_ROUTE, WORLD_ENVIRONMENT_GATEWAY_OWNER,
@@ -50,3 +57,9 @@ pub const RUNTIME_UNIT_REGISTRATION: newengine_runtime_unit_api::RuntimeUnitRegi
 
 #[cfg(test)]
 mod tests;
+
+pub use world_runtime::{
+    install_authored_environment_runtime_adapter, install_world_environment_runtime_adapter,
+    WorldEnvironmentAdmissionWorldRuntimeProvider, WorldEnvironmentRuntimeAdapter,
+    WorldEnvironmentRuntimeBinding, WorldEnvironmentSimulationWorldRuntimeProvider,
+};

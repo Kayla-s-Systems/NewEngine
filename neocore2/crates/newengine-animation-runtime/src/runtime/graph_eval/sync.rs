@@ -279,7 +279,7 @@ fn append_clip_events(
 ) -> Result<(), String> {
     event_scratch.clear();
     let clip = &emission.graph.clips[emission.clip_index].clip;
-    cursor.advance(clip, emission.playback_time_seconds, event_scratch)?;
+    cursor.advance_prevalidated(clip, emission.playback_time_seconds, event_scratch)?;
     if emission.emit {
         out.extend(
             event_scratch

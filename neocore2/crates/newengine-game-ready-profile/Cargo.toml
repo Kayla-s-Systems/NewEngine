@@ -6,6 +6,9 @@ readme = "README.md"
 description = "Game Ready FPS runtime profile composition for NewEngine"
 
 [dependencies]
+newengine-fps-character-runtime = { path = "../newengine-fps-character-runtime" }
+newengine-fps-content-runtime = { path = "../newengine-fps-content-runtime" }
+newengine-world-environment-runtime = { path = "../newengine-world-environment-runtime" }
 newengine-assets-api = { path = "../newengine-assets-api" }
 newengine-audio-api = { path = "../newengine-audio-api" }
 newengine-audio-world-runtime = { path = "../newengine-audio-world-runtime" }
@@ -55,9 +58,7 @@ newengine-math = { path = "../newengine-math" }
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-materials = { path = "../newengine-materials", features = ["serde"] }
 newengine-primitives = { path = "../newengine-primitives" }
-newengine-game-ready-world = { path = "../newengine-game-ready-world" }
 newengine-game-data = { path = "../newengine-game-data" }
 newengine-game-data-lua = { path = "../newengine-game-data-lua" }
 newengine-game-module-composition = { path = "../newengine-game-module-composition" }
-newengine-game-module-fps = { path = "../newengine-game-module-fps" }
 newengine-game-module-runtime = { path = "../newengine-game-module-runtime" }

@@ -76,6 +76,44 @@ impl FeatureExtractionFrame {
                         "primitive.directional_shadow",
                         primitive.directional_shadow_ms,
                     );
+                    profile.push_measurement(
+                        "primitive.directional_body",
+                        primitive.directional_body_ms,
+                    );
+                    profile.push_measurement(
+                        "primitive.directional_boundary",
+                        primitive.directional_boundary_ms,
+                    );
+                    for (index, elapsed_ms) in primitive.directional_cascade_ms.iter().enumerate() {
+                        profile.push_measurement(
+                            format!("primitive.directional_cascade{index}"),
+                            *elapsed_ms,
+                        );
+                    }
+                    profile
+                        .push_measurement("primitive.shadow_skinned", primitive.shadow_skinned_ms);
+                    profile.push_measurement("primitive.shadow_models", primitive.shadow_models_ms);
+                    profile.push_measurement("primitive.shadow_static", primitive.shadow_static_ms);
+                    profile.push_measurement(
+                        "primitive.shadow_static_body",
+                        primitive.shadow_static_body_ms,
+                    );
+                    profile.push_measurement(
+                        "primitive.shadow_static_scan",
+                        primitive.shadow_static_scan_ms,
+                    );
+                    profile.push_measurement(
+                        "primitive.shadow_static_plan",
+                        primitive.shadow_static_plan_ms,
+                    );
+                    profile.push_measurement(
+                        "primitive.shadow_static_upload",
+                        primitive.shadow_static_upload_ms,
+                    );
+                    profile.push_measurement(
+                        "primitive.shadow_static_replay",
+                        primitive.shadow_static_replay_ms,
+                    );
                     profile.push_measurement("primitive.local_shadow", primitive.local_shadow_ms);
                     profile.push_measurement("primitive.gbuffer", primitive.gbuffer_ms);
                     profile.push_measurement("primitive.forward", primitive.forward_ms);

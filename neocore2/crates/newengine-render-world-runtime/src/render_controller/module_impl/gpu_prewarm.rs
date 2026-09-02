@@ -2,7 +2,9 @@
 
 use newengine_core::render::{RenderApi, TextureFormat};
 use newengine_core::{EngineResult, ThreadPoolHandle};
-use newengine_gameplay_world_runtime::gameplay::{PreparedRenderMesh, PrimitiveGpuEvictionQueue};
+use newengine_gameplay_world_runtime::gameplay::{
+    PreparedRenderMesh, PrimitiveGpuEvictionQueue, WorldActivationState,
+};
 use newengine_primitives::{Primitive, PrimitiveId};
 use newengine_procedural_noise::ProceduralTerrain;
 use newengine_scene::Scene;
@@ -197,7 +199,8 @@ impl RuntimeRenderController {
             }
         }
 
-        let primitive_budget = primitive_gpu_upload_budget_per_frame();
+        let (primitive_budget, primitive_budget_ms) = primitive_gpu_upload_limits(world);
+        let primitive_upload_started = std::time::Instant::now();
         let mut primitive_uploaded = 0_u32;
         if primitive_budget > 0 {
             let mut unique = BTreeSet::<PrimitiveId>::new();
@@ -207,7 +210,11 @@ impl RuntimeRenderController {
             let registry_lock = self.bridges.scene.primitives();
             let registry = registry_lock.read();
             for primitive_id in unique {
-                if primitive_uploaded >= primitive_budget {
+                if primitive_uploaded >= primitive_budget
+                    || (primitive_uploaded > 0
+                        && primitive_upload_started.elapsed().as_secs_f32() * 1000.0
+                            >= primitive_budget_ms)
+                {
                     break;
                 }
                 if self.gpu.meshes.prim_cache.contains_key(&primitive_id) {
@@ -264,8 +271,30 @@ fn terrain_gpu_upload_budget_per_frame() -> u32 {
     newengine_runtime_policy::streaming_policy().terrain_gpu_uploads_per_frame
 }
 
-fn primitive_gpu_upload_budget_per_frame() -> u32 {
-    newengine_runtime_policy::streaming_policy().primitive_gpu_uploads_per_frame
+fn primitive_gpu_upload_limits(world: &newengine_ecs::World) -> (u32, f32) {
+    let prelaunch = world
+        .resource::<WorldActivationState>()
+        .is_some_and(WorldActivationState::needs_prelaunch_gate);
+    if prelaunch {
+        let uploads = newengine_runtime_env::var_u32(
+            "NEWENGINE_PRIMITIVE_GPU_PRELAUNCH_UPLOADS_PER_FRAME",
+            8,
+            1,
+            64,
+        );
+        let budget_ms = newengine_runtime_env::var_f32(
+            "NEWENGINE_PRIMITIVE_GPU_PRELAUNCH_BUDGET_MS",
+            12.0,
+            1.0,
+            32.0,
+        );
+        (uploads, budget_ms)
+    } else {
+        (
+            newengine_runtime_policy::streaming_policy().primitive_gpu_uploads_per_frame,
+            f32::INFINITY,
+        )
+    }
 }
 
 fn primitive_gpu_upload_warn_ms() -> f32 {

@@ -25,6 +25,55 @@ impl HostPlatformRuntime {
                 );
                 Ok(self.loading_step_result())
             }
+            RuntimeBootstrapStage::StartupIntro => {
+                let Some(rx) = self.startup_intro_result_rx.as_ref() else {
+                    self.bootstrap_stage = RuntimeBootstrapStage::AnnounceLoadEnginePlugins;
+                    self.set_bootstrap_overlay(
+                        "Startup intro complete.",
+                        "Preparing engine plugin loading.",
+                        0.10,
+                    );
+                    return Ok(self.loading_step_result());
+                };
+
+                match rx.try_recv() {
+                    Ok(report) => {
+                        self.startup_intro_result_rx = None;
+                        newengine_ulog_api::ulog::info!(
+                            "platform runtime bootstrap: game intro stage completed status={:?}; releasing engine loading gate",
+                            report.as_ref().map(|value| &value.status)
+                        );
+                        self.bootstrap_stage = RuntimeBootstrapStage::AnnounceLoadEnginePlugins;
+                        self.set_bootstrap_overlay(
+                            "Startup intro complete.",
+                            "Preparing engine plugin loading.",
+                            0.10,
+                        );
+                        Ok(self.loading_step_result())
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Empty) => {
+                        self.set_bootstrap_overlay(
+                            "Startup intro...",
+                            "Engine loading is gated until the authored game startup intro completes.",
+                            0.10,
+                        );
+                        Ok(self.loading_step_result())
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        self.startup_intro_result_rx = None;
+                        newengine_ulog_api::ulog::warn!(
+                            "platform runtime bootstrap: startup intro worker disconnected; releasing engine loading gate"
+                        );
+                        self.bootstrap_stage = RuntimeBootstrapStage::AnnounceLoadEnginePlugins;
+                        self.set_bootstrap_overlay(
+                            "Startup intro unavailable.",
+                            "Continuing to engine plugin loading.",
+                            0.10,
+                        );
+                        Ok(self.loading_step_result())
+                    }
+                }
+            }
             RuntimeBootstrapStage::AnnounceLoadEnginePlugins => {
                 self.set_bootstrap_overlay(
                     "Loading engine plugins...",

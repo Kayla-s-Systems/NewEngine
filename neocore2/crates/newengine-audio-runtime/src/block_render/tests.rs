@@ -172,3 +172,33 @@ fn master_output_limiter_is_channel_linked() {
     assert!((left - 1.0).abs() < 1.0e-6, "left={left}");
     assert!((right - 0.5).abs() < 1.0e-6, "right={right}");
 }
+
+#[test]
+fn dense_node_compaction_preserves_moved_voice_command_lookup() {
+    let (graph, mut source) = native_block_render_graph(
+        ChannelCount::new(1).unwrap(),
+        SampleRate::new(48_000).unwrap(),
+    );
+    graph
+        .add_source(mono(&vec![0.1; 768]), 1.0, 1.0, false, Duration::ZERO)
+        .unwrap();
+    let middle = graph
+        .add_source(mono(&vec![0.2; 768]), 1.0, 1.0, false, Duration::ZERO)
+        .unwrap();
+    let moved = graph
+        .add_source(mono(&vec![0.4; 768]), 1.0, 1.0, false, Duration::ZERO)
+        .unwrap();
+
+    assert!((source.next().unwrap() - 0.7).abs() < 1.0e-6);
+    middle.stop();
+    moved.set_volume(0.5);
+
+    // Finish the already-rendered block. The remove + gain commands are consumed at the
+    // next block boundary, where removing the middle node swap-moves the last node.
+    for _ in 1..NATIVE_BLOCK_FRAMES {
+        let _ = source.next().unwrap();
+    }
+    let next = source.next().unwrap();
+    assert!((next - 0.3).abs() < 1.0e-6, "next={next}");
+    assert_eq!(graph.stats().active_nodes, 2);
+}

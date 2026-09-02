@@ -7,13 +7,15 @@ use newengine_game_data::GameDataProvider;
 use newengine_game_data_lua::{
     LuaGameDataProvider, LUA_GAME_DATA_PROVIDER_ID, SCRIPT_GAME_DATA_PROVIDER_ID,
 };
+use newengine_game_module_composition::{
+    resolve_runtime_game_module, GameModuleFactoryRegistry, GameModuleTarget,
+};
 use newengine_runtime_host::app_launcher::RuntimeHostRuntimeUnitRegistration;
 use newengine_service_api::{EngineRuntimeUnitKind, EngineRuntimeUnitSpec};
 
 use crate::scene_bootstrap::{
-    GameReadyWorldSceneBootstrapProvider, ProjectAudioMixBootstrapCompletion,
+    ProjectAudioMixBootstrapCompletion, ProjectGameDataBootstrapContributor,
 };
-use crate::world_runtime::GameReadyWorldRuntimeProvider;
 
 const GAME_READY_UNIT_TAGS: &[&str] = &[
     "engine.runtime-unit",
@@ -124,9 +126,31 @@ fn scene_bootstrap_factory(
                 .to_owned(),
         )
         })?;
-    scene.set_scene_bootstrap_provider(GameReadyWorldSceneBootstrapProvider::shared(
+    let registry = engine
+        .resources_mut()
+        .get::<GameModuleFactoryRegistry>()
+        .cloned()
+        .ok_or_else(|| {
+            EngineError::Other(
+                "GameReady scene-bootstrap runtime unit requires instance GameModuleFactoryRegistry"
+                    .to_owned(),
+            )
+        })?;
+    let target = GameModuleTarget::from(runtime.launch_profile);
+    let mut contributors = vec![ProjectGameDataBootstrapContributor::shared(
         game_data_provider,
-    ));
+    )];
+    if let Some(game_module) =
+        resolve_runtime_game_module(&registry, &runtime, target).map_err(EngineError::Other)?
+    {
+        let module_providers = game_module.providers(target).map_err(EngineError::Other)?;
+        contributors.extend(module_providers.scene_bootstrap);
+    }
+    scene.set_scene_bootstrap_provider(
+        newengine_authored_world_runtime::AuthoredMapSceneBootstrapProvider::shared_with_contributors(
+            contributors,
+        ),
+    );
     Ok(Some(Box::new(
         newengine_authored_world_runtime::AuthoredWorldBootstrapModule::new(scene)
             .with_completion(Arc::new(ProjectAudioMixBootstrapCompletion)),
@@ -155,8 +179,19 @@ fn world_runtime_factory(
     engine: &mut Engine<()>,
     _: &StartupConfig,
 ) -> EngineResult<Option<Box<dyn Module<()>>>> {
-    render_contributions_mut(engine)
-        .register_world_runtime_provider(GameReadyWorldRuntimeProvider::shared());
+    let contributions: Vec<Arc<dyn newengine_engine_runtime::WorldRuntimeProvider>> = vec![
+        newengine_fps_character_runtime::FpsCharacterPresentationWorldRuntimeProvider::shared(),
+        newengine_authored_world_runtime::AuthoredWorldStreamingWorldRuntimeProvider::shared(),
+        newengine_world_environment_runtime::WorldEnvironmentAdmissionWorldRuntimeProvider::shared(
+        ),
+        newengine_fps_content_runtime::FpsContentWorldRuntimeProvider::shared(),
+        newengine_world_environment_runtime::WorldEnvironmentSimulationWorldRuntimeProvider::shared(
+        ),
+    ];
+    let registry = render_contributions_mut(engine);
+    for contribution in contributions {
+        registry.register_world_runtime_provider(contribution);
+    }
     Ok(None)
 }
 

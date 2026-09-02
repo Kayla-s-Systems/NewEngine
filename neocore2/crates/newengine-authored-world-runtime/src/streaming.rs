@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use newengine_definitions_runtime::DefinitionEntryV1;
 use newengine_math::Vec3;
@@ -54,15 +54,114 @@ pub struct PreparedAuthoredMapCell {
     pub metadata_only_count: usize,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct AuthoredMapDefinitionCache {
     entries: Arc<Mutex<BTreeMap<String, DefinitionEntryV1>>>,
+    logical_map_ref: Arc<String>,
+    catalog_load: Arc<OnceLock<Result<Option<Arc<crate::MapDefinitionCatalogV1>>, String>>>,
+}
+
+impl Default for AuthoredMapDefinitionCache {
+    fn default() -> Self {
+        Self {
+            entries: Arc::new(Mutex::new(BTreeMap::new())),
+            logical_map_ref: Arc::new(String::new()),
+            catalog_load: Arc::new(OnceLock::new()),
+        }
+    }
 }
 
 impl AuthoredMapDefinitionCache {
     #[inline]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn for_map(logical_map_ref: &str) -> Self {
+        Self {
+            logical_map_ref: Arc::new(logical_map_ref.trim().replace('\\', "/")),
+            ..Self::default()
+        }
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.entries.lock().len()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.entries.lock().is_empty()
+    }
+
+    fn ensure_catalog_loaded(&self) -> Result<Option<Arc<crate::MapDefinitionCatalogV1>>, String> {
+        self.catalog_load
+            .get_or_init(|| {
+                if self.logical_map_ref.trim().is_empty() {
+                    return Ok(None);
+                }
+                let (status, catalog) =
+                    crate::definition_catalog::load_map_definition_catalog(&self.logical_map_ref)?;
+                match status {
+                    crate::definition_catalog::MapDefinitionCatalogLoad::Missing { path } => {
+                        newengine_ulog_api::ulog::debug!(
+                            "authored-world: map definition catalog unavailable map='{}' path='{}' fallback='engine.assets.definitions per-entry'",
+                            self.logical_map_ref,
+                            path,
+                        );
+                        Ok(None)
+                    }
+                    crate::definition_catalog::MapDefinitionCatalogLoad::Loaded {
+                        path,
+                        entries,
+                        bytes,
+                    } => {
+                        let catalog = catalog.ok_or_else(|| {
+                            format!(
+                                "map definition catalog load reported success without payload path='{path}'"
+                            )
+                        })?;
+                        newengine_ulog_api::ulog::info!(
+                            "authored-world: indexed map definition catalog loaded map='{}' path='{}' entries={} bytes={} policy='single cooked catalog read; indexed lazy DefinitionEntry decode; YTYP gateway fallback only on catalog miss'",
+                            self.logical_map_ref,
+                            path,
+                            entries,
+                            bytes,
+                        );
+                        Ok(Some(Arc::new(catalog)))
+                    }
+                }
+            })
+            .clone()
+    }
+
+    /// Resolve one map-owned definition through the map-scoped cooked catalog first,
+    /// falling back to the authoritative definitions gateway only when the catalog or key is absent.
+    /// This is the single definition-resolution seam for both initial resident cells and later streaming.
+    pub fn resolve_definition_entry(
+        &self,
+        definition_ref: &str,
+    ) -> Result<DefinitionEntryV1, String> {
+        let definition_ref = definition_ref.trim().replace('\\', "/");
+        let catalog = self.ensure_catalog_loaded()?;
+        if let Some(existing) = self.entries.lock().get(&definition_ref).cloned() {
+            return Ok(existing);
+        }
+        if let Some(catalog) = catalog {
+            if let Some(parsed) = catalog.decode_entry(&definition_ref)? {
+                let mut locked = self.entries.lock();
+                return Ok(locked
+                    .entry(definition_ref)
+                    .or_insert_with(|| parsed.clone())
+                    .clone());
+            }
+        }
+        let parsed = crate::load_authored_definition_entry(&definition_ref)?;
+        let mut locked = self.entries.lock();
+        Ok(locked
+            .entry(definition_ref)
+            .or_insert_with(|| parsed.clone())
+            .clone())
     }
 }
 
@@ -78,15 +177,7 @@ fn resolve_definition(
     cache: &AuthoredMapDefinitionCache,
     definition_ref: &str,
 ) -> Result<DefinitionEntryV1, String> {
-    if let Some(existing) = cache.entries.lock().get(definition_ref).cloned() {
-        return Ok(existing);
-    }
-    let parsed = crate::load_authored_definition_entry(definition_ref)?;
-    let mut locked = cache.entries.lock();
-    Ok(locked
-        .entry(definition_ref.to_owned())
-        .or_insert_with(|| parsed.clone())
-        .clone())
+    cache.resolve_definition_entry(definition_ref)
 }
 
 pub fn project_authored_definition_surface(

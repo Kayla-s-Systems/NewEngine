@@ -104,6 +104,17 @@ impl RuntimeDrawListSet {
 pub(in crate::render_controller::module_impl) struct PrimitiveProviderStageProfile {
     pub(in crate::render_controller::module_impl) sampled: bool,
     pub(in crate::render_controller::module_impl) directional_shadow_ms: f32,
+    pub(in crate::render_controller::module_impl) directional_body_ms: f32,
+    pub(in crate::render_controller::module_impl) directional_boundary_ms: f32,
+    pub(in crate::render_controller::module_impl) directional_cascade_ms: [f32; 4],
+    pub(in crate::render_controller::module_impl) shadow_skinned_ms: f32,
+    pub(in crate::render_controller::module_impl) shadow_models_ms: f32,
+    pub(in crate::render_controller::module_impl) shadow_static_ms: f32,
+    pub(in crate::render_controller::module_impl) shadow_static_body_ms: f32,
+    pub(in crate::render_controller::module_impl) shadow_static_scan_ms: f32,
+    pub(in crate::render_controller::module_impl) shadow_static_plan_ms: f32,
+    pub(in crate::render_controller::module_impl) shadow_static_upload_ms: f32,
+    pub(in crate::render_controller::module_impl) shadow_static_replay_ms: f32,
     pub(in crate::render_controller::module_impl) local_shadow_ms: f32,
     pub(in crate::render_controller::module_impl) gbuffer_ms: f32,
     pub(in crate::render_controller::module_impl) forward_ms: f32,
@@ -315,10 +326,11 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
 
     fn record_primitive_mesh_shadow(&mut self, ctx: &SceneExtractionCtx<'_>) -> EngineResult<()> {
         let stage_started = std::time::Instant::now();
+        let mut directional_body_ms = 0.0_f32;
         if ctx.shadow_frame.cascade_count > 1 {
             for cascade_index in 0..ctx.shadow_frame.cascade_count as usize {
                 let cascade = ctx.shadow_frame.cascade(cascade_index);
-                let _ =
+                let sample =
                     self.record_shadow_phase(RenderGraphPassKind::ShadowCascadeMap, |this, r| {
                         r.set_viewport(cascade.viewport)?;
                         r.set_scissor(cascade.scissor)?;
@@ -337,9 +349,27 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                             super::super::passes::ShadowUboViewKey::directional(cascade_index),
                         )
                     })?;
+                if let Some(sample) = sample {
+                    directional_body_ms += sample.total_ms;
+                    if let Some(slot) = self
+                        .primitive_stage_profile
+                        .directional_cascade_ms
+                        .get_mut(cascade_index)
+                    {
+                        *slot = sample.total_ms;
+                    }
+                    self.primitive_stage_profile.shadow_skinned_ms += sample.skinned_ms;
+                    self.primitive_stage_profile.shadow_models_ms += sample.models_ms;
+                    self.primitive_stage_profile.shadow_static_ms += sample.static_ms;
+                    self.primitive_stage_profile.shadow_static_body_ms += sample.static_body_ms;
+                    self.primitive_stage_profile.shadow_static_scan_ms += sample.static_scan_ms;
+                    self.primitive_stage_profile.shadow_static_plan_ms += sample.static_plan_ms;
+                    self.primitive_stage_profile.shadow_static_upload_ms += sample.static_upload_ms;
+                    self.primitive_stage_profile.shadow_static_replay_ms += sample.static_replay_ms;
+                }
             }
         } else {
-            let _ = self.record(RenderDrawListKind::ShadowCasters, |this, r| {
+            let sample = self.record(RenderDrawListKind::ShadowCasters, |this, r| {
                 super::super::passes::draw_primitives_shadow(
                     this,
                     r,
@@ -354,10 +384,25 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                     super::super::passes::ShadowUboViewKey::directional(0),
                 )
             })?;
+            if let Some(sample) = sample {
+                directional_body_ms = sample.total_ms;
+                self.primitive_stage_profile.directional_cascade_ms[0] = sample.total_ms;
+                self.primitive_stage_profile.shadow_skinned_ms = sample.skinned_ms;
+                self.primitive_stage_profile.shadow_models_ms = sample.models_ms;
+                self.primitive_stage_profile.shadow_static_ms = sample.static_ms;
+                self.primitive_stage_profile.shadow_static_body_ms = sample.static_body_ms;
+                self.primitive_stage_profile.shadow_static_scan_ms = sample.static_scan_ms;
+                self.primitive_stage_profile.shadow_static_plan_ms = sample.static_plan_ms;
+                self.primitive_stage_profile.shadow_static_upload_ms = sample.static_upload_ms;
+                self.primitive_stage_profile.shadow_static_replay_ms = sample.static_replay_ms;
+            }
         }
+        let directional_shadow_ms = stage_started.elapsed().as_secs_f32() * 1000.0;
         self.primitive_stage_profile.sampled = true;
-        self.primitive_stage_profile.directional_shadow_ms =
-            stage_started.elapsed().as_secs_f32() * 1000.0;
+        self.primitive_stage_profile.directional_shadow_ms = directional_shadow_ms;
+        self.primitive_stage_profile.directional_body_ms = directional_body_ms;
+        self.primitive_stage_profile.directional_boundary_ms =
+            (directional_shadow_ms - directional_body_ms).max(0.0);
         Ok(())
     }
 

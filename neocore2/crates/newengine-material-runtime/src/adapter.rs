@@ -10,9 +10,11 @@ use newengine_materials::{
 use newengine_plugin_api::HostApiV1;
 
 use crate::{
-    cache::MaterialRuntimeCaches, collect_texture_refs, decode_material_entry_payload,
-    material_cache_key, material_response_from_authored, normalize_material_logical_path,
-    preview_material_name_from_body, split_nemat_selector, validate_material_body_schema,
+    cache::{shared_material_runtime_caches, MaterialRuntimeCaches},
+    collect_texture_refs, decode_nemat_material_library_from_body, material_cache_key,
+    material_response_from_authored, normalize_material_logical_path,
+    preview_material_name_from_body, select_material_entry_from_library, split_nemat_selector,
+    validate_material_body_schema,
 };
 
 #[derive(Clone)]
@@ -26,7 +28,7 @@ impl MaterialAssetGatewayAdapter {
     pub fn with_client(client: AssetServiceClient) -> Self {
         Self {
             client,
-            caches: Arc::new(Mutex::new(MaterialRuntimeCaches::default())),
+            caches: shared_material_runtime_caches(),
         }
     }
 
@@ -34,7 +36,7 @@ impl MaterialAssetGatewayAdapter {
     pub fn with_client_and_host(client: AssetServiceClient, _host: HostApiV1) -> Self {
         Self {
             client,
-            caches: Arc::new(Mutex::new(MaterialRuntimeCaches::default())),
+            caches: shared_material_runtime_caches(),
         }
     }
 
@@ -75,35 +77,68 @@ impl MaterialAssetGatewayAdapter {
     ) -> Result<MaterialLoadResponse, String> {
         let material_ref = normalize_material_logical_path(&request.logical_path)?;
         let (source, selector) = split_nemat_selector(&material_ref, request.selector.as_deref())?;
-        let (_, descriptor) = self.client
-            .require_semantic_asset_reference_v1(
-                &source,
-                newengine_assets_api::ENGINE_ASSETS_MATERIALS_SERVICE_ID,
-                false,
-            )
-            .map_err(|error| {
-                format!(
-                    "materials: source must resolve through the registered material format: '{source}': {error}"
+        let cached_library = self
+            .caches
+            .lock()
+            .ok()
+            .and_then(|mut caches| caches.libraries.get(&source).cloned());
+        let library = if let Some(library) = cached_library {
+            newengine_ulog_api::ulog::debug!(
+                "assets.materials.load_descriptor_v1: physical library cache hit source='{}' selector='{}' policy='one NEMAT read+XML parse -> many selector projections'",
+                source,
+                selector
+            );
+            library
+        } else {
+            let (_, descriptor) = self.client
+                .require_semantic_asset_reference_v1(
+                    &source,
+                    newengine_assets_api::ENGINE_ASSETS_MATERIALS_SERVICE_ID,
+                    false,
                 )
-            })?;
-        newengine_ulog_api::ulog::debug!(
-            "assets.materials.load_descriptor_v1: source='{}' selector='{}' output_kind='{}' policy='NEF8 body from engine.assets; material semantics stay in engine.assets.materials'",
-            source,
-            selector,
-            ASSET_LIST_FILE_BODY_OUTPUT
-        );
-        let bytes = self
-            .client
-            .decode_v1(&AssetDecodeRequest {
-                logical_path: source.clone(),
-                output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
-                selector: serde_json::Value::Null,
-                            format_descriptor: None,
-})
-            .map_err(|e| format!("engine.assets decode_v1 failed path='{source}' selector='{selector}' output='{ASSET_LIST_FILE_BODY_OUTPUT}' err='{e}'"))?;
-        validate_material_body_schema(&bytes, &descriptor)?;
-        let material = decode_material_entry_payload(&bytes, &selector)
-            .map_err(|e| format!("materials: decode .nemat library failed source='{source}' selector='{selector}' err='{e}'"))?;
+                .map_err(|error| {
+                    format!(
+                        "materials: source must resolve through the registered material format: '{source}': {error}"
+                    )
+                })?;
+            newengine_ulog_api::ulog::debug!(
+                "assets.materials.load_descriptor_v1: physical library load source='{}' selector='{}' output_kind='{}' policy='one NEMAT read+XML parse -> many selector projections'",
+                source,
+                selector,
+                ASSET_LIST_FILE_BODY_OUTPUT
+            );
+            let bytes = self
+                .client
+                .decode_v1(&AssetDecodeRequest {
+                    logical_path: source.clone(),
+                    output_kind: ASSET_LIST_FILE_BODY_OUTPUT.to_owned(),
+                    selector: serde_json::Value::Null,
+                    format_descriptor: None,
+                })
+                .map_err(|e| format!("engine.assets decode_v1 failed path='{source}' selector='{selector}' output='{ASSET_LIST_FILE_BODY_OUTPUT}' err='{e}'"))?;
+            validate_material_body_schema(&bytes, &descriptor)?;
+            let library = Arc::new(
+                decode_nemat_material_library_from_body(&bytes).map_err(|e| {
+                    format!(
+                        "materials: decode .nemat library failed source='{source}' selector='{selector}' err='{e}'"
+                    )
+                })?,
+            );
+            if let Ok(mut caches) = self.caches.lock() {
+                caches
+                    .libraries
+                    .insert(source.clone(), Arc::clone(&library));
+            }
+            newengine_ulog_api::ulog::info!(
+                "assets.materials: physical NEMAT library cached source='{}' entries={} body_bytes={} policy='single physical read+parse; selector projection from decoded library'",
+                source,
+                library.materials.len(),
+                bytes.len(),
+            );
+            library
+        };
+        let material = select_material_entry_from_library(&library, &selector)
+            .map_err(|e| format!("materials: select .nemat entry failed source='{source}' selector='{selector}' err='{e}'"))?;
         newengine_ulog_api::ulog::debug!(
             "assets.materials.load_descriptor_v1: decoded source='{}' selector='{}' texture_slots={} params={}",
             source,

@@ -61,6 +61,7 @@ newengine-ecs-api = { path = "../newengine-ecs-api", optional = true }
 newengine-entity-api = { path = "../newengine-entity-api", optional = true }
 newengine-ui-api = { path = "../newengine-ui-api", optional = true }
 newengine-loading-api = { path = "../newengine-loading-api" }
+newengine-startup-intro = { path = "../newengine-startup-intro" }
 newengine-task-api = { path = "../newengine-task-api" }
 newengine-time-api = { path = "../newengine-time-api" }
 newengine-input-api = { path = "../newengine-input-api", optional = true }

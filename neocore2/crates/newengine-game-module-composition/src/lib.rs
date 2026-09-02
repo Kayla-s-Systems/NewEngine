@@ -32,6 +32,10 @@ impl From<RuntimeLaunchProfile> for GameModuleTarget {
 
 #[derive(Clone, Default)]
 pub struct GameModuleProviderSet {
+    /// Ordered authored-scene enrichment contributed by the selected game module.
+    /// Runtime profiles own generic bootstrap lifecycle only and never name concrete game assembly.
+    pub scene_bootstrap:
+        Vec<Arc<dyn newengine_authored_world_runtime::AuthoredMapSceneBootstrapContributor>>,
     pub gameplay_content: Vec<Arc<dyn GameplayContentProvider>>,
     pub gameplay_systems: Vec<Arc<dyn GameplaySystemProvider>>,
     pub gameplay_ui: Vec<Arc<dyn GameplayUiProvider>>,

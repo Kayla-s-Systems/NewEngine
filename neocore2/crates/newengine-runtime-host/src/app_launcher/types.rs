@@ -150,6 +150,14 @@ pub struct RuntimeHostFrontendContext<'a> {
 }
 
 pub trait RuntimeHostFrontend<P: RuntimeHostAppProfile> {
+    /// Called at the first engine-visible boot boundary, before host preinit,
+    /// project/runtime loading, startup config and plugin discovery. Windowed
+    /// compositions use this only to register tiny boot-time presenter providers.
+    #[inline]
+    fn prepare_early_boot(&self, _profile: &P, _spec: &RuntimeHostLaunchSpec) -> EngineResult<()> {
+        Ok(())
+    }
+
     /// Called before startup config is loaded. Concrete frontends may install a
     /// startup presenter, but the runtime host itself remains toolkit-agnostic.
     #[inline]

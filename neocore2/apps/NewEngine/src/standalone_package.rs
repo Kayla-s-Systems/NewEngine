@@ -168,7 +168,7 @@ pub fn build_game_ready_standalone_with_options(
         &source_exe,
         &output_root.join(source_exe.file_name().unwrap()),
     )?;
-    copy_file(runtime_config_path, &output_root.join("runtime.toml"))?;
+    package_runtime_config(runtime_config_path, northstar_root, &output_root)?;
     copy_file(
         &workspace_root.join("config.json"),
         &output_root.join("config.json"),
@@ -435,6 +435,82 @@ fn copy_project_tree(
     Ok(())
 }
 
+fn package_runtime_config(
+    runtime_config_path: &Path,
+    northstar_root: &Path,
+    output_root: &Path,
+) -> Result<(), String> {
+    let source = fs::read_to_string(runtime_config_path).map_err(|error| {
+        format!(
+            "read runtime config '{}' for standalone packaging: {error}",
+            runtime_config_path.display()
+        )
+    })?;
+    let mut document: toml::Value = toml::from_str(&source).map_err(|error| {
+        format!(
+            "parse runtime config '{}' for standalone packaging: {error}",
+            runtime_config_path.display()
+        )
+    })?;
+
+    let intro = document
+        .get_mut("runtime")
+        .and_then(toml::Value::as_table_mut)
+        .and_then(|runtime| runtime.get_mut("startup_intro"));
+    if let Some(intro) = intro {
+        let raw = intro
+            .as_str()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| "runtime.startup_intro must be a non-empty string".to_owned())?;
+        let descriptor = resolve_packaged_boot_path(raw, runtime_config_path, northstar_root);
+        require_file(&descriptor, "startup intro descriptor")?;
+        let source_dir = descriptor.parent().ok_or_else(|| {
+            format!(
+                "startup intro descriptor '{}' has no parent directory",
+                descriptor.display()
+            )
+        })?;
+        let destination_dir = output_root.join("StartupIntro");
+        copy_tree_all(source_dir, &destination_dir)?;
+        let descriptor_name = descriptor.file_name().ok_or_else(|| {
+            format!(
+                "startup intro descriptor '{}' has no filename",
+                descriptor.display()
+            )
+        })?;
+        let packaged_relative = PathBuf::from("StartupIntro").join(descriptor_name);
+        *intro = toml::Value::String(path_to_manifest(&packaged_relative));
+    }
+
+    let packaged = toml::to_string_pretty(&document)
+        .map_err(|error| format!("encode packaged runtime.toml: {error}"))?;
+    fs::write(output_root.join("runtime.toml"), packaged)
+        .map_err(|error| format!("write packaged runtime.toml: {error}"))
+}
+
+fn resolve_packaged_boot_path(
+    raw: &str,
+    runtime_config_path: &Path,
+    northstar_root: &Path,
+) -> PathBuf {
+    if let Some(relative) = raw
+        .strip_prefix("ROOT-DIR/")
+        .or_else(|| raw.strip_prefix("ROOT-DIR\\"))
+    {
+        return northstar_root.join(relative.replace('/', std::path::MAIN_SEPARATOR_STR));
+    }
+    let path = PathBuf::from(raw);
+    if path.is_absolute() {
+        path
+    } else {
+        runtime_config_path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join(path)
+    }
+}
+
 fn copy_file(source: &Path, destination: &Path) -> Result<(), String> {
     if let Some(parent) = destination.parent() {
         fs::create_dir_all(parent)
@@ -464,6 +540,20 @@ fn validate_package(output_root: &Path, executable_name: &std::ffi::OsStr) -> Re
         &output_root.join("pluginsRuntime"),
         "standalone pluginsRuntime",
     )?;
+    let runtime_source = fs::read_to_string(output_root.join("runtime.toml"))
+        .map_err(|error| format!("read packaged runtime.toml for validation: {error}"))?;
+    let runtime_document: toml::Value = toml::from_str(&runtime_source)
+        .map_err(|error| format!("parse packaged runtime.toml for validation: {error}"))?;
+    if let Some(relative) = runtime_document
+        .get("runtime")
+        .and_then(|value| value.get("startup_intro"))
+        .and_then(toml::Value::as_str)
+    {
+        require_file(
+            &output_root.join(relative.replace('/', std::path::MAIN_SEPARATOR_STR)),
+            "standalone startup intro descriptor",
+        )?;
+    }
     Ok(())
 }
 
@@ -560,6 +650,20 @@ mod tests {
             Some(StandaloneTargetOs::MacOs)
         );
         assert_eq!(StandaloneTargetOs::from_id("beos"), None);
+    }
+
+    #[test]
+    fn packaged_boot_path_resolves_root_dir_token() {
+        let runtime = Path::new(r"C:\NorthStar\NewEngine\neocore2\runtime.toml");
+        let root = Path::new(r"C:\NorthStar");
+        assert_eq!(
+            resolve_packaged_boot_path(
+                "ROOT-DIR/Shared/Source/authoring/northstar/intro/intro.toml",
+                runtime,
+                root,
+            ),
+            root.join("Shared/Source/authoring/northstar/intro/intro.toml")
+        );
     }
 
     #[test]

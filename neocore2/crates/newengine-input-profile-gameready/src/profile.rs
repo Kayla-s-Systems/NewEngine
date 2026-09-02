@@ -63,10 +63,17 @@ pub fn game_ready_game_input_profile() -> InputBindingsProfile {
         }
     }
     profile.bindings.extend(standalone_fps_bindings());
+    // In the playable game profile Space is authoritative jump input. Keeping the generic
+    // UI-accept binding on the same physical key produces two cross-domain actions from one
+    // edge and can hand gameplay movement to retained UI policy on the jump frame. Menus keep
+    // Enter as keyboard accept; editor/general profiles retain their broader UI bindings.
     profile.bindings.retain(|binding| {
         !(binding.device == InputBindingDevice::Keyboard
-            && binding.code == newengine_input_api::key_code::F1
-            && binding.action != action::HUD_VISIBILITY_TOGGLE)
+            && binding.code == newengine_input_api::key_code::SPACE
+            && binding.action == action::UI_NAVIGATION_ACCEPT)
+            && !(binding.device == InputBindingDevice::Keyboard
+                && binding.code == newengine_input_api::key_code::F1
+                && binding.action != action::HUD_VISIBILITY_TOGGLE)
     });
     profile.bindings.push(InputBinding::keyboard_pressed(
         action::HUD_VISIBILITY_TOGGLE,

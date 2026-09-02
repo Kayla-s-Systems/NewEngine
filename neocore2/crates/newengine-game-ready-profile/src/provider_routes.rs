@@ -83,6 +83,9 @@ impl GameReadyRuntimeProfile {
         engine
             .resources_mut()
             .insert(SceneGatewayAssetMounts::from_profile(GAME_READY_MOUNT_SPEC));
+        engine
+            .resources_mut()
+            .insert(self.game_module_factory_registry());
         if let Some(provider) = self.game_data_provider.clone() {
             engine
                 .resources_mut()
@@ -156,7 +159,7 @@ impl GameReadyRuntimeProfile {
 
     #[inline]
     pub fn bootstrap_content_best_effort(&self) {
-        // Game scenes are assembled by GameReadySceneBootstrapModule during engine.start().
+        // Game scenes are bootstrapped by the generic authored-world module during engine.start().
     }
 }
 
@@ -216,16 +219,18 @@ mod composition_architecture_tests {
     #[test]
     fn game_ready_profile_does_not_install_game_module_composition_roles_directly() {
         let source = include_str!("profile.rs");
+        let retired_bootstrap_module = ["GameReadySceneBootstrap", "Module"].concat();
+        let retired_bootstrap_provider = ["GameReadyWorldSceneBootstrap", "Provider"].concat();
         for forbidden in [
-            "GameReadyRenderFeaturePack",
-            "GameReadyWorldRuntimeProvider",
-            "GameReadySceneBootstrapModule",
-            "GameReadyWorldSceneBootstrapProvider",
-            "game_ready_game_input_profile",
-            "set_scene_bootstrap_provider",
+            "GameReadyRenderFeaturePack".to_owned(),
+            ["GameReadyWorldRuntime", "Provider"].concat(),
+            retired_bootstrap_module,
+            retired_bootstrap_provider,
+            "game_ready_game_input_profile".to_owned(),
+            "set_scene_bootstrap_provider".to_owned(),
         ] {
             assert!(
-                !source.contains(forbidden),
+                !source.contains(&forbidden),
                 "GameReadyRuntimeProfile regained direct composition knowledge: {forbidden}"
             );
         }

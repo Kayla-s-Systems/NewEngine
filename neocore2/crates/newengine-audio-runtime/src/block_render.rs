@@ -1,3 +1,5 @@
+use std::cmp::Reverse;
+use std::collections::{BinaryHeap, HashMap};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -10,7 +12,14 @@ use rodio::{ChannelCount, SampleRate};
 #[path = "block_render/commands.rs"]
 mod commands;
 
+#[path = "block_render/limiter.rs"]
+mod limiter;
+#[path = "block_render/voice.rs"]
+mod voice;
+
 use commands::{render_command_node_id, RenderCommand, RenderCommandKind};
+use limiter::OutputPeakLimiter;
+use voice::{finite_gain, finite_speed, BlockSourceAdapter, BlockVoiceNode};
 
 pub(crate) const NATIVE_BLOCK_FRAMES: usize = 256;
 const MAX_BLOCK_NODES: usize = 256;
@@ -317,264 +326,16 @@ pub(crate) fn native_block_render_graph(
     (handle, source)
 }
 
-struct GainRamp {
-    from: f32,
-    target: f32,
-    start_sample: u64,
-    end_sample: u64,
-}
-
-struct BlockVoiceNode {
-    id: u64,
-    source: BlockSourceAdapter,
-    gain: f32,
-    speed: f32,
-    paused: bool,
-    output_position_seconds: f64,
-    state: Arc<SharedVoiceState>,
-    sample_rate: SampleRate,
-    scratch: Vec<Sample>,
-    gain_ramp: Option<GainRamp>,
-}
-
-impl BlockVoiceNode {
-    fn new(
-        id: u64,
-        source: BlockSourceAdapter,
-        gain: f32,
-        speed: f32,
-        paused: bool,
-        source_position: Duration,
-        state: Arc<SharedVoiceState>,
-        sample_rate: SampleRate,
-        channels: ChannelCount,
-    ) -> Self {
-        Self {
-            id,
-            source,
-            gain,
-            speed,
-            paused,
-            output_position_seconds: source_position.as_secs_f64(),
-            state,
-            sample_rate,
-            scratch: vec![0.0; usize::from(channels.get())],
-            gain_ramp: None,
-        }
-    }
-
-    fn set_gain(&mut self, gain: f32) {
-        self.gain = finite_gain(gain);
-        self.gain_ramp = None;
-    }
-
-    fn ramp_gain(&mut self, target: f32, start_sample: u64, duration_samples: u64) {
-        let target = finite_gain(target);
-        if duration_samples == 0 {
-            self.set_gain(target);
-            return;
-        }
-        self.gain_ramp = Some(GainRamp {
-            from: self.gain_at(start_sample),
-            target,
-            start_sample,
-            end_sample: start_sample.saturating_add(duration_samples),
-        });
-    }
-
-    fn gain_at(&mut self, sample: u64) -> f32 {
-        let Some(ramp) = self.gain_ramp.as_ref() else {
-            return self.gain;
-        };
-        if sample <= ramp.start_sample {
-            return ramp.from;
-        }
-        if sample >= ramp.end_sample {
-            self.gain = ramp.target;
-            self.gain_ramp = None;
-            return self.gain;
-        }
-        let elapsed = sample - ramp.start_sample;
-        let duration = ramp.end_sample - ramp.start_sample;
-        let t = elapsed as f64 / duration.max(1) as f64;
-        (f64::from(ramp.from) + (f64::from(ramp.target) - f64::from(ramp.from)) * t) as f32
-    }
-
-    fn seek(&mut self, position: Duration) {
-        if self.source.try_seek(position).is_ok() {
-            self.output_position_seconds = position.as_secs_f64();
-            self.publish_position();
-            self.state.finished.store(false, Ordering::Release);
-        }
-    }
-
-    fn render_frame(&mut self, output: &mut [Sample], absolute_sample: u64) -> bool {
-        if self.paused {
-            return true;
-        }
-        if !self.source.render_frame(&mut self.scratch, self.speed) {
-            self.state.finished.store(true, Ordering::Release);
-            return false;
-        }
-        let gain = self.gain_at(absolute_sample);
-        for (dst, src) in output.iter_mut().zip(self.scratch.iter().copied()) {
-            let sample = if src.is_finite() { src } else { 0.0 };
-            *dst += sample * gain;
-        }
-        self.output_position_seconds += 1.0 / f64::from(self.sample_rate.get());
-        self.publish_position();
-        true
-    }
-
-    fn publish_position(&self) {
-        let nanos = (self.output_position_seconds.max(0.0) * 1_000_000_000.0)
-            .round()
-            .clamp(0.0, u64::MAX as f64) as u64;
-        self.state
-            .source_position_ns
-            .store(nanos, Ordering::Release);
-    }
-}
-
-struct BlockSourceAdapter {
-    source: Box<dyn Source + Send>,
-    channels: usize,
-    current: Vec<Sample>,
-    next: Vec<Sample>,
-    phase: f64,
-    primed: bool,
-    next_valid: bool,
-    exhausted: bool,
-}
-
-impl BlockSourceAdapter {
-    fn new(source: Box<dyn Source + Send>, channels: ChannelCount) -> Self {
-        let channels = usize::from(channels.get());
-        Self {
-            source,
-            channels,
-            current: vec![0.0; channels],
-            next: vec![0.0; channels],
-            phase: 0.0,
-            primed: false,
-            next_valid: false,
-            exhausted: false,
-        }
-    }
-
-    fn try_seek(&mut self, position: Duration) -> Result<(), SeekError> {
-        self.source.try_seek(position)?;
-        self.phase = 0.0;
-        self.primed = false;
-        self.next_valid = false;
-        self.exhausted = false;
-        Ok(())
-    }
-
-    fn read_frame_from(source: &mut Box<dyn Source + Send>, frame: &mut [Sample]) -> bool {
-        for sample in frame {
-            let Some(value) = source.next() else {
-                return false;
-            };
-            *sample = value;
-        }
-        true
-    }
-
-    fn prime(&mut self) -> bool {
-        if self.primed {
-            return !self.exhausted;
-        }
-        if !Self::read_frame_from(&mut self.source, &mut self.current) {
-            self.exhausted = true;
-            return false;
-        }
-        self.next_valid = Self::read_frame_from(&mut self.source, &mut self.next);
-        if !self.next_valid {
-            self.next.copy_from_slice(&self.current);
-        }
-        self.primed = true;
-        true
-    }
-
-    fn render_frame(&mut self, out: &mut [Sample], speed: f32) -> bool {
-        debug_assert_eq!(out.len(), self.channels);
-        if self.exhausted || !self.prime() {
-            return false;
-        }
-        let t = self.phase.clamp(0.0, 1.0) as f32;
-        for channel in 0..self.channels {
-            out[channel] = self.current[channel] + (self.next[channel] - self.current[channel]) * t;
-        }
-
-        self.phase += f64::from(finite_speed(speed));
-        while self.phase >= 1.0 {
-            self.phase -= 1.0;
-            if !self.next_valid {
-                self.exhausted = true;
-                break;
-            }
-            self.current.copy_from_slice(&self.next);
-            self.next_valid = Self::read_frame_from(&mut self.source, &mut self.next);
-            if !self.next_valid {
-                self.next.copy_from_slice(&self.current);
-            }
-        }
-        true
-    }
-}
-
-const MASTER_OUTPUT_PEAK: f32 = 1.0;
-const MASTER_LIMITER_RELEASE_SECONDS: f32 = 0.080;
-
-#[derive(Clone, Copy, Debug)]
-struct OutputPeakLimiter {
-    gain: f32,
-    release_alpha: f32,
-}
-
-impl OutputPeakLimiter {
-    fn new(sample_rate: SampleRate) -> Self {
-        let frames = (sample_rate.get() as f32 * MASTER_LIMITER_RELEASE_SECONDS).max(1.0);
-        Self {
-            gain: 1.0,
-            release_alpha: 1.0 - (-1.0 / frames).exp(),
-        }
-    }
-
-    #[inline]
-    fn process_frame(&mut self, frame: &mut [Sample]) {
-        let peak = frame
-            .iter()
-            .copied()
-            .filter(|sample| sample.is_finite())
-            .map(f32::abs)
-            .fold(0.0_f32, f32::max);
-        let target = if peak > MASTER_OUTPUT_PEAK {
-            (MASTER_OUTPUT_PEAK / peak).clamp(0.0, 1.0)
-        } else {
-            1.0
-        };
-        if target < self.gain {
-            // Instant attack prevents the overloaded frame from ever reaching the device.
-            self.gain = target;
-        } else {
-            self.gain += (1.0 - self.gain) * self.release_alpha;
-        }
-        for sample in frame {
-            let finite = if sample.is_finite() { *sample } else { 0.0 };
-            *sample = (finite * self.gain).clamp(-MASTER_OUTPUT_PEAK, MASTER_OUTPUT_PEAK);
-        }
-    }
-}
-
 pub(crate) struct NativeBlockRenderSource {
     channels: ChannelCount,
     sample_rate: SampleRate,
     command_rx: Receiver<RenderCommand>,
     stats: Arc<SharedRenderStats>,
-    nodes: Vec<Option<BlockVoiceNode>>,
-    scheduled: Vec<RenderCommand>,
+    /// Dense active-node storage keeps the per-frame mixer proportional to active voices,
+    /// not the configured voice ceiling.
+    nodes: Vec<BlockVoiceNode>,
+    node_index_by_id: HashMap<u64, usize>,
+    scheduled: BinaryHeap<Reverse<RenderCommand>>,
     block: Vec<Sample>,
     block_cursor: usize,
     output_sample: u64,
@@ -588,16 +349,14 @@ impl NativeBlockRenderSource {
         command_rx: Receiver<RenderCommand>,
         stats: Arc<SharedRenderStats>,
     ) -> Self {
-        let nodes = std::iter::repeat_with(|| None)
-            .take(MAX_BLOCK_NODES)
-            .collect::<Vec<_>>();
         Self {
             channels,
             sample_rate,
             command_rx,
             stats,
-            nodes,
-            scheduled: Vec::with_capacity(MAX_RENDER_COMMANDS),
+            nodes: Vec::with_capacity(MAX_BLOCK_NODES),
+            node_index_by_id: HashMap::with_capacity(MAX_BLOCK_NODES),
+            scheduled: BinaryHeap::with_capacity(MAX_RENDER_COMMANDS),
             block: vec![0.0; NATIVE_BLOCK_FRAMES * usize::from(channels.get())],
             block_cursor: NATIVE_BLOCK_FRAMES * usize::from(channels.get()),
             output_sample: 0,
@@ -606,7 +365,6 @@ impl NativeBlockRenderSource {
     }
 
     fn drain_commands(&mut self) {
-        let mut inserted = false;
         while let Ok(mut command) = self.command_rx.try_recv() {
             command.at_sample = Some(command.resolved_sample(self.output_sample));
             if self.scheduled.len() >= MAX_RENDER_COMMANDS {
@@ -616,14 +374,9 @@ impl NativeBlockRenderSource {
                 }
                 continue;
             }
-            self.scheduled.push(command);
-            inserted = true;
-        }
-        if inserted {
-            // Keep the earliest command at the end so the audio callback consumes due
-            // work with O(1) pop() instead of draining the front and shifting the tail.
-            self.scheduled
-                .sort_unstable_by(|left, right| right.cmp(left));
+            // The render callback never re-sorts the complete schedule. A preallocated
+            // min-heap keeps admission O(log N) and the next due command O(1) to inspect.
+            self.scheduled.push(Reverse(command));
         }
     }
 
@@ -639,8 +392,8 @@ impl NativeBlockRenderSource {
             self.apply_due_commands(cursor_sample);
             let next_boundary = self
                 .scheduled
-                .last()
-                .and_then(|command| command.at_sample)
+                .peek()
+                .and_then(|entry| entry.0.at_sample)
                 .filter(|sample| *sample < block_end)
                 .unwrap_or(block_end)
                 .max(cursor_sample);
@@ -664,23 +417,22 @@ impl NativeBlockRenderSource {
         self.stats
             .rendered_frames
             .fetch_add(NATIVE_BLOCK_FRAMES as u64, Ordering::Relaxed);
-        self.stats.active_nodes.store(
-            self.nodes.iter().filter(|node| node.is_some()).count() as u64,
-            Ordering::Relaxed,
-        );
+        self.stats
+            .active_nodes
+            .store(self.nodes.len() as u64, Ordering::Relaxed);
         self.block_cursor = 0;
     }
 
     fn apply_due_commands(&mut self, sample: u64) {
         while self
             .scheduled
-            .last()
-            .is_some_and(|command| command.at_sample.unwrap_or(sample) <= sample)
+            .peek()
+            .is_some_and(|entry| entry.0.at_sample.unwrap_or(sample) <= sample)
         {
-            let command = self
+            let Reverse(command) = self
                 .scheduled
                 .pop()
-                .expect("scheduled command checked by last()");
+                .expect("scheduled command checked by peek()");
             self.apply_command(command, sample);
             self.stats.applied_commands.fetch_add(1, Ordering::Relaxed);
         }
@@ -693,19 +445,19 @@ impl NativeBlockRenderSource {
                     node.state.finished.store(true, Ordering::Release);
                     return;
                 }
-                if let Some(slot) = self.nodes.iter_mut().find(|slot| slot.is_none()) {
+                if self.nodes.len() < MAX_BLOCK_NODES {
+                    let index = self.nodes.len();
                     node.state.finished.store(false, Ordering::Release);
-                    *slot = Some(node);
+                    self.node_index_by_id.insert(node.id, index);
+                    self.nodes.push(node);
                 } else {
                     node.state.finished.store(true, Ordering::Release);
                     self.stats.dropped_commands.fetch_add(1, Ordering::Relaxed);
                 }
             }
             RenderCommandKind::Remove { node_id } => {
-                if let Some(slot) = self.node_slot_mut(node_id) {
-                    if let Some(node) = slot.take() {
-                        node.state.finished.store(true, Ordering::Release);
-                    }
+                if let Some(node) = self.remove_node(node_id) {
+                    node.state.finished.store(true, Ordering::Release);
                 }
             }
             RenderCommandKind::SetGain { node_id, gain } => {
@@ -741,7 +493,8 @@ impl NativeBlockRenderSource {
                 node_id,
                 schedule_id,
             } => {
-                self.scheduled.retain(|candidate| {
+                self.scheduled.retain(|entry| {
+                    let candidate = &entry.0;
                     !(candidate.schedule_id == Some(schedule_id)
                         && render_command_node_id(&candidate.kind) == Some(node_id))
                 });
@@ -749,14 +502,19 @@ impl NativeBlockRenderSource {
         }
     }
 
-    fn node_slot_mut(&mut self, node_id: u64) -> Option<&mut Option<BlockVoiceNode>> {
-        self.nodes
-            .iter_mut()
-            .find(|slot| slot.as_ref().is_some_and(|node| node.id == node_id))
+    fn remove_node(&mut self, node_id: u64) -> Option<BlockVoiceNode> {
+        let index = self.node_index_by_id.remove(&node_id)?;
+        let removed = self.nodes.swap_remove(index);
+        if index < self.nodes.len() {
+            let moved_id = self.nodes[index].id;
+            self.node_index_by_id.insert(moved_id, index);
+        }
+        Some(removed)
     }
 
     fn node_mut(&mut self, node_id: u64) -> Option<&mut BlockVoiceNode> {
-        self.node_slot_mut(node_id).and_then(Option::as_mut)
+        let index = *self.node_index_by_id.get(&node_id)?;
+        self.nodes.get_mut(index)
     }
 
     fn render_segment(&mut self, start_frame: usize, frames: usize, start_sample: u64) {
@@ -767,18 +525,35 @@ impl NativeBlockRenderSource {
             let frame_end = frame_start + channels;
             let absolute_sample = start_sample + local_frame as u64;
             let output = &mut self.block[frame_start..frame_end];
-            for slot in &mut self.nodes {
-                let Some(node) = slot.as_mut() else {
+            let mut node_index = 0usize;
+            while node_index < self.nodes.len() {
+                if self.nodes[node_index].render_frame(output, absolute_sample) {
+                    node_index += 1;
                     continue;
-                };
-                if !node.render_frame(output, absolute_sample) {
-                    let node = slot.take().expect("node checked");
-                    node.state.finished.store(true, Ordering::Release);
                 }
+                let node_id = self.nodes[node_index].id;
+                let removed_index = self
+                    .node_index_by_id
+                    .remove(&node_id)
+                    .expect("dense block node must be indexed");
+                debug_assert_eq!(removed_index, node_index);
+                let node = self.nodes.swap_remove(node_index);
+                if node_index < self.nodes.len() {
+                    let moved_id = self.nodes[node_index].id;
+                    self.node_index_by_id.insert(moved_id, node_index);
+                }
+                // Publish the final successfully rendered source position before retiring the node.
+                node.publish_position();
+                node.state.finished.store(true, Ordering::Release);
             }
             // Device safety is owned once, after the complete voice/room mix. Normal material below
             // unity is unaffected; only overloaded frames receive stereo-linked gain reduction.
             self.output_limiter.process_frame(output);
+        }
+        // render_next_block() pre-renders the segment synchronously, so intermediate per-frame
+        // atomics are not externally useful. Publish once at the segment boundary instead.
+        for node in &self.nodes {
+            node.publish_position();
         }
     }
 }
@@ -821,22 +596,6 @@ impl Source for NativeBlockRenderSource {
         Err(SeekError::NotSupported {
             underlying_source: std::any::type_name::<Self>(),
         })
-    }
-}
-
-fn finite_gain(value: f32) -> f32 {
-    if value.is_finite() {
-        value.clamp(0.0, 16.0)
-    } else {
-        1.0
-    }
-}
-
-fn finite_speed(value: f32) -> f32 {
-    if value.is_finite() {
-        value.clamp(0.05, 4.0)
-    } else {
-        1.0
     }
 }
 

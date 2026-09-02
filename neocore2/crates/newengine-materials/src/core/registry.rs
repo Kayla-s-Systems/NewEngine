@@ -61,6 +61,18 @@ impl MaterialRegistry {
         self.inner.read().iter().map(|e| e.id).collect()
     }
 
+    /// Resolve a registry entry by its canonical name without cloning a descriptor.
+    /// Authored asset registration uses canonical asset refs as names, so this is the
+    /// zero-I/O cache seam for repeated NEMAT bindings across world instances.
+    #[inline]
+    pub fn id_by_name(&self, name: &str) -> Option<MaterialId> {
+        self.inner
+            .read()
+            .iter()
+            .find(|entry| entry.name == name)
+            .map(|entry| entry.id)
+    }
+
     pub fn register_named(&self, name: &str, desc: MaterialDescriptor) -> MaterialId {
         self.register_named_with_textures(name, desc, MaterialTextureBindings::default())
     }

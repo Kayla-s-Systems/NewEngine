@@ -291,6 +291,10 @@ pub struct PlayerLocomotionState {
     /// True only when gameplay explicitly initiated a jump. Physics contact correction
     /// may create positive Y velocity on uneven terrain and must not synthesize Jump.
     pub jump_started: bool,
+    /// Horizontal world-space velocity captured at explicit jump takeoff. FPS character policy
+    /// uses it as momentum fallback while airborne so a transient zero movement sample cannot
+    /// freeze the character in mid-jump. New non-zero air input remains authoritative.
+    pub jump_takeoff_horizontal_velocity: Vec3,
     /// Last input sample that consumed the edge-triggered jump command. Fixed-step catch-up
     /// may execute several ticks against one sampled command frame; the jump edge is one-shot.
     pub last_jump_command_source_frame: Option<u64>,

@@ -100,6 +100,7 @@ mod tests {
                     lifetime_seconds: 0.25,
                     fade_start_fraction: 0.4,
                     fade_in_fraction: 0.0,
+                    depth_softness_m: 0.0,
                 }],
                 ..FxdEffectV1::default()
             }],

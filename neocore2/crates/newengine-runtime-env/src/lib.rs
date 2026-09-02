@@ -40,3 +40,27 @@ pub fn var_u64(name: &str, default: u64, min: u64, max: u64) -> u64 {
         .map(|v| v.clamp(min, max))
         .unwrap_or(default)
 }
+
+#[inline]
+pub fn var_i32(name: &str, default: i32, min: i32, max: i32) -> i32 {
+    var(name)
+        .and_then(|v| v.trim().parse::<i32>().ok())
+        .map(|v| v.clamp(min, max))
+        .unwrap_or(default)
+}
+
+#[inline]
+pub fn var_u32(name: &str, default: u32, min: u32, max: u32) -> u32 {
+    var(name)
+        .and_then(|v| v.trim().parse::<u32>().ok())
+        .map(|v| v.clamp(min, max))
+        .unwrap_or(default)
+}
+
+#[inline]
+pub fn var_usize(name: &str, default: usize, min: usize, max: usize) -> usize {
+    var(name)
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .map(|v| v.clamp(min, max))
+        .unwrap_or(default)
+}

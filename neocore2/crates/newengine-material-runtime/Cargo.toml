@@ -24,3 +24,5 @@ newengine-model-import-obj = { path = "../newengine-model-import-obj" }
 newengine-plugin-api = { path = "../newengine-plugin-api" }
 newengine-service-api = { path = "../newengine-service-api" }
 newengine-service-kit = { path = "../newengine-service-kit" }
+
+newengine-material-domain-api = { path = "../newengine-material-domain-api" }

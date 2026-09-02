@@ -9,6 +9,15 @@ type ShadowPrimitiveEntry = (
     Option<newengine_model_domain_api::FoliageInstanceRuntime>,
 );
 
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct ShadowPrimitiveBodyProfile {
+    pub(super) total_ms: f32,
+    pub(super) scan_ms: f32,
+    pub(super) plan_ms: f32,
+    pub(super) upload_ms: f32,
+    pub(super) replay_ms: f32,
+}
+
 pub(super) fn draw_primitives_shadow_body(
     this: &mut RuntimeRenderController,
     r: &mut dyn newengine_core::render::RenderApi,
@@ -20,12 +29,12 @@ pub(super) fn draw_primitives_shadow_body(
     camera_position: Vec3,
     cascade_index: usize,
     cascade_texel_world_size: f32,
-) -> newengine_core::EngineResult<()> {
+) -> newengine_core::EngineResult<ShadowPrimitiveBodyProfile> {
     let stage_profile = runtime
         && (this.frame.frame_index <= 3 || this.frame.frame_index.is_multiple_of(30))
         && newengine_runtime_policy::render_runtime_policy().primitive_stage_log;
-    let total_started = stage_profile.then(std::time::Instant::now);
-    let scan_started = stage_profile.then(std::time::Instant::now);
+    let total_started = std::time::Instant::now();
+    let scan_started = std::time::Instant::now();
     let (primitive_snapshot, snapshot_reused) = this.primitive_scene_snapshot(scene, runtime);
     let reg_lock = this.bridges.scene.primitives();
     let reg = reg_lock.read();
@@ -107,10 +116,8 @@ pub(super) fn draw_primitives_shadow_body(
     let foliage_shadow_budget = foliage_instance_budget(runtime, true);
     entries.truncate(shadow_budget);
     foliage_entries.truncate(foliage_shadow_budget);
-    let scan_ms = scan_started
-        .map(|t| t.elapsed().as_secs_f64() * 1000.0)
-        .unwrap_or(0.0);
-    let plan_started = stage_profile.then(std::time::Instant::now);
+    let scan_ms = scan_started.elapsed().as_secs_f32() * 1000.0;
+    let plan_started = std::time::Instant::now();
 
     let plan_capacity = entries.len().saturating_add(foliage_entries.len());
     let mut plan_cache: FxHashMap<PrimitivePlanKey, PrimitiveGpuPlan> =
@@ -278,6 +285,7 @@ pub(super) fn draw_primitives_shadow_body(
     let shadow_log_due = runtime && route_diagnostics_due(this.frame.frame_index);
     let shadow_batch_count = batches.batch_count();
     let shadow_instance_count = batches.instance_count();
+    let plan_ms = plan_started.elapsed().as_secs_f32() * 1000.0;
     if batches.is_empty() {
         if shadow_log_due {
             newengine_ulog_api::ulog::debug!(
@@ -296,23 +304,24 @@ pub(super) fn draw_primitives_shadow_body(
                 shadow_instance_count,
             );
         }
-        return Ok(());
+        return Ok(ShadowPrimitiveBodyProfile {
+            total_ms: total_started.elapsed().as_secs_f32() * 1000.0,
+            scan_ms,
+            plan_ms,
+            upload_ms: 0.0,
+            replay_ms: 0.0,
+        });
     }
 
-    let plan_ms = plan_started
-        .map(|t| t.elapsed().as_secs_f64() * 1000.0)
-        .unwrap_or(0.0);
-    let upload_started = stage_profile.then(std::time::Instant::now);
+    let upload_started = std::time::Instant::now();
     let ordered_batches = batches.into_sorted_batches();
     let packed_upload = this
         .gpu
         .meshes
         .instance_uploader
         .upload_batches(r, &ordered_batches)?;
-    let upload_ms = upload_started
-        .map(|t| t.elapsed().as_secs_f64() * 1000.0)
-        .unwrap_or(0.0);
-    let replay_started = stage_profile.then(std::time::Instant::now);
+    let upload_ms = upload_started.elapsed().as_secs_f32() * 1000.0;
+    let replay_started = std::time::Instant::now();
 
     let mut replay = InstancedReplayState::default();
     for (batch, instance_slice) in ordered_batches
@@ -331,13 +340,9 @@ pub(super) fn draw_primitives_shadow_body(
         ))?;
     }
 
+    let replay_ms = replay_started.elapsed().as_secs_f32() * 1000.0;
+    let total_ms = total_started.elapsed().as_secs_f32() * 1000.0;
     if stage_profile {
-        let replay_ms = replay_started
-            .map(|t| t.elapsed().as_secs_f64() * 1000.0)
-            .unwrap_or(0.0);
-        let total_ms = total_started
-            .map(|t| t.elapsed().as_secs_f64() * 1000.0)
-            .unwrap_or(0.0);
         newengine_ulog_api::ulog::info!(
             "primitive.shadow.stage.profile: frame={} cascade={} total_ms={:.3} scan_ms={:.3} snapshot_reused={} entries={} plan_ms={:.3} upload_ms={:.3} replay_ms={:.3} batches={} instances={} bytes={}",
             this.frame.frame_index,
@@ -375,5 +380,11 @@ pub(super) fn draw_primitives_shadow_body(
         );
     }
 
-    Ok(())
+    Ok(ShadowPrimitiveBodyProfile {
+        total_ms,
+        scan_ms,
+        plan_ms,
+        upload_ms,
+        replay_ms,
+    })
 }

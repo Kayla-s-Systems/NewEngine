@@ -6,15 +6,37 @@ description = "Reusable FPS character control, locomotion and foot-contact mecha
 license = "Proprietary"
 
 [dependencies]
+newengine-animation-api = { path = "../newengine-animation-api" }
+newengine-animation-runtime = { path = "../newengine-animation-runtime" }
+newengine-tags-api = { path = "../newengine-tags-api" }
+newengine-core = { path = "../newengine-core" }
+newengine-materials = { path = "../newengine-materials" }
+newengine-primitives = { path = "../newengine-primitives" }
+newengine-world-runtime-api = { path = "../newengine-world-runtime-api" }
 newengine-ecs = { path = "../newengine-ecs" }
 newengine-engine-runtime = { path = "../newengine-engine-runtime" }
 newengine-gameplay-fps-api = { path = "../newengine-gameplay-fps-api" }
 newengine-input-actions-api = { path = "../newengine-input-actions-api" }
 newengine-math = { path = "../newengine-math" }
 newengine-model-contact-api = { path = "../newengine-model-contact-api" }
+newengine-model-domain-api = { path = "../newengine-model-domain-api" }
 newengine-physics-api = { path = "../newengine-physics-api" }
 newengine-sim = { path = "../newengine-sim" }
 newengine-transform = { path = "../newengine-transform" }
-newengine-ui-api = { path = "../newengine-ui-api" }
 newengine-ulog-api = { path = "../newengine-ulog-api" }
 serde_json = "1"
+newengine-assets = { path = "../newengine-assets" }
+newengine-assets-api = { path = "../newengine-assets-api" }
+newengine-asset-format-nehair = { path = "../newengine-asset-format-nehair" }
+newengine-definitions-runtime = { path = "../newengine-definitions-runtime" }
+newengine-material-domain-api = { path = "../newengine-material-domain-api" }
+newengine-material-runtime = { path = "../newengine-material-runtime" }
+newengine-model-client = { path = "../newengine-model-client" }
+newengine-model-runtime = { path = "../newengine-model-runtime" }
+newengine-model-skeleton-api = { path = "../newengine-model-skeleton-api" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-render-api = { path = "../newengine-render-api" }
+newengine-runtime-env = { path = "../newengine-runtime-env" }
+newengine-scene = { path = "../newengine-scene" }
+newengine-vfx-runtime = { path = "../newengine-vfx-runtime" }
+blake3 = "1"

@@ -98,9 +98,10 @@ pub fn load_authored_definition_entry(definition_ref: &str) -> Result<Definition
     )
 }
 
-pub(crate) fn load_authored_map(logical_path: &str) -> Result<LoadedAuthoredMap, String> {
-    let (map_ref, index) = load_authored_map_index(logical_path)?;
-
+pub(crate) fn load_authored_map_from_index(
+    map_ref: String,
+    index: MapIndexV1,
+) -> Result<LoadedAuthoredMap, String> {
     let mut cells = Vec::with_capacity(index.cells.len());
     let mut definitions = BTreeMap::new();
     for cell_ref in &index.cells {

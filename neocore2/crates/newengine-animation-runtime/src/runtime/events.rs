@@ -86,6 +86,19 @@ impl AnimationEventCursor {
         playback_time_seconds: f32,
         out: &mut Vec<AnimationEventOccurrence>,
     ) -> Result<usize, String> {
+        clip.validate_events()?;
+        self.advance_prevalidated(clip, playback_time_seconds, out)
+    }
+
+    /// Hot-path variant for clips admitted through `decode_ycd_*` / `AnimationClipBinding`.
+    /// Event structure has already passed validation at that boundary, so per-frame playback only
+    /// performs interval traversal and never rebuilds parameter-key sets or lowercase strings.
+    pub(crate) fn advance_prevalidated(
+        &mut self,
+        clip: &AnimationClip,
+        playback_time_seconds: f32,
+        out: &mut Vec<AnimationEventOccurrence>,
+    ) -> Result<usize, String> {
         if !playback_time_seconds.is_finite() || playback_time_seconds < 0.0 {
             return Err(format!(
                 "animation event playback time is invalid clip='{}' time={playback_time_seconds}",
@@ -101,7 +114,7 @@ impl AnimationEventCursor {
             // Backward time is an explicit seek/state restart. Do not synthesize history.
             return Ok(0);
         }
-        clip.collect_events_between(previous, playback_time_seconds, out)
+        clip.collect_events_between_prevalidated(previous, playback_time_seconds, out)
     }
 }
 
@@ -175,6 +188,20 @@ impl AnimationClip {
         current_playback_time_seconds: f32,
         out: &mut Vec<AnimationEventOccurrence>,
     ) -> Result<usize, String> {
+        self.validate_events()?;
+        self.collect_events_between_prevalidated(
+            previous_playback_time_seconds,
+            current_playback_time_seconds,
+            out,
+        )
+    }
+
+    pub(crate) fn collect_events_between_prevalidated(
+        &self,
+        previous_playback_time_seconds: f32,
+        current_playback_time_seconds: f32,
+        out: &mut Vec<AnimationEventOccurrence>,
+    ) -> Result<usize, String> {
         const MAX_EMISSIONS_PER_ADVANCE: usize = 4096;
         if !previous_playback_time_seconds.is_finite()
             || !current_playback_time_seconds.is_finite()
@@ -187,22 +214,25 @@ impl AnimationClip {
                 self.name, previous_playback_time_seconds, current_playback_time_seconds
             ));
         }
-        if self.events.is_empty() || current_playback_time_seconds == previous_playback_time_seconds {
+        if self.events.is_empty() || current_playback_time_seconds == previous_playback_time_seconds
+        {
             return Ok(0);
         }
-        self.validate_events()?;
         let initial_len = out.len();
         if !self.looped {
-            for (event_index, event) in self.events.iter().enumerate() {
-                if event.time_seconds > previous_playback_time_seconds
-                    && event.time_seconds <= current_playback_time_seconds
-                {
-                    out.push(AnimationEventOccurrence {
-                        event_index,
-                        playback_time_seconds: event.time_seconds,
-                        loop_index: 0,
-                    });
-                }
+            let first = self
+                .events
+                .partition_point(|event| event.time_seconds <= previous_playback_time_seconds);
+            let end = self
+                .events
+                .partition_point(|event| event.time_seconds <= current_playback_time_seconds);
+            out.reserve(end.saturating_sub(first));
+            for (event_index, event) in self.events[first..end].iter().enumerate() {
+                out.push(AnimationEventOccurrence {
+                    event_index: first + event_index,
+                    playback_time_seconds: event.time_seconds,
+                    loop_index: 0,
+                });
             }
             return Ok(out.len() - initial_len);
         }

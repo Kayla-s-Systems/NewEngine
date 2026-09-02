@@ -10,11 +10,7 @@ fn sample_bound_joint_wrapped(
             "animation root-motion joint index outside skeleton joint={skeleton_joint}"
         ));
     }
-    let Some(clip_joint) = binding
-        .clip_joint_to_skeleton
-        .iter()
-        .position(|joint| *joint == skeleton_joint)
-    else {
+    let Some(clip_joint) = binding.clip_joint_for_skeleton(skeleton_joint) else {
         return Ok(skeleton.bind_locals()[skeleton_joint]);
     };
     let frame_count = clip.frame_count();

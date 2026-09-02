@@ -29,3 +29,7 @@ newengine-math = { path = "../newengine-math", features = ["serde"] }
 newengine-service-api = { path = "../newengine-service-api" }
 newengine-service-kit = { path = "../newengine-service-kit" }
 newengine-ulog-api = { path = "../newengine-ulog-api" }
+
+newengine-runtime-env = { path = "../newengine-runtime-env" }
+
+newengine-render-api = { path = "../newengine-render-api" }

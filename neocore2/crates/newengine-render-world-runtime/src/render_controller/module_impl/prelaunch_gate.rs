@@ -1,13 +1,8 @@
 use newengine_core::host_events::CursorState;
-use newengine_core::render::{
-    BeginFrameDesc, Extent2D, RenderApi, RenderWorkBudget, SceneLaunchStatus, UploadPumpDesc,
-};
+use newengine_core::render::{RenderApi, RenderWorkBudget, SceneLaunchStatus, UploadPumpDesc};
 use newengine_core::{EngineResult, ModuleCtx};
-use newengine_math::collections::FxHashMap;
-use newengine_ui_api::{UiDrawList, UiLayerDrawPacketSet};
 
 use super::super::controller::RuntimeRenderController;
-use super::frame_envelope_builder::build_ui_layer_frame_envelope;
 use super::launch_loading::scene_launch_loading_status;
 use super::readiness;
 
@@ -19,8 +14,8 @@ impl RuntimeRenderController {
         backend_work_budget: Option<RenderWorkBudget>,
         material_upload_jobs: u32,
         trace_frame: bool,
-        window_w: u32,
-        window_h: u32,
+        _window_w: u32,
+        _window_h: u32,
     ) -> EngineResult<Option<SceneLaunchStatus>> {
         let next_frame = self.frame.frame_index.saturating_add(1).max(1);
         let mut prelaunch_gate = None;
@@ -165,49 +160,11 @@ impl RuntimeRenderController {
 
         self.frame.frame_index = next_frame;
         self.sync_cursor_state(ctx, CursorState::released());
+        // Prelaunch owns GPU/resource warmup only. Window presentation remains exclusively
+        // owned by the platform-native loading compositor until SceneLaunchStatus releases.
+        // Submitting even an empty Vulkan frame here clears/presents the swapchain over the
+        // native loader and makes the loading stage visually disappear.
         let _ = r.discard_recorded_commands();
-
-        if let Some(mut ui_layers) = ctx
-            .resources()
-            .get::<UiLayerDrawPacketSet>()
-            .cloned()
-            .filter(|layers| !layers.is_empty())
-        {
-            let original = ui_layer_payload_stats(&ui_layers);
-            self.filter_redundant_prelaunch_texture_delta(&mut ui_layers);
-            let submitted = ui_layer_payload_stats(&ui_layers);
-            newengine_ulog_api::ulog::debug!(
-                "render prelaunch loading ui: present frame={} window={}x{} layers={} mesh_cmds={} paint_cmds={} paint_images={} tex_set={}/{} patches={}/{} tex_bytes={}/{} reason='{}'",
-                next_frame,
-                window_w,
-                window_h,
-                ui_layers.packets.len(),
-                submitted.mesh_cmds,
-                submitted.paint_cmds,
-                submitted.paint_images,
-                submitted.texture_sets,
-                original.texture_sets,
-                submitted.texture_patches,
-                original.texture_patches,
-                submitted.texture_bytes,
-                original.texture_bytes,
-                gate.reason
-            );
-            present_prelaunch_loading_ui_frame(
-                r,
-                ui_layers,
-                self.viewport.clear_color,
-                next_frame,
-                window_w,
-                window_h,
-            )?;
-        } else if next_frame <= 4 || next_frame.is_multiple_of(120) {
-            newengine_ulog_api::ulog::warn!(
-                "render prelaunch loading ui: missing UiLayerDrawPacketSet in resources frame={} reason='{}'",
-                next_frame,
-                gate.reason
-            );
-        }
 
         let status = if prelaunch_released {
             self.bridges.scene.activate_profile_play_now();
@@ -229,125 +186,6 @@ impl RuntimeRenderController {
 
         Ok(Some(status))
     }
-
-    fn filter_redundant_prelaunch_texture_delta(&mut self, ui_layers: &mut UiLayerDrawPacketSet) {
-        for packet in &mut ui_layers.packets {
-            filter_redundant_draw_texture_delta(
-                &mut self.ui.prelaunch_texture_fingerprints,
-                &mut self.ui.prelaunch_patch_fingerprints,
-                &mut packet.draw_list,
-            );
-        }
-    }
-}
-
-fn filter_redundant_draw_texture_delta(
-    texture_fingerprints: &mut FxHashMap<u32, u64>,
-    patch_fingerprints: &mut FxHashMap<(u32, u32, u32, u32, u32), u64>,
-    ui: &mut UiDrawList,
-) {
-    for id in &ui.texture_delta.free {
-        texture_fingerprints.remove(&id.0);
-        patch_fingerprints.retain(|key, _| key.0 != id.0);
-    }
-
-    ui.texture_delta.set.retain(|id, texture| {
-        let fingerprint = ui_payload_fingerprint(texture.size, &texture.rgba8);
-        !matches!(
-            texture_fingerprints.insert(id.0, fingerprint),
-            Some(previous) if previous == fingerprint
-        )
-    });
-
-    ui.texture_delta.patches.retain(|patch| {
-        let key = (
-            patch.id.0,
-            patch.origin[0],
-            patch.origin[1],
-            patch.size[0],
-            patch.size[1],
-        );
-        let fingerprint = ui_payload_fingerprint(patch.size, &patch.rgba8);
-        !matches!(
-            patch_fingerprints.insert(key, fingerprint),
-            Some(previous) if previous == fingerprint
-        )
-    });
-}
-
-#[derive(Debug, Default, Clone, Copy)]
-struct UiLayerPayloadStats {
-    mesh_cmds: usize,
-    paint_cmds: usize,
-    paint_images: usize,
-    texture_sets: usize,
-    texture_patches: usize,
-    texture_bytes: usize,
-}
-
-fn ui_layer_payload_stats(ui_layers: &UiLayerDrawPacketSet) -> UiLayerPayloadStats {
-    let mut stats = UiLayerPayloadStats::default();
-    for packet in &ui_layers.packets {
-        let ui = &packet.draw_list;
-        stats.mesh_cmds += ui.mesh.cmds.len();
-        stats.paint_cmds += ui.paint.commands.len();
-        stats.paint_images += ui
-            .paint
-            .commands
-            .iter()
-            .filter(|cmd| matches!(cmd, newengine_ui_api::UiPaintCommand::Image(_)))
-            .count();
-        stats.texture_sets += ui.texture_delta.set.len();
-        stats.texture_patches += ui.texture_delta.patches.len();
-        stats.texture_bytes += ui
-            .texture_delta
-            .set
-            .values()
-            .map(|texture| texture.rgba8.len())
-            .sum::<usize>()
-            + ui.texture_delta
-                .patches
-                .iter()
-                .map(|patch| patch.rgba8.len())
-                .sum::<usize>();
-    }
-    stats
-}
-
-#[inline]
-fn ui_payload_fingerprint(size: [u32; 2], rgba8: &[u8]) -> u64 {
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(&size[0].to_le_bytes());
-    hasher.update(&size[1].to_le_bytes());
-    hasher.update(rgba8);
-    let hash = hasher.finalize();
-    u64::from_le_bytes(hash.as_bytes()[0..8].try_into().expect("blake3 prefix"))
-}
-
-fn present_prelaunch_loading_ui_frame(
-    r: &mut dyn RenderApi,
-    ui_layers: UiLayerDrawPacketSet,
-    clear_color: [f32; 4],
-    frame_index: u64,
-    window_w: u32,
-    window_h: u32,
-) -> EngineResult<()> {
-    if window_w == 0 || window_h == 0 || ui_layers.is_empty() {
-        return Ok(());
-    }
-
-    // `RenderApi::submit_frame` is an envelope submission contract, not a universal
-    // begin-frame contract. Open the bootstrap frame explicitly so non-backend backends
-    // do not depend on backend's defensive `if !in_frame { begin_frame(...) }` behavior.
-    r.begin_frame(BeginFrameDesc::new(clear_color).with_frame_index(frame_index))?;
-    let envelope = build_ui_layer_frame_envelope(
-        frame_index,
-        clear_color,
-        Extent2D::new(window_w, window_h),
-        ui_layers,
-    );
-    let _ = r.submit_frame(envelope)?;
-    r.end_frame()
 }
 
 fn prelaunch_material_decode_jobs(configured_jobs: u32) -> u32 {
@@ -397,32 +235,21 @@ mod loading_budget_tests {
     }
 
     #[test]
+    fn prelaunch_gate_never_submits_or_begins_a_window_frame() {
+        let source = include_str!("prelaunch_gate.rs");
+        let submit_frame = ["r.sub", "mit_frame("].concat();
+        let begin_frame = ["r.beg", "in_frame("].concat();
+        let end_frame = ["r.end", "_frame("].concat();
+        assert!(!source.contains(&submit_frame));
+        assert!(!source.contains(&begin_frame));
+        assert!(!source.contains(&end_frame));
+    }
+
+    #[test]
     fn prelaunch_decode_jobs_respect_runtime_ceiling() {
         assert_eq!(
             prelaunch_material_decode_jobs(u32::MAX),
             super::super::super::render_quality::MATERIAL_TEXTURE_MAX_ASYNC_DECODE_JOBS as u32
         );
-    }
-
-    #[test]
-    fn prelaunch_payload_stats_cover_all_layer_packets() {
-        let mut layers = UiLayerDrawPacketSet::new(4);
-        let mut system = UiDrawList::new();
-        system.screen_size_px = [1280, 720];
-        let mut debug = UiDrawList::new();
-        debug.screen_size_px = [1280, 720];
-        layers.push(newengine_ui_api::UiLayerDrawPacket::new(
-            newengine_ui_api::UiLayerDomain::System,
-            4,
-            system,
-        ));
-        layers.push(newengine_ui_api::UiLayerDrawPacket::new(
-            newengine_ui_api::UiLayerDomain::Debug,
-            4,
-            debug,
-        ));
-        let stats = ui_layer_payload_stats(&layers);
-        assert_eq!(layers.packets.len(), 2);
-        assert_eq!(stats.texture_bytes, 0);
     }
 }

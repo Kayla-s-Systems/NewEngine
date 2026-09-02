@@ -5,6 +5,8 @@ edition = "2021"
 description = "FPS game module composition for NewEngine"
 
 [dependencies]
+newengine-authored-world-runtime = { path = "../newengine-authored-world-runtime" }
+newengine-engine-runtime = { path = "../newengine-engine-runtime" }
 newengine-game-module-api = { path = "../newengine-game-module-api" }
 newengine-game-module-fps-contract = { path = "../newengine-game-module-fps-contract" }
 newengine-game-module-composition = { path = "../newengine-game-module-composition" }
@@ -16,3 +18,22 @@ newengine-gameplay-fps-lua = { path = "../newengine-gameplay-fps-lua" }
 newengine-gameplay-script-api = { path = "../newengine-gameplay-script-api" }
 newengine-project-runtime = { path = "../newengine-project-runtime" }
 newengine-service-api = { path = "../newengine-service-api" }
+newengine-fps-character-runtime = { path = "../newengine-fps-character-runtime" }
+newengine-world-environment-runtime = { path = "../newengine-world-environment-runtime" }
+newengine-game-data = { path = "../newengine-game-data" }
+newengine-assets = { path = "../newengine-assets" }
+newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
+newengine-camera = { path = "../newengine-camera" }
+newengine-core = { path = "../newengine-core" }
+newengine-ecs = { path = "../newengine-ecs" }
+newengine-lighting = { path = "../newengine-lighting" }
+newengine-materials = { path = "../newengine-materials", features = ["serde"] }
+newengine-math = { path = "../newengine-math" }
+newengine-model-domain-api = { path = "../newengine-model-domain-api" }
+newengine-plugin-host = { path = "../newengine-plugin-host" }
+newengine-primitives = { path = "../newengine-primitives" }
+newengine-scene = { path = "../newengine-scene", features = ["runtime"] }
+newengine-sim = { path = "../newengine-sim" }
+newengine-transform = { path = "../newengine-transform", features = ["ecs"], default-features = false }
+newengine-ulog-api = { path = "../newengine-ulog-api" }
+serde_json = "1"

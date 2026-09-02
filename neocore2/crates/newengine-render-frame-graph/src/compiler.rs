@@ -115,6 +115,27 @@ mod tests {
             .find(|resource| resource.label.as_deref() == Some("vfx_particle_state"))
             .expect("VFX particle-state resource missing")
             .id;
+        let particle_accum = plan
+            .graph
+            .resources
+            .iter()
+            .find(|resource| resource.label.as_deref() == Some("particle_accum"))
+            .expect("particle accumulation resource missing")
+            .id;
+        let particle_gbuffer = plan
+            .graph
+            .passes
+            .iter()
+            .find(|pass| pass.kind == RenderGraphPassKind::ParticleGBuffer)
+            .expect("particle gbuffer pass missing")
+            .id;
+        let particle_composite = plan
+            .graph
+            .passes
+            .iter()
+            .find(|pass| pass.kind == RenderGraphPassKind::ParticleComposite)
+            .expect("particle composite pass missing")
+            .id;
         let transparent = plan
             .graph
             .passes
@@ -135,12 +156,24 @@ mod tests {
 
         assert!(compiled.dag.edges.iter().any(|edge| {
             edge.producer == particle_simulation_id
-                && edge.consumer == transparent
+                && edge.consumer == particle_gbuffer
                 && edge.resource == particle_state
                 && edge.kind == RenderGraphDependencyKind::ReadAfterWrite
         }));
         assert!(compiled.dag.edges.iter().any(|edge| {
+            edge.producer == particle_gbuffer
+                && edge.consumer == particle_composite
+                && edge.resource == particle_accum
+                && edge.kind == RenderGraphDependencyKind::ReadAfterWrite
+        }));
+        assert!(compiled.dag.edges.iter().any(|edge| {
             edge.producer == forward
+                && edge.consumer == particle_composite
+                && edge.resource == RG_SCENE_HDR_COLOR
+                && edge.kind == RenderGraphDependencyKind::WriteAfterWrite
+        }));
+        assert!(compiled.dag.edges.iter().any(|edge| {
+            edge.producer == particle_composite
                 && edge.consumer == transparent
                 && edge.resource == RG_SCENE_HDR_COLOR
                 && edge.kind == RenderGraphDependencyKind::WriteAfterWrite

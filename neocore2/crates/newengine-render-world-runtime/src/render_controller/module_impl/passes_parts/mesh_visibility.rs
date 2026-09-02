@@ -14,6 +14,7 @@ pub(super) const RUNTIME_TERRAIN_FORWARD_BUDGET: usize = 64;
 pub(super) const RUNTIME_TERRAIN_SHADOW_BUDGET: usize = 64;
 pub(super) const EDITOR_TERRAIN_FORWARD_BUDGET: usize = 64;
 pub(super) const EDITOR_TERRAIN_SHADOW_BUDGET: usize = 64;
+const DEFAULT_SCENE_CULLING_ENABLED: bool = false;
 
 #[derive(Clone, Copy, Debug)]
 struct MeshRuntimePolicy {
@@ -148,11 +149,12 @@ impl MeshRuntimePolicy {
                 ],
             ],
             terrain_receive_shadows_override: optional_bool("NEWENGINE_TERRAIN_RECEIVE_SHADOWS"),
-            // Exact view-frustum culling is safe as the default; the previous default-off
-            // policy existed because the old forward-cone heuristic could pop visible objects.
+            // CPU extraction culling is opt-in. Backend clip-space rejection is authoritative;
+            // default-on CPU rejection can hide authored world geometry when bounds are stale
+            // or conservative for a particular camera pose.
             scene_culling_enabled: newengine_runtime_env::var_bool(
                 "NEWENGINE_RENDER_SCENE_CULLING",
-                true,
+                DEFAULT_SCENE_CULLING_ENABLED,
             ),
             terrain_render_distance: lod_scaled(
                 newengine_runtime_env::var_f32(
@@ -532,6 +534,11 @@ pub(super) fn primitive_near_accept_distance() -> f32 {
 #[cfg(test)]
 mod startup_lod_scale_tests {
     use super::scale_lod_distance;
+
+    #[test]
+    fn cpu_scene_culling_is_opt_in_by_default() {
+        assert!(!super::DEFAULT_SCENE_CULLING_ENABLED);
+    }
 
     #[test]
     fn frustum_culler_rejects_far_offscreen_spheres() {

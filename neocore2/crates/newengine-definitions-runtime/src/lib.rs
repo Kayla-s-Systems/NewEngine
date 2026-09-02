@@ -27,6 +27,7 @@ use newengine_service_kit::{
 use serde::{Deserialize, Serialize};
 
 mod loading;
+mod metadata;
 mod model;
 mod parsing;
 mod projection;
@@ -34,6 +35,10 @@ mod request;
 mod service;
 
 use loading::*;
+pub use metadata::{
+    definition_metadata_namespace, load_definition_entry_v1, metadata_value_bool,
+    metadata_value_f32, metadata_value_string,
+};
 pub use model::{
     DefinitionEntryV1, DefinitionIdentityV1, DefinitionManifestEntryV1, DefinitionManifestRequest,
     DefinitionManifestV1, DefinitionRefRequest, DefinitionRefResolutionV1, DefinitionRefsV1,

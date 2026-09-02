@@ -41,8 +41,8 @@ pub(crate) fn validate_material_body_schema(
     bytes: &[u8],
     descriptor: &newengine_assets_api::AssetFileTypeDescriptor,
 ) -> Result<(), String> {
-    let text = std::str::from_utf8(bytes)
-        .map_err(|_| "material library body is not UTF-8".to_owned())?;
+    let text =
+        std::str::from_utf8(bytes).map_err(|_| "material library body is not UTF-8".to_owned())?;
     let doc = authored_xml::parse_xml_document(text, "engine.assets.materials authored body")?;
     let root = doc.root_element();
     let schema = authored_xml::root_schema(root);
@@ -154,23 +154,16 @@ pub(crate) fn preview_material_name_from_body(bytes: &[u8]) -> Result<String, St
         .ok_or_else(|| "material library contains no named materials".to_owned())
 }
 
-pub(crate) fn decode_material_entry_payload(
-    bytes: &[u8],
+pub(crate) fn select_material_entry_from_library(
+    library: &AuthoredMaterialLibrary,
     selector: &str,
 ) -> Result<AuthoredMaterialDescriptor, String> {
-    let text = std::str::from_utf8(bytes).map_err(|_| {
-        "NEMAT payload must be UTF-8 XML material library inside the NEF8 ListFile body".to_owned()
-    })?;
-    if !authored_xml::text_is_xml(text) {
-        return Err("NEMAT body must be XML <NematMaterialLibrary>; JSON material bodies are forbidden in authored .nemat files".to_owned());
-    }
-    let library = decode_nemat_material_library_xml(text)?;
-    let validation = validate_authored_material_library(&library);
-    if !validation.valid {
-        return Err(format!(
-            "invalid XML material library: {}",
-            validation.errors.join("; ")
-        ));
+    if let Some(material) = library
+        .materials
+        .iter()
+        .find(|material| material.name.trim().eq_ignore_ascii_case(selector.trim()))
+    {
+        return Ok(material.clone());
     }
     let available = library
         .materials
@@ -179,11 +172,18 @@ pub(crate) fn decode_material_entry_payload(
         .filter(|name| !name.trim().is_empty())
         .collect::<Vec<_>>()
         .join(",");
-    library
-        .materials
-        .into_iter()
-        .find(|material| material.name.trim().eq_ignore_ascii_case(selector.trim()))
-        .ok_or_else(|| format!("material entry '{selector}' not found in XML .nemat library; available=[{available}]"))
+    Err(format!(
+        "material entry '{selector}' not found in XML .nemat library; available=[{available}]"
+    ))
+}
+
+#[cfg(test)]
+pub(crate) fn decode_material_entry_payload(
+    bytes: &[u8],
+    selector: &str,
+) -> Result<AuthoredMaterialDescriptor, String> {
+    let library = decode_nemat_material_library_from_body(bytes)?;
+    select_material_entry_from_library(&library, selector)
 }
 
 fn decode_nemat_material_library_xml(text: &str) -> Result<AuthoredMaterialLibrary, String> {
@@ -556,6 +556,35 @@ pub(crate) fn normalize_material_logical_path(path: &str) -> Result<String, Stri
 #[cfg(test)]
 mod canonical_identity_tests {
     use super::*;
+
+    #[test]
+    fn decoded_library_supports_multiple_selector_reads_without_reparse() {
+        let library = AuthoredMaterialLibrary {
+            version: 1,
+            materials: vec![
+                AuthoredMaterialDescriptor {
+                    name: "a".to_owned(),
+                    ..Default::default()
+                },
+                AuthoredMaterialDescriptor {
+                    name: "b".to_owned(),
+                    ..Default::default()
+                },
+            ],
+        };
+        assert_eq!(
+            select_material_entry_from_library(&library, "a")
+                .unwrap()
+                .name,
+            "a"
+        );
+        assert_eq!(
+            select_material_entry_from_library(&library, "B")
+                .unwrap()
+                .name,
+            "b"
+        );
+    }
 
     #[test]
     fn zero_alpha_cutoff_does_not_enable_alpha_test() {

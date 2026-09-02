@@ -1,10 +1,10 @@
 use super::*;
 
 #[test]
-fn texture_decode_is_asset_io_normal_priority_not_frame_interactive() {
+fn texture_decode_is_asset_io_background_priority_not_frame_interactive() {
     let request = material_texture_decode_request("textures/characters/abby.ytd@m00_base", 42);
     assert_eq!(request.lane, TaskLane::AssetIo);
-    assert_eq!(request.priority, TaskPriority::Normal);
+    assert_eq!(request.priority, TaskPriority::Background);
     assert_eq!(request.frame_id, Some(42));
     assert_eq!(request.task_domain, task_domain::ENGINE_ASSETS);
     assert_eq!(request.task_pass, task_pass::TEXTURE_DECODE);
