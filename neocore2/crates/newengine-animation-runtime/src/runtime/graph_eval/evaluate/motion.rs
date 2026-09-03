@@ -60,13 +60,13 @@ fn evaluate_motion(
 
             // Keep inactive cursors synchronized to current graph time without synthesizing their
             // historical markers if the blend parameter later enters their segment.
-            for sample_index in 0..samples.len() {
+            for (sample_index, cursor) in runtime.cursors.iter_mut().enumerate() {
                 if sample_index == left_index || sample_index == right_index {
                     continue;
                 }
                 let playback_time =
                     sample_playback_time(graph, motion, sample_index, motion_time_seconds);
-                runtime.cursors[sample_index].seek(playback_time)?;
+                cursor.seek(playback_time)?;
             }
 
             let left_time = sample_playback_time(graph, motion, left_index, motion_time_seconds);
@@ -157,13 +157,13 @@ fn evaluate_motion(
 
             // Inactive samples track the current synchronized clock without replaying historical
             // markers if the 2D query later enters their region.
-            for sample_index in 0..samples.len() {
+            for (sample_index, cursor) in runtime.cursors.iter_mut().enumerate() {
                 if weights.contains(sample_index) {
                     continue;
                 }
                 let playback_time =
                     sample_playback_time(graph, motion, sample_index, motion_time_seconds);
-                runtime.cursors[sample_index].seek(playback_time)?;
+                cursor.seek(playback_time)?;
             }
 
             let mut accumulated_weight = 0.0_f32;
