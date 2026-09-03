@@ -118,6 +118,10 @@ mod tests {
     use crate::profile_catalog::{atmosphere_profile_by_id, profile_by_id};
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "environment f32 bit patterns are validated by native tests; Miri is used for UB semantics"
+    )]
     fn graph_is_deterministic_without_seed_or_random_forcing() {
         let (environment, _) = profile_by_id("environment.game_ready_forest_road");
         let profile = atmosphere_profile_by_id(environment.atmosphere_profile_ref);

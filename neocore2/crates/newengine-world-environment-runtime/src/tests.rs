@@ -31,6 +31,10 @@ fn frame(req: EnvironmentFrameRequest) -> newengine_world_environment_api::Envir
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "environment f32 bit patterns are validated by native tests; Miri is used for UB semantics"
+)]
 fn default_provider_is_deterministic_for_same_request() {
     let req = request("environment.default", 0.5, 42);
     let a = frame(req.clone());
@@ -80,6 +84,10 @@ fn clear_sky_constraint_is_physical_consumer_state_not_renderer_only_mask() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "environment f32 bit patterns are validated by native tests; Miri is used for UB semantics"
+)]
 fn weather_physics_is_seed_independent() {
     let a = frame(request("environment.game_ready_forest_road", 0.42, 1));
     let b = frame(request(

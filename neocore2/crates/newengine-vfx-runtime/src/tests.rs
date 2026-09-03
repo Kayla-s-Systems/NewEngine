@@ -616,6 +616,10 @@ fn pending_tracer_is_clamped_before_pre_update_materialization() {
     assert!((tracer.max_distance - 1.0).abs() < 1.0e-5);
 }
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "transcendental f32 results are not a bitwise determinism contract under Miri"
+)]
 fn deterministic_impact_seed_reproduces_gpu_spark_velocities() {
     fn velocities() -> Vec<[f32; 3]> {
         let mut world = test_world();

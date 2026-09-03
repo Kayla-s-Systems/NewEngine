@@ -135,7 +135,7 @@ pub(crate) fn update_platform_window_snapshot(ready: PlatformWindowReadyV1) {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(miri)))]
 mod loaded_provider_contract_tests {
     fn load_first_party(manager: &mut newengine_plugin_host::PluginManager, plugin_id: &str) {
         manager
