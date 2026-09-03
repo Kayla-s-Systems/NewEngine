@@ -15,13 +15,13 @@ fn main() {
 
 fn compile_windows_resources() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
-    let root_dir = manifest_dir.ancestors().nth(4).unwrap_or_else(|| {
+    let root_dir = manifest_dir.ancestors().nth(3).unwrap_or_else(|| {
         panic!(
             "NewEngine build cannot resolve ROOT-DIR from {}",
             manifest_dir.display()
         )
     });
-    let icon_path = root_dir.join("Shared/Source/branding/logo.ico");
+    let icon_path = root_dir.join("logoStar.ico");
     let icon_path = fs::canonicalize(&icon_path).unwrap_or_else(|_| {
         panic!(
             "NewEngine canonical Windows application icon is missing: {}",

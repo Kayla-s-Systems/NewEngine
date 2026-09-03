@@ -362,8 +362,7 @@ impl PackedLights {
         }
         let light_count = frame.light_count.min(MAX_LOCAL_SHADOW_LIGHTS as u32) as usize;
         let mut max_strength = 0.0_f32;
-        for i in 0..light_count {
-            let light = frame.lights[i];
+        for light in frame.lights.iter().take(light_count) {
             let meta = [
                 1.0,
                 light.first_view as f32,
