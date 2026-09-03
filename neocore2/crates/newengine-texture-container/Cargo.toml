@@ -6,8 +6,10 @@ license = "Proprietary"
 description = "NewEngine NEF8/YTD texture dictionary payload container"
 
 [dependencies]
-newengine-assets-api = { path = "../newengine-assets-api" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
 zstd = "0.13"
+
+[dev-dependencies]
+newengine-assets-api = { path = "../newengine-assets-api" }

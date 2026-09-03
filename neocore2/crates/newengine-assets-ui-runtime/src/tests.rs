@@ -170,14 +170,11 @@ fn aurelia_asset_preview_fixture_xml() -> String {
             .nth(2)
             .expect("crate manifest must live under neocore2/crates");
 
-        for candidate in
-            [workspace_root.join("assets/ui/src/devtools/aurelia_asset_preview_stand.neui.xml")]
-        {
-            if candidate.exists() {
-                return std::fs::read_to_string(&candidate).unwrap_or_else(|err| {
-                    panic!("failed to read {}: {}", candidate.display(), err)
-                });
-            }
+        let candidate =
+            workspace_root.join("assets/ui/src/devtools/aurelia_asset_preview_stand.neui.xml");
+        if candidate.exists() {
+            return std::fs::read_to_string(&candidate)
+                .unwrap_or_else(|err| panic!("failed to read {}: {}", candidate.display(), err));
         }
     }
 
