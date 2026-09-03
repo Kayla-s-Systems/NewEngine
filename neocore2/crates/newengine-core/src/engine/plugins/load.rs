@@ -210,9 +210,36 @@ impl<E: Send + 'static> Engine<E> {
                 ))
             })?;
         if roots.is_empty() {
-            return Err(EngineError::Other(
-                "plugins: no discovery roots resolved for incremental load".to_owned(),
-            ));
+            install_forward_logger_once(host);
+            if bootstrap_preload_deferred() {
+                emit_startup_logs_after_logger_ready();
+            }
+
+            self.validate_required_plugins_loaded()?;
+            self.engine_plugins_loaded = true;
+            self.plugins_loaded = true;
+            self.expose_plugins_snapshot();
+
+            let event = EngineLifecycleEvent::EnginePluginsReady {
+                loaded_count: 0,
+                origin: "load_engine_plugins_incremental_step",
+            };
+            self.mark_readiness_observed(&event);
+            self.events.publish(event)?;
+            newengine_ulog_api::ulog::info!(
+                "plugins: done (phase=engine-load-incremental roots=0 count=0)"
+            );
+
+            return Ok(newengine_plugin_host::IncrementalLoadOutcome {
+                finished: true,
+                loaded_total: 0,
+                loaded_this_phase: 0,
+                pending_total: 0,
+                completed: 0,
+                load_errors: 0,
+                progress_01: 1.0,
+                current_path: None,
+            });
         }
         if self.plugin_discovery_root_index >= roots.len() {
             self.plugin_discovery_root_index = 0;

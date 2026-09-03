@@ -104,4 +104,23 @@ mod tests {
         engine.shutdown().expect("empty host shutdown");
         assert_eq!(engine.run_state(), newengine_core::EngineRunState::Stopped);
     }
+
+    #[test]
+    fn empty_host_incremental_plugin_phase_succeeds_with_zero_modules() {
+        let mut engine = build_empty_host(16).expect("empty host kernel");
+        let outcome = engine
+            .load_engine_plugins_incremental_step()
+            .expect("zero-module incremental plugin phase");
+        assert!(outcome.finished);
+        assert_eq!(outcome.loaded_total, 0);
+        assert_eq!(outcome.pending_total, 0);
+        assert_eq!(outcome.load_errors, 0);
+        assert_eq!(outcome.progress_01, 1.0);
+
+        engine
+            .start()
+            .expect("empty host startup after plugin phase");
+        assert_eq!(engine.run_state(), newengine_core::EngineRunState::Running);
+        engine.shutdown().expect("empty host shutdown");
+    }
 }
