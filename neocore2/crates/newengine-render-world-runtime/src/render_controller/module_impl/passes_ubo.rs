@@ -69,8 +69,13 @@ pub(super) fn write_lit_ubo_ex(
     }
 
     let cascade_mvp_off = 448;
-    for cascade in 0..newengine_render_feature_api::MAX_DIRECTIONAL_SHADOW_CASCADES {
-        let cascade_cols = lights.shadow_cascade_light_mvp[cascade].to_cols_array();
+    for (cascade, cascade_mvp) in lights
+        .shadow_cascade_light_mvp
+        .iter()
+        .take(newengine_render_feature_api::MAX_DIRECTIONAL_SHADOW_CASCADES)
+        .enumerate()
+    {
+        let cascade_cols = cascade_mvp.to_cols_array();
         for (i, f) in cascade_cols.iter().enumerate() {
             let off = cascade_mvp_off + cascade * 64 + i * 4;
             bytes[off..off + 4].copy_from_slice(&f.to_ne_bytes());
@@ -78,21 +83,21 @@ pub(super) fn write_lit_ubo_ex(
     }
 
     let shadow_off = 704;
-    for i in 0..4 {
+    for (i, value) in lights.shadow_params.iter().enumerate() {
         let off = shadow_off + i * 4;
-        bytes[off..off + 4].copy_from_slice(&lights.shadow_params[i].to_ne_bytes());
+        bytes[off..off + 4].copy_from_slice(&value.to_ne_bytes());
     }
 
     let shadow_extra_off = 720;
-    for i in 0..4 {
+    for (i, value) in lights.shadow_extra.iter().enumerate() {
         let off = shadow_extra_off + i * 4;
-        bytes[off..off + 4].copy_from_slice(&lights.shadow_extra[i].to_ne_bytes());
+        bytes[off..off + 4].copy_from_slice(&value.to_ne_bytes());
     }
 
     let shadow_splits_off = 736;
-    for i in 0..4 {
+    for (i, value) in lights.shadow_cascade_splits.iter().enumerate() {
         let off = shadow_splits_off + i * 4;
-        bytes[off..off + 4].copy_from_slice(&lights.shadow_cascade_splits[i].to_ne_bytes());
+        bytes[off..off + 4].copy_from_slice(&value.to_ne_bytes());
     }
 
     for (base, values) in [
