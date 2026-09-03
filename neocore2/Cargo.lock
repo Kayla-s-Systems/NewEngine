@@ -3500,7 +3500,6 @@ version = "0.1.0"
 dependencies = [
  "newengine-replication-api",
  "serde",
- "serde_json",
 ]
 
 [[package]]
