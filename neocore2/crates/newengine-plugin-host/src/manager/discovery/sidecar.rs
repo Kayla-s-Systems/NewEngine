@@ -259,14 +259,21 @@ fn sha256_file(path: &Path) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    static NEXT_TEMP_ARTIFACT_ID: AtomicU64 = AtomicU64::new(0);
+
     fn temp_artifact(name: &str, bytes: &[u8]) -> PathBuf {
-        let nonce = SystemTime::now()
+        let clock = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock")
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!("northstar-sidecar-{nonce}"));
+        let sequence = NEXT_TEMP_ARTIFACT_ID.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "northstar-sidecar-{}-{clock}-{sequence}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&dir).expect("temp dir");
         let path = dir.join(name);
         std::fs::write(&path, bytes).expect("temp artifact");
