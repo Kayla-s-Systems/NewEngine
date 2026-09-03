@@ -60,7 +60,7 @@ impl AssetPreviewCameraState {
         }
         let _ = self
             .yaw_pitch
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |packed| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |packed| {
                 let (yaw, pitch) = unpack_f32_pair(packed);
                 let next_yaw =
                     (yaw - dx_px * PREVIEW_ORBIT_SENSITIVITY).rem_euclid(std::f32::consts::TAU);
@@ -124,7 +124,7 @@ impl AssetPreviewCameraState {
         };
         let _ = self
             .distance
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |bits| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |bits| {
                 let current = f32::from_bits(bits);
                 let next = (current * 0.86_f32.powf(steps))
                     .clamp(PREVIEW_MIN_DISTANCE, PREVIEW_MAX_DISTANCE);

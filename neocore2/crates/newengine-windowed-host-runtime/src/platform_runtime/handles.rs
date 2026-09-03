@@ -1,5 +1,7 @@
 use newengine_core::{EngineError, EngineResult};
-use newengine_platform_api::{NativeWindowBackendV1, NativeWindowHandlesV1};
+#[cfg(any(target_os = "windows", all(unix, not(target_os = "macos"))))]
+use newengine_platform_api::NativeWindowBackendV1;
+use newengine_platform_api::NativeWindowHandlesV1;
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 #[cfg(windows)]
 use std::num::NonZeroIsize;
