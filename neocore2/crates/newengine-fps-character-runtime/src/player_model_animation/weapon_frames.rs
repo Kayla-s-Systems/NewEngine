@@ -13,16 +13,18 @@ pub(crate) fn player_rifle_view_rotation_world(
         .map(|controller| controller.rot_offset)
         .unwrap_or(Quat::IDENTITY)
         .normalize_or_identity();
-    let view_rotation_ws = world
-        .get::<newengine_sim::CharacterMotor>(player)
-        .map(|motor| {
-            (Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0) * camera_rot_offset)
-                .normalize_or_identity()
-        })
+    // The active gameplay camera owns view orientation in orbit-style TPP. In that mode mouse look
+    // deliberately does not mutate CharacterMotor yaw/pitch, so consulting the motor first makes the
+    // weapon aim delta appear frozen while the camera visibly moves. Prefer the actual active CameraRig
+    // rotation; CharacterMotor remains the fallback for modes where no gameplay camera pose is published.
+    let view_rotation_ws = active_camera
+        .and_then(|camera| world.get::<newengine_sim::CameraRigComp>(camera))
+        .map(|rig| rig.0.rotation.normalize_or_identity())
         .or_else(|| {
-            active_camera
-                .and_then(|camera| world.get::<newengine_sim::CameraRigComp>(camera))
-                .map(|rig| rig.0.rotation.normalize_or_identity())
+            world.get::<newengine_sim::CharacterMotor>(player).map(|motor| {
+                (Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0) * camera_rot_offset)
+                    .normalize_or_identity()
+            })
         })?;
     view_rotation_ws.is_finite().then_some(view_rotation_ws)
 }

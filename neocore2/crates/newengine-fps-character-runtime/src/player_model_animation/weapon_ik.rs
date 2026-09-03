@@ -1,5 +1,75 @@
 include!("weapon_ik/solver.rs");
 
+
+/// Apply third-person RMB/free-aim as an authored upper-body delta, not as a detached weapon-root
+/// correction. Native rifle prop sockets live under the wrists, so rotating both clavicle-owned arm
+/// chains moves the firing socket, both hands and the muzzle together while leaving neck/head
+/// authority untouched. Body turn-in-place may later consume large residual yaw and naturally
+/// recenters this local arm offset.
+fn apply_native_rifle_clavicle_aim_delta(
+    skeleton: &ModelSkeletonMetadata,
+    animation_runtime: &AnimationSkeletonRuntime,
+    pose: &mut [JointLocalPose],
+    frames: &mut Vec<Mat4>,
+    rig: &WeaponArmIkRig,
+    authored_sight_forward: Vec3,
+    target_sight_forward: Vec3,
+) -> Result<bool, String> {
+    let (Some(right_clavicle), Some(left_clavicle)) = (rig.right_clavicle, rig.left_clavicle) else {
+        return Ok(false);
+    };
+    let from = authored_sight_forward.normalize_or_zero();
+    let to = target_sight_forward.normalize_or_zero();
+    if !from.is_finite()
+        || !to.is_finite()
+        || from.length_squared() <= 1.0e-8
+        || to.length_squared() <= 1.0e-8
+    {
+        return Ok(false);
+    }
+    let mut delta = Quat::from_rotation_arc(from, to).normalize_or_identity();
+    // Keep a native arm-space envelope. Beyond this the authored body turn owns the remaining yaw;
+    // do not ask shoulders to absorb a near-180-degree camera orbit in one frame.
+    if delta.w < 0.0 {
+        delta = Quat::from_xyzw(-delta.x, -delta.y, -delta.z, -delta.w);
+    }
+    const MAX_ARM_AIM_RADIANS: f32 = 65.0_f32.to_radians();
+    let angle = (2.0 * delta.w.clamp(-1.0, 1.0).acos()).abs();
+    if angle > MAX_ARM_AIM_RADIANS && angle > 1.0e-6 {
+        delta = Quat::IDENTITY
+            .slerp(delta, MAX_ARM_AIM_RADIANS / angle)
+            .normalize_or_identity();
+    }
+    if delta.dot(Quat::IDENTITY).abs() >= 0.999_999_9 {
+        return Ok(true);
+    }
+
+    let arm_roots = if right_clavicle == left_clavicle {
+        [Some(right_clavicle), None]
+    } else {
+        [Some(right_clavicle), Some(left_clavicle)]
+    };
+    for clavicle in arm_roots.into_iter().flatten() {
+        let current_global = frames
+            .get(clavicle)
+            .copied()
+            .ok_or("rifle ADS clavicle frame missing")?
+            .to_scale_rotation_translation()
+            .1
+            .normalize_or_identity();
+        let desired_global = (delta * current_global).normalize_or_identity();
+        set_pose_joint_global_rotation(
+            skeleton,
+            pose,
+            frames,
+            clavicle,
+            desired_global,
+        )?;
+        refresh_model_joint_frames_subtree(animation_runtime, pose, frames, clavicle)?;
+    }
+    Ok(true)
+}
+
 /// Authored equipment animation owns the third-person weapon pose whenever it supplies a firing-hand
 /// contact. A qualified prop socket is the strongest authority; otherwise the animated firing palm owns
 /// the complete weapon root transform (translation + orientation). The anatomical ReadyHold contract is
@@ -14,7 +84,7 @@ fn apply_equipped_weapon_support_ik(
     pose: &mut [JointLocalPose],
     frames: &mut Vec<Mat4>,
     view_forward_model: Option<Vec3>,
-    first_person_view_rotation_model: Option<Quat>,
+    view_rotation_model: Option<Quat>,
     first_person_eye_model: Option<Vec3>,
     first_person_active: bool,
     aim_alpha: f32,
@@ -27,6 +97,7 @@ fn apply_equipped_weapon_support_ik(
     stabilize_native_support_hand: bool,
     support_right_hand: bool,
     support_left_hand: bool,
+    relative_ads_state: Option<&mut EquipmentRelativeAdsState>,
 ) -> Result<Option<WeaponIkSolveResult>, String> {
     let Some(rig) = rig else {
         return Ok(None);
@@ -84,7 +155,7 @@ fn apply_equipped_weapon_support_ik(
         && authored_hand_contacts
         && support_right_hand)
         .then(|| frames[rig.right_palm])
-        .zip(first_person_view_rotation_model)
+        .zip(view_rotation_model)
         .and_then(|(right_palm, view_rotation)| {
             crate::weapon_grip::weapon_first_person_hand_anchored_root(
                 presentation,
@@ -95,17 +166,62 @@ fn apply_equipped_weapon_support_ik(
                 recoil_yaw_radians,
             )
         });
-    let native_sight_aim_root = authored_prop_root
-        .filter(|_| !first_person_active && aim_alpha > 1.0e-4)
-        .zip(view_forward_model)
-        .and_then(|(root, view_forward)| {
-            crate::weapon_grip::weapon_sight_aligned_root_around_handle(
-                presentation,
-                root,
-                view_forward,
-                aim_alpha,
-            )
+    let mut relative_ads_state = relative_ads_state;
+    let native_relative_target = authored_prop_root
+        .filter(|_| !first_person_active)
+        .and_then(|root| {
+            let authored_sight = crate::weapon_grip::weapon_sight_forward(presentation, root);
+            relative_ads_state.as_deref_mut().and_then(|state| {
+                view_rotation_model.and_then(|view| state.relative_sight_target(view, authored_sight))
+            })
         });
+
+    // Native TPP rifle aim is arm-owned. Move both clavicle/arm chains first; the weapon root is then
+    // re-read from the moved right prop socket. This cannot be cancelled by a right-arm reach failure
+    // because the firing hand/socket itself is the motion authority.
+    let native_arm_aim_applied = if let (Some(root), Some(target)) =
+        (authored_prop_root, native_relative_target)
+    {
+        let authored_sight = crate::weapon_grip::weapon_sight_forward(presentation, root);
+        apply_native_rifle_clavicle_aim_delta(
+            skeleton,
+            animation_runtime,
+            pose,
+            frames,
+            rig,
+            authored_sight,
+            target,
+        )?
+    } else {
+        false
+    };
+    let authored_prop_root = if native_arm_aim_applied {
+        rig.right_prop_attachment
+            .and_then(|index| frames.get(index).copied())
+            .and_then(|frame| {
+                crate::weapon_grip::weapon_root_from_authored_prop_frame(presentation, frame)
+            })
+            .or(authored_prop_root)
+    } else {
+        authored_prop_root
+    };
+    let native_sight_aim_root = if native_arm_aim_applied {
+        authored_prop_root
+    } else {
+        authored_prop_root
+            .filter(|_| !first_person_active)
+            .and_then(|root| {
+                let target = match relative_ads_state.as_ref() {
+                    Some(_) => native_relative_target,
+                    None => (aim_alpha > 1.0e-4).then_some(view_forward_model).flatten(),
+                }?;
+                crate::weapon_grip::weapon_sight_aligned_root_around_stock_contact(
+                    presentation,
+                    root,
+                    target,
+                )
+            })
+    };
     let root_contract = if let Some(root) = authored_prop_root {
         let root = native_sight_aim_root.unwrap_or(root);
         // Qualified original-content grip owns the prop frame directly. Do not reinterpret its
@@ -161,7 +277,7 @@ fn apply_equipped_weapon_support_ik(
         // Defensive compatibility fallback for rigs that explicitly disable the firing-hand support
         // chain. Normal full-body FPP never enters this path.
         first_person_eye_model
-            .zip(first_person_view_rotation_model)
+            .zip(view_rotation_model)
             .and_then(|(eye, view_rotation)| {
                 crate::weapon_grip::weapon_first_person_solve_contract_presented(
                     presentation,
@@ -294,7 +410,8 @@ fn apply_equipped_weapon_support_ik(
     // the visible palm on the foregrip. Strict rifle Ready/Aim therefore stabilizes only the left
     // support arm, while the right arm/root remain immutable.
     let native_view_aim = native_prop_owned && native_sight_aim_root.is_some();
-    let solve_right_hand = support_right_hand && (!native_prop_owned || native_view_aim);
+    let solve_right_hand = support_right_hand
+        && (!native_prop_owned || (native_view_aim && !native_arm_aim_applied));
     let solve_left_hand =
         support_left_hand && (!native_prop_owned || stabilize_native_support_hand);
     let hand_owned_root = first_person_hand_root.is_some() || authored_hand_root.is_some();
@@ -396,7 +513,7 @@ fn apply_equipped_weapon_support_ik(
     // anatomical right arm cannot reach the requested camera-aligned contract without violating the
     // safe-extension gate, keep the original authored prop root for this frame. Large yaw is then
     // resolved by body turn-in-place instead of rubber-arm stretching or a floating weapon.
-    let native_view_aim_committed = if native_view_aim && !right_solved {
+    let native_view_aim_committed = if native_view_aim && !native_arm_aim_applied && !right_solved {
         if let Some(authored_root) = authored_prop_root {
             contract.root = authored_root;
             base_root = authored_root;

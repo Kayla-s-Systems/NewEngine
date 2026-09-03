@@ -15,6 +15,7 @@ pub(crate) fn weapon_sight_forward(
 /// This is deliberately root-in/root-out: native character rigs may have a prop socket that is a
 /// sibling of the anatomical palm, so the arm solver must consume the resulting root rather than
 /// inventing a separate camera-space attachment.
+#[cfg(test)]
 pub(crate) fn weapon_sight_aligned_root_around_handle(
     presentation: &WeaponPresentationDefinition,
     authored: WeaponRootTransform,
@@ -47,6 +48,40 @@ pub(crate) fn weapon_sight_aligned_root_around_handle(
         .normalize_or_identity();
     let handle = weapon_handle_position(&presentation, authored);
     let position = weapon_root_position_from_handle(&presentation, handle, rotation);
+    (position.is_finite() && rotation.is_finite())
+        .then_some(WeaponRootTransform { position, rotation })
+}
+
+/// Rotate a third-person rifle around its current stock/shoulder contact. This is the native RMB
+/// free-aim pivot: both anatomical hands and the muzzle move with mouse/view delta while the stock
+/// remains planted instead of spinning the weapon inside a fixed firing palm.
+#[inline]
+pub(crate) fn weapon_sight_aligned_root_around_stock_contact(
+    presentation: &WeaponPresentationDefinition,
+    authored: WeaponRootTransform,
+    target_sight_forward_model: Vec3,
+) -> Option<WeaponRootTransform> {
+    let presentation = presentation.clone().sanitized();
+    if !presentation.enabled
+        || !authored.position.is_finite()
+        || !authored.rotation.is_finite()
+        || !target_sight_forward_model.is_finite()
+    {
+        return None;
+    }
+    let target_forward = target_sight_forward_model.normalize_or_zero();
+    let sight_forward = weapon_sight_forward(&presentation, authored);
+    if target_forward.length_squared() <= 1.0e-8 || sight_forward.length_squared() <= 1.0e-8 {
+        return None;
+    }
+
+    let rotation = (Quat::from_rotation_arc(sight_forward, target_forward) * authored.rotation)
+        .normalize_or_identity();
+    let handle_rotation_local = handle_rotation_from_root(&presentation);
+    let root_to_stock = v3(presentation.handle_from_root)
+        + handle_rotation_local * v3(presentation.stock_contact_from_handle);
+    let stock_contact = authored.position + authored.rotation * root_to_stock;
+    let position = stock_contact - rotation * root_to_stock;
     (position.is_finite() && rotation.is_finite())
         .then_some(WeaponRootTransform { position, rotation })
 }

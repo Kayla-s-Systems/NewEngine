@@ -41,6 +41,23 @@ fn evaluate_player_animation_presentation(
     }
     binding.equipment_ik_residual_diag_cooldown =
         (binding.equipment_ik_residual_diag_cooldown - dt).max(0.0);
+    let relative_rifle_ads_active = equipment_pose_family == Some("rifle")
+        && equipment_stance == EquipmentPresentationStance::Aim
+        && !frame.first_person_active;
+    binding
+        .equipment_relative_ads
+        .update_activation(relative_rifle_ads_active, frame.rifle_view_rotation_model);
+    if relative_rifle_ads_active {
+        let entry_sight = binding
+            .equipment_resolved_weapon_root
+            .zip(frame.weapon_presentation.as_ref())
+            .map(|(root, presentation)| {
+                crate::weapon_grip::weapon_sight_forward(presentation, root)
+            });
+        binding
+            .equipment_relative_ads
+            .capture_entry_sight_if_unset(entry_sight);
+    }
     binding.equipment_resolved_weapon_root = None;
     if unarmed_active {
         if binding.unarmed_attack_sequence != unarmed_attack_sequence {
@@ -71,13 +88,8 @@ fn evaluate_player_animation_presentation(
     }
     binding.equipment_reload_active = reload_active;
 
-    let (active_state, transitioned, mut clip_ref) = evaluate_locomotion_presentation_layer(
-        player,
-        binding,
-        dt,
-        frame,
-        &mut timeline_events,
-    )?;
+    let (active_state, transitioned, mut clip_ref) =
+        evaluate_locomotion_presentation_layer(player, binding, dt, frame, &mut timeline_events)?;
     let turn_step_request = evaluate_native_turn_presentation_layer(
         player,
         binding,

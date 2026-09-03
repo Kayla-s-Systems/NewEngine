@@ -1,3 +1,65 @@
+#[derive(Clone, Copy, Debug, Default)]
+struct EquipmentRelativeAdsState {
+    view_rotation_model_at_entry: Option<Quat>,
+    sight_forward_model_at_entry: Option<Vec3>,
+}
+
+impl EquipmentRelativeAdsState {
+    #[inline]
+    fn update_activation(&mut self, active: bool, view_rotation_model: Option<Quat>) {
+        if !active {
+            *self = Self::default();
+            return;
+        }
+        if self.view_rotation_model_at_entry.is_none() {
+            self.view_rotation_model_at_entry = view_rotation_model
+                .filter(|rotation| rotation.is_finite())
+                .map(|rotation| rotation.normalize_or_identity());
+        }
+    }
+
+    #[inline]
+    fn capture_entry_sight_if_unset(&mut self, sight_forward_model: Option<Vec3>) {
+        if self.sight_forward_model_at_entry.is_some()
+            || self.view_rotation_model_at_entry.is_none()
+        {
+            return;
+        }
+        self.sight_forward_model_at_entry = sight_forward_model
+            .filter(|forward| forward.is_finite())
+            .map(Vec3::normalize_or_zero)
+            .filter(|forward| forward.length_squared() > 1.0e-8);
+    }
+
+    #[inline]
+    fn relative_sight_target(
+        &mut self,
+        current_view_rotation_model: Quat,
+        current_sight_forward_model: Vec3,
+    ) -> Option<Vec3> {
+        let entry_view = self.view_rotation_model_at_entry?;
+        if !current_view_rotation_model.is_finite() || !current_sight_forward_model.is_finite() {
+            return None;
+        }
+        let current_sight = current_sight_forward_model.normalize_or_zero();
+        if current_sight.length_squared() <= 1.0e-8 {
+            return None;
+        }
+        let entry_sight = match self.sight_forward_model_at_entry {
+            Some(forward) => forward,
+            None => {
+                self.sight_forward_model_at_entry = Some(current_sight);
+                current_sight
+            }
+        };
+        let view_delta = (current_view_rotation_model.normalize_or_identity()
+            * entry_view.inverse())
+        .normalize_or_identity();
+        let target = (view_delta * entry_sight).normalize_or_zero();
+        (target.is_finite() && target.length_squared() > 1.0e-8).then_some(target)
+    }
+}
+
 pub(super) struct PlayerAnimationRuntimeBinding {
     clips: [Option<PlayerAnimationRuntimeClip>; 8],
     animation_event_bindings: std::collections::BTreeMap<String, String>,
@@ -91,6 +153,9 @@ pub(super) struct PlayerAnimationRuntimeBinding {
     /// Cooldown for significant support-IK residual diagnostics. The solve still runs every frame,
     /// but a persistent authored-contact problem must not flood the runtime log.
     equipment_ik_residual_diag_cooldown: f32,
+    /// Relative RMB/ADS anchor. Entry view+sight are captured once so the complete rifle chain follows
+    /// mouse/view deltas from its current pose instead of snapping to absolute camera-forward.
+    equipment_relative_ads: EquipmentRelativeAdsState,
     /// Torso-owned, reach-fitted weapon root before secondary dynamics. Render consumes this exact root.
     equipment_resolved_weapon_root: Option<crate::weapon_grip::WeaponRootTransform>,
 }

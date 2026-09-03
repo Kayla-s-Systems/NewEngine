@@ -3,6 +3,47 @@ mod transition_tests {
     use super::*;
 
     #[test]
+    fn relative_rmb_ads_anchor_starts_at_current_sight_and_tracks_only_view_delta() {
+        let mut state = EquipmentRelativeAdsState::default();
+        let entry_view = Quat::from_euler(newengine_math::EulerRot::YXZ, 0.42, -0.17, 0.0);
+        let visible_ready_sight = Vec3::new(-0.18, 0.11, -0.977).normalize_or_zero();
+        let newly_sampled_aim_sight = Vec3::new(0.07, 0.16, -0.985).normalize_or_zero();
+        state.update_activation(true, Some(entry_view));
+        state.capture_entry_sight_if_unset(Some(visible_ready_sight));
+
+        let first = state
+            .relative_sight_target(entry_view, newly_sampled_aim_sight)
+            .expect("entry sight target");
+        assert!(
+            first.dot(visible_ready_sight) > 0.999_999,
+            "RMB press must preserve the previously visible weapon sight instead of snapping to camera or newly sampled AIM orientation"
+        );
+
+        let mouse_delta = Quat::from_rotation_y(0.19) * Quat::from_rotation_x(-0.08);
+        let current_view = (mouse_delta * entry_view).normalize_or_identity();
+        let expected = (mouse_delta * visible_ready_sight).normalize_or_zero();
+        let moved = state
+            .relative_sight_target(current_view, newly_sampled_aim_sight)
+            .expect("relative sight target after mouse delta");
+        assert!(
+            moved.dot(expected) > 0.999_999,
+            "weapon sight must follow the relative mouse/view delta from the RMB entry pose"
+        );
+
+        state.update_activation(false, None);
+        let next_entry_view = Quat::from_rotation_y(-0.31);
+        let next_entry_sight = Vec3::new(0.14, -0.06, -0.988).normalize_or_zero();
+        state.update_activation(true, Some(next_entry_view));
+        let restarted = state
+            .relative_sight_target(next_entry_view, next_entry_sight)
+            .expect("new RMB entry sight");
+        assert!(
+            restarted.dot(next_entry_sight) > 0.999_999,
+            "releasing RMB must clear the previous anchor so the next aim starts from the new current pose"
+        );
+    }
+
+    #[test]
     fn fall_presentation_selects_authored_height_bands_deterministically() {
         let select = |distance| select_fall_presentation_band(distance, true, true, true, 2.0, 5.0);
         assert_eq!(select(0.0), Some(FallPresentationBand::Low));
@@ -867,6 +908,7 @@ mod transition_tests {
             false,
             true,
             true,
+            None,
         )
         .expect("authored rifle support IK")
         .expect("IK enabled");
@@ -990,6 +1032,7 @@ mod transition_tests {
             false,
             true,
             true,
+            None,
         )
         .expect("unqualified prop socket presentation")
         .expect("fallback root");
@@ -1056,6 +1099,7 @@ mod transition_tests {
             true,
             true,
             true,
+            None,
         )
         .expect("authored socket presentation")
         .expect("socket root");
@@ -1100,9 +1144,9 @@ mod transition_tests {
         assert!(socket_result.socket_position_error_m <= 1.0e-6);
         assert!(socket_result.socket_angular_error_deg <= 0.001);
 
-        // Third-person RMB/ADS transfers view intent to the real weapon sight, not to head-look.
-        // The current authored handle stays fixed while the firing/support arm chains follow the
-        // sight-aligned weapon root returned to equipment_visual.
+        // Third-person ADS transfers view intent to the real weapon sight, not to head-look.
+        // Rifle aiming pivots around the current stock/shoulder contact so both hands and the muzzle
+        // move with the weapon instead of spinning it inside a frozen firing palm.
         let mut tpp_aim_pose = authored_pose.clone();
         for (joint, rotation) in [
             (rig.right_shoulder, Quat::from_rotation_z(0.48)),
@@ -1122,8 +1166,16 @@ mod transition_tests {
         .expect("TPP authored socket root");
         let tpp_handle_before =
             crate::weapon_grip::weapon_handle_position(&socket_presentation, tpp_authored_root);
+        let tpp_stock_before = tpp_handle_before
+            + crate::weapon_grip::weapon_handle_rotation(&socket_presentation, tpp_authored_root)
+                * Vec3::new(
+                    socket_presentation.stock_contact_from_handle[0],
+                    socket_presentation.stock_contact_from_handle[1],
+                    socket_presentation.stock_contact_from_handle[2],
+                );
         let tpp_sight_before =
             crate::weapon_grip::weapon_sight_forward(&socket_presentation, tpp_authored_root);
+        let tpp_authored_pose_for_relative_ads = tpp_aim_pose.clone();
         let tpp_view_forward =
             (Quat::from_rotation_y(0.16) * Quat::from_rotation_x(-0.08) * tpp_sight_before)
                 .normalize_or_zero();
@@ -1148,6 +1200,7 @@ mod transition_tests {
             true,
             true,
             false,
+            None,
         )
         .expect("TPP native sight-aligned presentation")
         .expect("TPP native sight-aligned root");
@@ -1159,8 +1212,21 @@ mod transition_tests {
             &socket_presentation,
             tpp_aim_result.base_root,
         );
+        let tpp_stock_after = tpp_handle_after
+            + crate::weapon_grip::weapon_handle_rotation(
+                &socket_presentation,
+                tpp_aim_result.base_root,
+            ) * Vec3::new(
+                socket_presentation.stock_contact_from_handle[0],
+                socket_presentation.stock_contact_from_handle[1],
+                socket_presentation.stock_contact_from_handle[2],
+            );
         assert!(tpp_sight_after.dot(tpp_view_forward) > 0.999_9);
-        assert!(tpp_handle_before.distance(tpp_handle_after) <= 1.0e-6);
+        assert!(tpp_stock_before.distance(tpp_stock_after) <= 1.0e-6);
+        assert!(
+            tpp_handle_before.distance(tpp_handle_after) > 0.005,
+            "TPP ADS must move the firing-hand target with the rifle around the planted stock"
+        );
         assert!(tpp_aim_result.right_error_m <= 0.005);
         assert!(tpp_aim_result.socket_position_error_m <= 0.005);
         assert!(
@@ -1170,6 +1236,100 @@ mod transition_tests {
             tpp_aim_result.socket_position_error_m,
             tpp_aim_result.right_error_m,
             tpp_aim_result.left_error_m,
+        );
+
+        // Production RMB path is relative, not absolute. Entering aim must keep the current sight
+        // exactly where it is; subsequent mouse/view delta moves the complete weapon contract from
+        // that entry pose. Absolute camera-forward is intentionally different here to prove no snap.
+        let entry_view = Quat::from_euler(newengine_math::EulerRot::YXZ, 0.43, -0.12, 0.0);
+        let mut relative_ads = EquipmentRelativeAdsState::default();
+        relative_ads.update_activation(true, Some(entry_view));
+        let mut relative_entry_pose = tpp_authored_pose_for_relative_ads.clone();
+        let mut relative_entry_frames = Vec::new();
+        let relative_entry = apply_equipped_weapon_support_ik(
+            &socket_presentation,
+            Some(&socket_rig),
+            &skeleton,
+            &animation_runtime,
+            &mut relative_entry_pose,
+            &mut relative_entry_frames,
+            Some((entry_view * -Vec3::Z).normalize_or_zero()),
+            Some(entry_view),
+            None,
+            false,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            Vec3::ZERO,
+            true,
+            true,
+            true,
+            true,
+            false,
+            Some(&mut relative_ads),
+        )
+        .expect("relative RMB entry solve")
+        .expect("relative RMB entry root");
+        let entry_sight = crate::weapon_grip::weapon_sight_forward(
+            &socket_presentation,
+            relative_entry.base_root,
+        );
+        assert!(
+            entry_sight.dot(tpp_sight_before) > 0.999_99,
+            "RMB entry must preserve the current sight even when camera forward is elsewhere"
+        );
+
+        let mouse_delta = Quat::from_rotation_y(0.045) * Quat::from_rotation_x(-0.025);
+        let moved_view = (mouse_delta * entry_view).normalize_or_identity();
+        let expected_relative_sight = (mouse_delta * tpp_sight_before).normalize_or_zero();
+        let mut relative_moved_pose = tpp_authored_pose_for_relative_ads.clone();
+        let mut relative_moved_frames = Vec::new();
+        let relative_moved = apply_equipped_weapon_support_ik(
+            &socket_presentation,
+            Some(&socket_rig),
+            &skeleton,
+            &animation_runtime,
+            &mut relative_moved_pose,
+            &mut relative_moved_frames,
+            Some((moved_view * -Vec3::Z).normalize_or_zero()),
+            Some(moved_view),
+            None,
+            false,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            Vec3::ZERO,
+            true,
+            true,
+            true,
+            true,
+            false,
+            Some(&mut relative_ads),
+        )
+        .expect("relative RMB moved solve")
+        .expect("relative RMB moved root");
+        let moved_sight = crate::weapon_grip::weapon_sight_forward(
+            &socket_presentation,
+            relative_moved.base_root,
+        );
+        assert!(
+            moved_sight.dot(expected_relative_sight) > 0.999_9,
+            "relative arm-owned ADS sight mismatch dot={:.6} before={:?} expected={:?} after={:?}",
+            moved_sight.dot(expected_relative_sight),
+            tpp_sight_before,
+            expected_relative_sight,
+            moved_sight,
+        );
+        assert!(
+            crate::weapon_grip::weapon_handle_position(&socket_presentation, relative_moved.base_root)
+                .distance(crate::weapon_grip::weapon_handle_position(
+                    &socket_presentation,
+                    relative_entry.base_root,
+                ))
+                > 0.002,
+            "relative ADS must move the firing-hand target instead of rotating around a frozen palm"
         );
 
         // Full-body FPP must preserve the same qualified prop ownership. Camera aim/recoil and
@@ -1207,6 +1367,7 @@ mod transition_tests {
             true,
             true,
             true,
+            None,
         )
         .expect("FPP qualified prop presentation")
         .expect("FPP qualified prop root");
@@ -1299,6 +1460,7 @@ mod transition_tests {
             false,
             true,
             true,
+            None,
         )
         .expect("FPP authored hand presentation")
         .expect("FPP weapon root");

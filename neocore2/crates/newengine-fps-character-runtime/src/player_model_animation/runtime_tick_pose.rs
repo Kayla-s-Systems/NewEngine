@@ -154,6 +154,12 @@ fn finalize_player_pose_and_palette(
                 EquipmentPresentationStance::Reload | EquipmentPresentationStance::None => false,
             }
         });
+    let relative_rifle_ads_active = frame.equipment_pose_family.as_deref() == Some("rifle")
+        && equipment_stance == EquipmentPresentationStance::Aim
+        && !first_person_active;
+    binding
+        .equipment_relative_ads
+        .update_activation(relative_rifle_ads_active, rifle_view_rotation_model);
     let strict_rifle_contact_contract = frame.equipment_pose_family.as_deref() == Some("rifle")
         && matches!(
             equipment_stance,
@@ -201,6 +207,7 @@ fn finalize_player_pose_and_palette(
                 rifle_reload_progress
                     .map(|progress| progress <= 0.08 || progress >= 0.92)
                     .unwrap_or(true),
+                Some(&mut binding.equipment_relative_ads),
             ) {
                 Ok(Some(result)) => {
                     binding.equipment_resolved_weapon_root = Some(result.base_root);

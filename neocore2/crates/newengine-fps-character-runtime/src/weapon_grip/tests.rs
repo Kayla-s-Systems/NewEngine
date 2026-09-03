@@ -42,6 +42,50 @@ fn third_person_ads_aligns_real_sights_while_preserving_firing_handle() {
 }
 
 #[test]
+fn relative_third_person_ads_keeps_stock_planted_while_hands_and_muzzle_follow() {
+    let p = fixture();
+    let authored = WeaponRootTransform {
+        position: Vec3::new(0.12, 1.18, -0.24),
+        rotation: Quat::from_euler(newengine_math::EulerRot::YXZ, 0.15, -0.08, 0.04),
+    };
+    let current_sight = weapon_sight_forward(&p, authored);
+    let relative_delta = Quat::from_rotation_y(0.17) * Quat::from_rotation_x(-0.09);
+    let desired = (relative_delta * current_sight).normalize_or_zero();
+
+    let stock = |root: WeaponRootTransform| {
+        weapon_handle_position(&p, root)
+            + weapon_handle_rotation(&p, root) * v3(p.stock_contact_from_handle)
+    };
+    let handle_before = weapon_handle_position(&p, authored);
+    let support_before = weapon_ready_left_grip_position(&p, authored);
+    let muzzle_before = weapon_muzzle_position(&p, authored);
+    let stock_before = stock(authored);
+
+    let aimed = weapon_sight_aligned_root_around_stock_contact(&p, authored, desired)
+        .expect("stock-pivot relative ADS root");
+    let stock_after = stock(aimed);
+    let handle_after = weapon_handle_position(&p, aimed);
+    let support_after = weapon_ready_left_grip_position(&p, aimed);
+    let muzzle_after = weapon_muzzle_position(&p, aimed);
+    let sight_after = weapon_sight_forward(&p, aimed);
+
+    assert!(stock_before.distance(stock_after) <= 1.0e-6);
+    assert!(sight_after.dot(desired) > 0.999_99);
+    assert!(
+        handle_before.distance(handle_after) > 0.01,
+        "firing hand target must move with the rifle instead of becoming the rotation pivot"
+    );
+    assert!(
+        support_before.distance(support_after) > 0.01,
+        "support hand target must move with relative ADS"
+    );
+    assert!(
+        muzzle_before.distance(muzzle_after) > 0.03,
+        "muzzle must visibly follow the relative mouse delta around the shoulder/stock pivot"
+    );
+}
+
+#[test]
 fn authored_prop_socket_resolves_handle_then_inverse_full_handle_transform_once() {
     let mut p = fixture();
     p.handle_from_root = [0.03, -0.02, 0.11];
