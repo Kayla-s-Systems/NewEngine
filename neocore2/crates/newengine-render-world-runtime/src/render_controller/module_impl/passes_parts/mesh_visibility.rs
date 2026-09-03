@@ -537,7 +537,7 @@ mod startup_lod_scale_tests {
 
     #[test]
     fn cpu_scene_culling_is_opt_in_by_default() {
-        assert!(!super::DEFAULT_SCENE_CULLING_ENABLED);
+        const { assert!(!super::DEFAULT_SCENE_CULLING_ENABLED) };
     }
 
     #[test]

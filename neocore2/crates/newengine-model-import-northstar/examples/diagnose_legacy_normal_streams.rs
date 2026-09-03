@@ -148,14 +148,14 @@ fn main() -> Result<(), String> {
             for (label, signed) in [("snorm8", true), ("unorm8", false)] {
                 let mut signed_dots = Vec::with_capacity(vc);
                 let mut abs_dots = Vec::with_capacity(vc);
-                for i in 0..vc {
+                for (i, geom_normal) in geom.iter().enumerate().take(vc) {
                     let o = i * 4;
                     let v = if signed {
                         norm([s8(raw[o]), s8(raw[o + 1]), s8(raw[o + 2])])
                     } else {
                         norm([u8n(raw[o]), u8n(raw[o + 1]), u8n(raw[o + 2])])
                     };
-                    let d = dot(geom[i], v);
+                    let d = dot(*geom_normal, v);
                     signed_dots.push(d);
                     abs_dots.push(d.abs());
                 }

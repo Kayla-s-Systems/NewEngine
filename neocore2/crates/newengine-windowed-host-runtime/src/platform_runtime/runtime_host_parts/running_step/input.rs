@@ -30,7 +30,7 @@ pub(super) struct RunningInputState {
 }
 
 pub(super) enum RunningInputOutcome {
-    Continue(RunningInputState),
+    Continue(Box<RunningInputState>),
     Exit(PlatformStepResultV1),
 }
 
@@ -241,7 +241,7 @@ pub(super) fn prepare_running_input(
         }));
     }
 
-    Ok(RunningInputOutcome::Continue(RunningInputState {
+    Ok(RunningInputOutcome::Continue(Box::new(RunningInputState {
         input_frame,
         input_poll_ms,
         ui_provider_dispatch_ms,
@@ -250,5 +250,5 @@ pub(super) fn prepare_running_input(
         game_profile_active,
         console_open: console_frame.open,
         console_draw_refresh: console_frame.draw_refresh,
-    }))
+    })))
 }

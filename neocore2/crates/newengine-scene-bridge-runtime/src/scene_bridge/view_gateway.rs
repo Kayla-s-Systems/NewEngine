@@ -12,7 +12,7 @@ use newengine_math::{Mat4, Vec3};
 
 use newengine_bounds::EngineBoundsSnap;
 use newengine_camera_gateway_runtime::{
-    CameraGatewayFrame, CameraGatewayInput, CameraTransitionPhase,
+    CameraGatewayFrame, CameraGatewayFrameRequest, CameraGatewayInput, CameraTransitionPhase,
 };
 use newengine_gameplay_world_runtime::gameplay::GameRunMode;
 use newengine_viewport_bridge::ViewportBridge;
@@ -262,42 +262,6 @@ pub fn apply_engine_view_postfx(
     params
 }
 
-#[cfg(test)]
-mod shadow_view_tests {
-    use super::*;
-
-    #[test]
-    fn remove_projection_jitter_recovers_physical_projection() {
-        let clean = Mat4::perspective_rh(68.0_f32.to_radians(), 16.0 / 9.0, 0.1, 250.0);
-        let jitter_px = [0.375_f32, -0.222_f32];
-        let width = 1920_u32;
-        let height = 1080_u32;
-        let dx = 2.0 * jitter_px[0] / width as f32;
-        let dy = 2.0 * jitter_px[1] / height as f32;
-        let jittered = Mat4::from_translation(Vec3::new(dx, dy, 0.0)) * clean;
-        let recovered = remove_projection_jitter(jittered, jitter_px, width, height);
-        for (actual, expected) in recovered
-            .to_cols_array()
-            .into_iter()
-            .zip(clean.to_cols_array())
-        {
-            assert!(
-                (actual - expected).abs() <= 2.0e-6,
-                "actual={actual} expected={expected}"
-            );
-        }
-    }
-
-    #[test]
-    fn zero_viewport_keeps_projection_unchanged() {
-        let projection = Mat4::perspective_rh(60.0_f32.to_radians(), 1.0, 0.1, 100.0);
-        assert_eq!(
-            remove_projection_jitter(projection, [0.5, 0.5], 0, 1080),
-            projection
-        );
-    }
-}
-
 impl SceneBridge {
     /// Apply direct-player input before simulation and consume camera-view requests.
     pub fn prepare_engine_runtime_input(
@@ -339,17 +303,55 @@ impl SceneBridge {
             .tick_world_frame(
                 world,
                 viewport,
-                CameraGatewayInput::from(input),
-                play_mode,
-                effective_play_mode,
-                world_playable,
-                frame_index,
-                dt,
-                vp_w,
-                vp_h,
-                bounds,
-                selection_bounds,
+                CameraGatewayFrameRequest {
+                    input: CameraGatewayInput::from(input),
+                    play_mode,
+                    effective_play_mode,
+                    world_playable,
+                    frame_index,
+                    dt,
+                    viewport_width: vp_w,
+                    viewport_height: vp_h,
+                    bounds,
+                    selection_bounds,
+                },
             )
             .into()
+    }
+}
+
+#[cfg(test)]
+mod shadow_view_tests {
+    use super::*;
+
+    #[test]
+    fn remove_projection_jitter_recovers_physical_projection() {
+        let clean = Mat4::perspective_rh(68.0_f32.to_radians(), 16.0 / 9.0, 0.1, 250.0);
+        let jitter_px = [0.375_f32, -0.222_f32];
+        let width = 1920_u32;
+        let height = 1080_u32;
+        let dx = 2.0 * jitter_px[0] / width as f32;
+        let dy = 2.0 * jitter_px[1] / height as f32;
+        let jittered = Mat4::from_translation(Vec3::new(dx, dy, 0.0)) * clean;
+        let recovered = remove_projection_jitter(jittered, jitter_px, width, height);
+        for (actual, expected) in recovered
+            .to_cols_array()
+            .into_iter()
+            .zip(clean.to_cols_array())
+        {
+            assert!(
+                (actual - expected).abs() <= 2.0e-6,
+                "actual={actual} expected={expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn zero_viewport_keeps_projection_unchanged() {
+        let projection = Mat4::perspective_rh(60.0_f32.to_radians(), 1.0, 0.1, 100.0);
+        assert_eq!(
+            remove_projection_jitter(projection, [0.5, 0.5], 0, 1080),
+            projection
+        );
     }
 }

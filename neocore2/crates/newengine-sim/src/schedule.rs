@@ -158,6 +158,75 @@ impl SimSchedule {
     }
 }
 
+/// A production-lean default schedule.
+///
+/// You can extend it with gameplay systems without forking the engine.
+#[inline]
+pub fn default_schedule() -> SimSchedule {
+    let mut s = SimSchedule::new();
+
+    // Controllers emit intents only.
+    s.add_system(
+        SimStage::Controllers,
+        10,
+        "character_motor",
+        AccessMask::write_domain(AccessDomain::CharacterControl)
+            .union(AccessMask::read_domain(AccessDomain::CharacterInput)),
+        systems::sys_character_motor,
+    );
+    s.add_system(
+        SimStage::Controllers,
+        20,
+        "orbit_camera",
+        AccessMask::write_domain(AccessDomain::CameraControl)
+            .union(AccessMask::read_domain(AccessDomain::CameraInput))
+            .union(AccessMask::read_domain(AccessDomain::CameraRig)),
+        systems::sys_orbit_camera,
+    );
+    s.add_system(
+        SimStage::Controllers,
+        25,
+        "camera_follow",
+        AccessMask::write_domain(AccessDomain::CameraControl)
+            .union(AccessMask::read_domain(AccessDomain::CameraRig))
+            .union(AccessMask::read_domain(AccessDomain::FollowTarget))
+            .union(AccessMask::read_domain(AccessDomain::Transform)),
+        systems::sys_camera_follow,
+    );
+
+    // Single ordered apply stage.
+    s.add_system(
+        SimStage::ApplyIntents,
+        10,
+        "apply_controller_intents",
+        AccessMask::write_domain(AccessDomain::CharacterControl)
+            .union(AccessMask::write_domain(AccessDomain::CameraControl))
+            .union(AccessMask::write_domain(AccessDomain::ControllerIntents)),
+        systems::sys_apply_controller_intents,
+    );
+    s.add_system(
+        SimStage::ApplyIntents,
+        20,
+        "camera_rig_to_transform",
+        AccessMask::read_domain(AccessDomain::CameraRig)
+            .union(AccessMask::write_domain(AccessDomain::Transform)),
+        systems::sys_camera_rig_to_transform,
+    );
+
+    // Physics.
+    s.add_system(
+        SimStage::Physics,
+        10,
+        "integrate_velocities",
+        AccessMask::read_domain(AccessDomain::Velocity)
+            .union(AccessMask::write_domain(AccessDomain::Transform))
+            .union(AccessMask::write_domain(AccessDomain::PhysicsState)),
+        systems::sys_integrate_velocities,
+    );
+
+    s
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -295,73 +364,4 @@ mod tests {
         assert!(!systems[0].access.conflicts(systems[1].access));
         assert!(systems[1].access.conflicts(systems[2].access));
     }
-}
-
-/// A production-lean default schedule.
-///
-/// You can extend it with gameplay systems without forking the engine.
-#[inline]
-pub fn default_schedule() -> SimSchedule {
-    let mut s = SimSchedule::new();
-
-    // Controllers emit intents only.
-    s.add_system(
-        SimStage::Controllers,
-        10,
-        "character_motor",
-        AccessMask::write_domain(AccessDomain::CharacterControl)
-            .union(AccessMask::read_domain(AccessDomain::CharacterInput)),
-        systems::sys_character_motor,
-    );
-    s.add_system(
-        SimStage::Controllers,
-        20,
-        "orbit_camera",
-        AccessMask::write_domain(AccessDomain::CameraControl)
-            .union(AccessMask::read_domain(AccessDomain::CameraInput))
-            .union(AccessMask::read_domain(AccessDomain::CameraRig)),
-        systems::sys_orbit_camera,
-    );
-    s.add_system(
-        SimStage::Controllers,
-        25,
-        "camera_follow",
-        AccessMask::write_domain(AccessDomain::CameraControl)
-            .union(AccessMask::read_domain(AccessDomain::CameraRig))
-            .union(AccessMask::read_domain(AccessDomain::FollowTarget))
-            .union(AccessMask::read_domain(AccessDomain::Transform)),
-        systems::sys_camera_follow,
-    );
-
-    // Single ordered apply stage.
-    s.add_system(
-        SimStage::ApplyIntents,
-        10,
-        "apply_controller_intents",
-        AccessMask::write_domain(AccessDomain::CharacterControl)
-            .union(AccessMask::write_domain(AccessDomain::CameraControl))
-            .union(AccessMask::write_domain(AccessDomain::ControllerIntents)),
-        systems::sys_apply_controller_intents,
-    );
-    s.add_system(
-        SimStage::ApplyIntents,
-        20,
-        "camera_rig_to_transform",
-        AccessMask::read_domain(AccessDomain::CameraRig)
-            .union(AccessMask::write_domain(AccessDomain::Transform)),
-        systems::sys_camera_rig_to_transform,
-    );
-
-    // Physics.
-    s.add_system(
-        SimStage::Physics,
-        10,
-        "integrate_velocities",
-        AccessMask::read_domain(AccessDomain::Velocity)
-            .union(AccessMask::write_domain(AccessDomain::Transform))
-            .union(AccessMask::write_domain(AccessDomain::PhysicsState)),
-        systems::sys_integrate_velocities,
-    );
-
-    s
 }

@@ -23,7 +23,7 @@ fn main() -> Result<(), String> {
             writeln!(
                 file,
                 "\"{}\",{},{},{},{},{},{},{},{},{}",
-                mesh.name.replace('"', "\""),
+                mesh.name.replace('"', "\"\""),
                 index,
                 vertex.position[0],
                 vertex.position[1],

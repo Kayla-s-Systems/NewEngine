@@ -304,8 +304,10 @@ mod tests {
     #[test]
     fn normal_playable_surface_merges_canonical_mouse_xy() {
         let mut snap = ViewportInputSnap::default();
-        let mut frame = UiInputFrame::default();
-        frame.mouse_delta = (7.25, -5.5);
+        let frame = UiInputFrame {
+            mouse_delta: (7.25, -5.5),
+            ..UiInputFrame::default()
+        };
 
         snap.merge_semantic_actions_from_surface(Some(&frame), true);
 
@@ -321,8 +323,10 @@ mod tests {
     #[test]
     fn pure_vertical_raw_mouse_delta_activates_look_without_x_motion() {
         let mut snap = ViewportInputSnap::default();
-        let mut frame = UiInputFrame::default();
-        frame.mouse_delta = (0.0, -8.0);
+        let frame = UiInputFrame {
+            mouse_delta: (0.0, -8.0),
+            ..UiInputFrame::default()
+        };
 
         snap.merge_semantic_actions_from_surface(Some(&frame), true);
 
@@ -339,8 +343,10 @@ mod tests {
             dy_px: 3.0,
             ..ViewportInputSnap::default()
         };
-        let mut frame = UiInputFrame::default();
-        frame.mouse_delta = (4.0, -8.0);
+        let frame = UiInputFrame {
+            mouse_delta: (4.0, -8.0),
+            ..UiInputFrame::default()
+        };
 
         snap.merge_semantic_actions_from_surface(Some(&frame), true);
 
@@ -380,8 +386,10 @@ mod tests {
     #[test]
     fn middle_mouse_drag_is_preserved_as_dolly_channel() {
         let mut snap = ViewportInputSnap::default();
-        let mut frame = UiInputFrame::default();
-        frame.mouse_delta = (4.0, -12.0);
+        let mut frame = UiInputFrame {
+            mouse_delta: (4.0, -12.0),
+            ..UiInputFrame::default()
+        };
         frame
             .mouse_down
             .insert(newengine_input_api::mouse_button::MIDDLE);
@@ -401,8 +409,10 @@ mod tests {
             gameplay_movement_gated: true,
             ..ViewportInputSnap::default()
         };
-        let mut frame = UiInputFrame::default();
-        frame.mouse_delta = (6.0, -4.0);
+        let mut frame = UiInputFrame {
+            mouse_delta: (6.0, -4.0),
+            ..UiInputFrame::default()
+        };
         frame
             .mouse_down
             .insert(newengine_input_api::mouse_button::RIGHT);

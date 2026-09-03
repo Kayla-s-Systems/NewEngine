@@ -271,14 +271,14 @@ fn append_mesh_guides(
 }
 
 fn valid_triangles(mesh: &YddBinaryMesh) -> Result<Vec<Triangle>, String> {
-    if mesh.indices.len() % 3 != 0 {
+    if !mesh.indices.len().is_multiple_of(3) {
         return Err(format!(
             "mesh '{}' index count is not divisible by 3",
             mesh.name
         ));
     }
     let mut out = Vec::with_capacity(mesh.indices.len() / 3);
-    for tri in mesh.indices.chunks_exact(3) {
+    for tri in mesh.indices.as_chunks::<3>().0 {
         if tri
             .iter()
             .any(|&index| index as usize >= mesh.vertices.len())

@@ -47,11 +47,7 @@ pub fn apply_project_browser_settings_patch(
     if let Some(patch) = response.get("settings_patch") {
         let entries = patch
             .as_array()
-            .ok_or_else(|| "Project Browser settings_patch must be an array".to_owned());
-        let entries = match entries {
-            Ok(v) => v,
-            Err(e) => return Err(e),
-        };
+            .ok_or_else(|| "Project Browser settings_patch must be an array".to_owned())?;
         let mut changed = 0usize;
         for (index, entry) in entries.iter().enumerate() {
             let object = entry

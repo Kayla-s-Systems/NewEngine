@@ -61,17 +61,20 @@ impl CameraGatewayBridge {
         &self,
         world: &mut World,
         viewport: &ViewportBridge,
-        input: CameraGatewayInput,
-        play_mode: GameRunMode,
-        effective_play_mode: GameRunMode,
-        world_playable: bool,
-        frame_index: u64,
-        dt: f32,
-        vp_w: u32,
-        vp_h: u32,
-        bounds: EngineBoundsSnap,
-        selection_bounds: Option<EngineBoundsSnap>,
+        request: CameraGatewayFrameRequest,
     ) -> CameraGatewayFrame {
+        let CameraGatewayFrameRequest {
+            input,
+            play_mode,
+            effective_play_mode,
+            world_playable,
+            frame_index,
+            dt,
+            viewport_width: vp_w,
+            viewport_height: vp_h,
+            bounds,
+            selection_bounds,
+        } = request;
         let camera_dt = sanitize_camera_dt(dt);
         let mut state = self.state.lock();
         state.apply_authored_initial_view(world);

@@ -166,7 +166,7 @@ pub(super) fn surface_node(
             danger_rgba: [255, 120, 120, 255],
             border_rgba: [96, 165, 250, 235],
             backdrop_rgba: [0, 0, 0, 176],
-            min_size_px: [(width - 16.0).min(760.0).max(320.0), 300.0],
+            min_size_px: [(width - 16.0).clamp(320.0, 760.0), 300.0],
             max_size_px: [(width - 16.0).max(320.0), console_max_height],
             margin_px: [8.0, 8.0],
             padding_px: [12.0, 34.0, 12.0, 14.0],
@@ -214,8 +214,10 @@ mod tests {
 
     #[test]
     fn console_surface_is_modal_top_overlay_with_scroll_icons_and_input() {
-        let mut state = RuntimeConsoleOverlayState::default();
-        state.open = true;
+        let mut state = RuntimeConsoleOverlayState {
+            open: true,
+            ..RuntimeConsoleOverlayState::default()
+        };
         for index in 0..40 {
             state.push_line(ConsoleLineKind::Output, format!("line {index}"));
         }

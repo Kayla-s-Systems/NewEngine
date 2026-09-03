@@ -51,10 +51,10 @@ fn dec(p: &PakFile, s: S, n: usize) -> Result<Vec<[f32; 4]>, String> {
     let mut o = Vec::with_capacity(n);
     for _ in 0..n {
         let mut v = [0.; 4];
-        for c in 0..4 {
+        for (c, value) in v.iter_mut().enumerate() {
             let w = s.sz[c] as usize;
             if w > 0 {
-                v[c] = b.r(w) as f32 * s.sc[c] + s.off[c];
+                *value = b.r(w) as f32 * s.sc[c] + s.off[c];
             }
         }
         o.push(v)

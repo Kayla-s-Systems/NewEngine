@@ -16,7 +16,7 @@ fn read_tga_rgba(path: &PathBuf) -> Result<(u32, u32, Vec<u8>), String> {
         return Err(format!("{} is truncated", path.display()));
     }
     let mut rgba = Vec::with_capacity(pixel_bytes);
-    for bgra in bytes[18..18 + pixel_bytes].chunks_exact(4) {
+    for bgra in bytes[18..18 + pixel_bytes].as_chunks::<4>().0 {
         rgba.extend_from_slice(&[bgra[2], bgra[1], bgra[0], bgra[3]]);
     }
     Ok((width, height, rgba))

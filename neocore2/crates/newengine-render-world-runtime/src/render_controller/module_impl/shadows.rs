@@ -525,16 +525,18 @@ mod startup_shadow_override_tests {
     #[test]
     fn advanced_prestart_shadow_controls_override_scene_settings() {
         let scene = ShadowSettings::default();
-        let mut graphics = newengine_core::StartupGraphicsSettings::default();
-        graphics.shadow_advanced_override = true;
-        graphics.shadow_filter = newengine_core::ShadowFilterMode::Hard;
-        graphics.shadow_max_distance = 333.0;
-        graphics.shadow_softness = 2.25;
-        graphics.shadow_bias = 0.004;
-        graphics.shadow_normal_bias = 0.031;
-        graphics.shadow_contact_strength = 0.72;
-        graphics.shadow_pcss_blocker_samples = 14;
-        graphics.shadow_pcss_filter_samples = 15;
+        let graphics = newengine_core::StartupGraphicsSettings {
+            shadow_advanced_override: true,
+            shadow_filter: newengine_core::ShadowFilterMode::Hard,
+            shadow_max_distance: 333.0,
+            shadow_softness: 2.25,
+            shadow_bias: 0.004,
+            shadow_normal_bias: 0.031,
+            shadow_contact_strength: 0.72,
+            shadow_pcss_blocker_samples: 14,
+            shadow_pcss_filter_samples: 15,
+            ..Default::default()
+        };
         let resolved = apply_shadow_graphics_overrides(scene, &graphics);
         assert_eq!(resolved.filter, ShadowFilter::Hard);
         assert_eq!(resolved.max_distance, 333.0);
@@ -549,9 +551,11 @@ mod startup_shadow_override_tests {
     #[test]
     fn explicit_shadow_overrides_control_cascades_and_map_size() {
         let scene = ShadowSettings::default();
-        let mut graphics = newengine_core::StartupGraphicsSettings::default();
-        graphics.shadow_cascade_count = 4;
-        graphics.shadow_map_resolution = 4096;
+        let graphics = newengine_core::StartupGraphicsSettings {
+            shadow_cascade_count: 4,
+            shadow_map_resolution: 4096,
+            ..Default::default()
+        };
         let resolved = apply_shadow_graphics_overrides(scene, &graphics);
         assert_eq!(resolved.resolution, 4096);
         assert_eq!(resolved.cascade_count, 4);
@@ -566,9 +570,11 @@ mod startup_shadow_override_tests {
             filter: ShadowFilter::Pcf,
             ..ShadowSettings::default()
         };
-        let mut graphics = newengine_core::StartupGraphicsSettings::default();
-        graphics.shadow_quality = newengine_core::ShadowQuality::Quality;
-        graphics.shadow_cascade_count = 0;
+        let graphics = newengine_core::StartupGraphicsSettings {
+            shadow_quality: newengine_core::ShadowQuality::Quality,
+            shadow_cascade_count: 0,
+            ..Default::default()
+        };
         let resolved = apply_shadow_graphics_overrides(scene, &graphics);
         assert_eq!(resolved.cascade_count, 3);
         assert_eq!(resolved.method, ShadowMethod::CascadedShadowMaps);
@@ -580,8 +586,10 @@ mod startup_shadow_override_tests {
     #[test]
     fn startup_shadow_gate_disables_scene_and_local_shadow_family() {
         let scene = ShadowSettings::default();
-        let mut graphics = newengine_core::StartupGraphicsSettings::default();
-        graphics.shadows_enabled = false;
+        let graphics = newengine_core::StartupGraphicsSettings {
+            shadows_enabled: false,
+            ..Default::default()
+        };
         let resolved = apply_shadow_graphics_overrides(scene, &graphics);
         assert!(!resolved.enabled);
         assert_eq!(resolved.method, ShadowMethod::None);

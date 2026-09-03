@@ -3,21 +3,26 @@ use newengine_math::Vec3;
 
 use crate::scene_bridge::EngineViewGatewayFrame;
 
+#[derive(Clone, Copy, Debug)]
+pub struct CameraProjectionBounds {
+    pub world_center: Vec3,
+    pub world_radius: f32,
+    pub selection_center: Option<Vec3>,
+    pub selection_radius: Option<f32>,
+}
+
 pub fn apply_camera_projection(
     controller: &mut newengine_editor_viewport_runtime::EditorViewportController,
     frame: &mut EngineViewGatewayFrame,
-    world_center: Vec3,
-    world_radius: f32,
-    selection_center: Option<Vec3>,
-    selection_radius: Option<f32>,
+    bounds: CameraProjectionBounds,
     wheel_y: f32,
     viewport_size: [u32; 2],
 ) {
     let Some(projection) = controller.resolve_camera_projection(
-        world_center,
-        world_radius,
-        selection_center,
-        selection_radius,
+        bounds.world_center,
+        bounds.world_radius,
+        bounds.selection_center,
+        bounds.selection_radius,
         wheel_y,
         viewport_size,
     ) else {

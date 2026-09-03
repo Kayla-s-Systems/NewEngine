@@ -14,7 +14,7 @@ fn write_tga(path: &PathBuf, width: u32, height: u32, rgba: &[u8]) -> Result<(),
     out.extend_from_slice(&(height as u16).to_le_bytes());
     out.push(32);
     out.push(0x28);
-    for px in rgba.chunks_exact(4) {
+    for px in rgba.as_chunks::<4>().0 {
         out.extend_from_slice(&[px[2], px[1], px[0], px[3]]);
     }
     fs::write(path, out).map_err(|e| e.to_string())
@@ -65,7 +65,9 @@ fn main() -> Result<(), String> {
         linear.extend_from_slice(&raw[start..start + row_bytes]);
     }
     let zero = linear
-        .chunks_exact(8)
+        .as_chunks::<8>()
+        .0
+        .iter()
         .filter(|b| b.iter().all(|&v| v == 0))
         .count();
     let format = match texture.format {
@@ -80,7 +82,9 @@ fn main() -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
     let black = rgba
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .filter(|p| p[0] < 15 && p[1] < 15 && p[2] < 15)
         .count();
     println!("candidate path='{}' blocks={}x{} row_bytes={} row_pitch={} physical_base={} zero_blocks={} black_pixels={} black_frac={:.6}", texture.source_path, bw, bh, row_bytes, row_pitch, physical_base, zero, black, black as f64 / (texture.width as u64 * texture.height as u64) as f64);

@@ -35,7 +35,7 @@ impl HostPlatformRuntime {
         self.ui_frame_index = self.ui_frame_index.wrapping_add(1);
         let ui_frame_index = self.ui_frame_index;
         let input_state = match prepare_running_input(self, ui_frame_index)? {
-            RunningInputOutcome::Continue(state) => state,
+            RunningInputOutcome::Continue(state) => *state,
             RunningInputOutcome::Exit(result) => return Ok(result),
         };
         let RunningInputState {

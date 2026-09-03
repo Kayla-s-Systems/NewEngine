@@ -120,7 +120,7 @@ fn load_ydd_entries(
     logical: &str,
     selectors: &[String],
 ) -> Result<(newengine_assets_api::ListFileHeader, YddBinaryDocument), String> {
-    let path = content_root.join(logical.replace('/', &std::path::MAIN_SEPARATOR.to_string()));
+    let path = content_root.join(logical.replace('/', std::path::MAIN_SEPARATOR_STR));
     let bytes = fs::read(&path).map_err(|e| format!("read source YDD {}: {e}", path.display()))?;
     let decoded = decode_list_file_envelope(
         &bytes,
@@ -479,10 +479,7 @@ fn main() -> Result<(), String> {
     let mut max_page_bytes = 0usize;
     let mut pages_over_target = 0usize;
     for page in packed_pages {
-        let output = output_root.join(
-            page.page_ydd
-                .replace('/', &std::path::MAIN_SEPARATOR.to_string()),
-        );
+        let output = output_root.join(page.page_ydd.replace('/', std::path::MAIN_SEPARATOR_STR));
         if let Some(parent) = output.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }

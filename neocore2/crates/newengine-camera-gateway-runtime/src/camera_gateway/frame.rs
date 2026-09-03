@@ -17,6 +17,19 @@ pub struct CameraGatewayInput {
     pub gameplay_actions: ActionCommandFrame,
 }
 
+pub struct CameraGatewayFrameRequest {
+    pub input: CameraGatewayInput,
+    pub play_mode: GameRunMode,
+    pub effective_play_mode: GameRunMode,
+    pub world_playable: bool,
+    pub frame_index: u64,
+    pub dt: f32,
+    pub viewport_width: u32,
+    pub viewport_height: u32,
+    pub bounds: EngineBoundsSnap,
+    pub selection_bounds: Option<EngineBoundsSnap>,
+}
+
 #[derive(Clone, Debug)]
 pub struct CameraGatewayFrame {
     pub frame_index: u64,
@@ -78,13 +91,16 @@ mod camera_gateway_start_view_tests {
             player,
             newengine_gameplay_world_runtime::gameplay::PlayerActor,
         );
-        let mut profile =
-            newengine_gameplay_world_runtime::gameplay::PlayerCameraProfile::default();
-        profile.initial_view =
-            newengine_gameplay_world_runtime::gameplay::PlayerCameraViewMode::ThirdPersonOrbit;
+        let mut profile = newengine_gameplay_world_runtime::gameplay::PlayerCameraProfile {
+            initial_view:
+                newengine_gameplay_world_runtime::gameplay::PlayerCameraViewMode::ThirdPersonOrbit,
+            ..Default::default()
+        };
         let _ = world.insert(player, profile);
-        let mut state = CameraGatewayState::default();
-        state.active_view = CameraViewMode::FirstPerson;
+        let mut state = CameraGatewayState {
+            active_view: CameraViewMode::FirstPerson,
+            ..Default::default()
+        };
         state.apply_authored_initial_view(&world);
         assert_eq!(state.active_view, CameraViewMode::ThirdPersonOrbit);
         assert!(state.authored_initial_view_applied);

@@ -52,10 +52,10 @@ fn qdec(p: &PakFile, s: S, n: usize) -> Result<Vec<[f32; 4]>, String> {
     let mut out = Vec::with_capacity(n);
     for _ in 0..n {
         let mut v = [0.; 4];
-        for c in 0..4 {
+        for (c, value) in v.iter_mut().enumerate() {
             let w = s.sz[c] as usize;
             if w > 0 {
-                v[c] = br.r(w) as f32 * s.sc[c] + s.off[c];
+                *value = br.r(w) as f32 * s.sc[c] + s.off[c];
             }
         }
         out.push(v)
@@ -100,11 +100,10 @@ fn main() -> Result<(), String> {
         };
         let gt = qdec(&pak, s80, vc)?;
         let raw = pak.slice(s130.buf, vc * 4)?;
-        for i in 0..vc {
-            let o = i * 4;
+        for (packed, tangent) in raw.as_chunks::<4>().0.iter().zip(gt.iter()).take(vc) {
             rows.push((
-                u32::from_le_bytes(raw[o..o + 4].try_into().unwrap()),
-                [gt[i][0], gt[i][1], gt[i][2]],
+                u32::from_le_bytes(*packed),
+                [tangent[0], tangent[1], tangent[2]],
             ));
         }
         println!("collected mesh={mi} vertices={vc} name='{name}'");

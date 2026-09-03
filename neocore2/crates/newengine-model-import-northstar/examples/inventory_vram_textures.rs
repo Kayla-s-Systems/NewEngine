@@ -37,7 +37,7 @@ fn main() -> Result<(), String> {
         packages += 1;
         let name = p.file_name().unwrap_or_default().to_string_lossy();
         for t in textures {
-            let src = t.source_path.replace('\t', " ").replace('\n', " ");
+            let src = t.source_path.replace(['\t', '\n'], " ");
             text.push_str(&format!(
                 "{}\t{}\t{}\t{}\t{:?}\t{}\t{}\t{}\t{}\t0x{:x}\n",
                 name,

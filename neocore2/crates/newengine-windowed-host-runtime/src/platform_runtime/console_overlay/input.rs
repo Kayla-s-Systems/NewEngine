@@ -214,8 +214,10 @@ mod tests {
 
     #[test]
     fn escape_closes_and_is_consumed() {
-        let mut state = RuntimeConsoleOverlayState::default();
-        state.open = true;
+        let mut state = RuntimeConsoleOverlayState {
+            open: true,
+            ..RuntimeConsoleOverlayState::default()
+        };
         let mut frame = UiInputFrame::default();
         frame.keys_pressed.insert(keys::ESCAPE);
         let out = process(&mut state, Some(&frame));

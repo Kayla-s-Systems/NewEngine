@@ -81,7 +81,7 @@ fn main() -> Result<(), String> {
             )
             .map_err(|e| e.to_string())?;
         }
-        for tri in mesh.indices.chunks_exact(3) {
+        for tri in mesh.indices.as_chunks::<3>().0 {
             let a = base + u64::from(tri[0]);
             let b = base + u64::from(tri[1]);
             let c = base + u64::from(tri[2]);

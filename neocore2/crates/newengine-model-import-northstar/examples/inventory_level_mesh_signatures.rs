@@ -31,15 +31,17 @@ fn mesh_signature(mesh: &newengine_model_import_northstar::ImportMesh) -> u64 {
     h = hash_bytes(h, &(mesh.vertices.len() as u64).to_le_bytes());
     h = hash_bytes(h, &(mesh.indices.len() as u64).to_le_bytes());
     for vertex in &mesh.vertices {
-        for axis in 0..3 {
-            h = hash_bytes(
-                h,
-                &quantize(vertex.position[axis] - center[axis], 4096.0).to_le_bytes(),
-            );
-            h = hash_bytes(h, &quantize(vertex.normal[axis], 32767.0).to_le_bytes());
+        for ((position, normal), center) in vertex
+            .position
+            .iter()
+            .zip(vertex.normal.iter())
+            .zip(center.iter())
+        {
+            h = hash_bytes(h, &quantize(*position - *center, 4096.0).to_le_bytes());
+            h = hash_bytes(h, &quantize(*normal, 32767.0).to_le_bytes());
         }
-        for axis in 0..2 {
-            h = hash_bytes(h, &quantize(vertex.uv0[axis], 4096.0).to_le_bytes());
+        for uv in vertex.uv0.iter().take(2) {
+            h = hash_bytes(h, &quantize(*uv, 4096.0).to_le_bytes());
         }
     }
     for &index in &mesh.indices {

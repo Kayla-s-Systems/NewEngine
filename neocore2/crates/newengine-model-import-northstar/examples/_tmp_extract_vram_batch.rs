@@ -14,7 +14,7 @@ fn write_tga(path: &PathBuf, width: u32, height: u32, rgba: &[u8]) -> Result<(),
     out.extend_from_slice(&(height as u16).to_le_bytes());
     out.push(32);
     out.push(0x28);
-    for px in rgba.chunks_exact(4) {
+    for px in rgba.as_chunks::<4>().0 {
         out.extend_from_slice(&[px[2], px[1], px[0], px[3]]);
     }
     if let Some(parent) = path.parent() {
@@ -58,7 +58,7 @@ fn main() -> Result<(), String> {
             }
         };
         let rgba = texture.base_rgba8(&pak)?;
-        let safe = selector.replace('/', "_").replace('\\', "_");
+        let safe = selector.replace(['/', '\\'], "_");
         let out = out_dir.join(format!("{safe}.tga"));
         write_tga(&out, texture.width, texture.height, &rgba)?;
         println!(

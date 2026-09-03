@@ -183,17 +183,18 @@ fn draw_procedural_terrain_for_pass(
         );
         let distance_m = (center_ws - camera_position).length();
         let screen_coverage = sphere_screen_coverage_hint(radius_ws, distance_m);
-        if runtime && terrain_culling_enabled {
-            if !frustum_sphere_visible(
+        if runtime
+            && terrain_culling_enabled
+            && !frustum_sphere_visible(
                 terrain_frustum.as_ref().expect("terrain culling frustum"),
                 camera_position,
                 center_ws,
                 radius_ws,
                 terrain_max_distance,
                 terrain_near_accept_distance(radius_ws),
-            ) {
-                continue;
-            }
+            )
+        {
+            continue;
         }
         let render_options = world
             .get::<MeshRenderOptions>(id)

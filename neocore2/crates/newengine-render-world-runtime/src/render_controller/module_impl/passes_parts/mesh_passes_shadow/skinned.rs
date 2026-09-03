@@ -42,8 +42,8 @@ pub(super) fn draw_skinned_player_primitives_shadow(
         if pose.palette.is_empty() {
             continue;
         }
-        if runtime {
-            if source.proxy_center_ws.distance_squared(camera_position) > shadow_max_distance_sq
+        if runtime
+            && (source.proxy_center_ws.distance_squared(camera_position) > shadow_max_distance_sq
                 || !shadow_caster_visible(
                     this.shadows_current_cull(),
                     source.proxy_center_ws,
@@ -53,10 +53,9 @@ pub(super) fn draw_skinned_player_primitives_shadow(
                     cascade_index,
                     cascade_texel_world_size,
                     source.proxy_radius_ws,
-                )
-            {
-                continue;
-            }
+                ))
+        {
+            continue;
         }
 
         let material_ref = source.material_ref;

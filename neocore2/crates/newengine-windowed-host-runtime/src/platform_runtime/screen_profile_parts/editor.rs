@@ -468,17 +468,17 @@ impl ScreenProfileRuntimeState {
             .get::<UiEditorInspectorSnapshot>()
             .cloned()
             .unwrap_or_default();
-        let mut node = EditorScreen::default().surface_node(
+        let mut node = EditorScreen::default().surface_node(EditorScreenFrameContext {
             frame_index,
             runtime_mode,
             runtime_paused,
-            &viewport_state,
-            &scene_snapshot,
-            &inspector_snapshot,
-            &authoring_state,
-            &layout,
-            self.active_menu_id.as_deref(),
-        );
+            viewport_state: &viewport_state,
+            scene_snapshot: &scene_snapshot,
+            inspector_snapshot: &inspector_snapshot,
+            authoring_state: &authoring_state,
+            layout: &layout,
+            active_menu_id: self.active_menu_id.as_deref(),
+        });
         let asset_document_selected =
             resources
                 .get::<EditorSelectionContext>()

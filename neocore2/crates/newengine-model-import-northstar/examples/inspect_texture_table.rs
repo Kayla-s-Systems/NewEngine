@@ -26,7 +26,10 @@ fn main() -> Result<(), String> {
             if let Some(ptr) = ptr {
                 note.push_str(&format!(" ptr=0x{ptr:x}"));
                 if let Ok(s) = pak.string_at(ptr) {
-                    if !s.is_empty() && s.len() < 220 && s.bytes().all(|b| b >= 0x20 && b < 0x7f) {
+                    if !s.is_empty()
+                        && s.len() < 220
+                        && s.bytes().all(|b| (0x20..0x7f).contains(&b))
+                    {
                         note.push_str(&format!(" str={s:?}"));
                     }
                 }

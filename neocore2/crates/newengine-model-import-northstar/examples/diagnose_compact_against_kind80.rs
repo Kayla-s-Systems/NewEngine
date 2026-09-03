@@ -51,10 +51,10 @@ fn qdec(p: &PakFile, s: S, n: usize) -> Result<Vec<[f32; 4]>, String> {
     let mut out = Vec::with_capacity(n);
     for _ in 0..n {
         let mut v = [0.; 4];
-        for c in 0..4 {
+        for (c, value) in v.iter_mut().enumerate() {
             let w = s.sz[c] as usize;
             if w > 0 {
-                v[c] = br.r(w) as f32 * s.sc[c] + s.off[c];
+                *value = br.r(w) as f32 * s.sc[c] + s.off[c];
             }
         }
         out.push(v)
@@ -169,11 +169,11 @@ fn small3(v: u32, unorm: bool, index_mode: u32, sign_mode: u32) -> [f32; 4] {
     };
     let mut out = [0.; 4];
     let mut k = 0;
-    for i in 0..4 {
+    for (i, value) in out.iter_mut().enumerate() {
         if i == idx {
-            out[i] = omitted
+            *value = omitted
         } else {
-            out[i] = a[k];
+            *value = a[k];
             k += 1;
         }
     }

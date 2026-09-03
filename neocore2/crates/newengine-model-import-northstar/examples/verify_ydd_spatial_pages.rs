@@ -68,7 +68,7 @@ fn load_entries(
     logical: &str,
     selectors: &[String],
 ) -> Result<Vec<YddBinaryEntry>, String> {
-    let path = root.join(logical.replace('/', &std::path::MAIN_SEPARATOR.to_string()));
+    let path = root.join(logical.replace('/', std::path::MAIN_SEPARATOR_STR));
     let bytes = fs::read(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
     let decoded = decode_list_file_envelope(
         &bytes,

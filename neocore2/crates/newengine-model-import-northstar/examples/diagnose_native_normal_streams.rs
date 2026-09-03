@@ -61,10 +61,10 @@ fn qdecode(p: &PakFile, s: StreamDesc, n: usize) -> Result<Vec<[f32; 4]>, String
     let mut out = Vec::with_capacity(n);
     for _ in 0..n {
         let mut v = [0.; 4];
-        for c in 0..4 {
+        for (c, value) in v.iter_mut().enumerate() {
             let w = s.sizes[c] as usize;
             if w > 0 {
-                v[c] = br.read(w)? as f32 * s.q_scale[c] + s.q_offset[c];
+                *value = br.read(w)? as f32 * s.q_scale[c] + s.q_offset[c];
             }
         }
         out.push(v);

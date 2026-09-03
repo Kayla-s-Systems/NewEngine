@@ -52,10 +52,10 @@ fn qdecode(p: &PakFile, s: S, n: usize) -> Result<Vec<[f32; 4]>, String> {
     let mut out = Vec::with_capacity(n);
     for _ in 0..n {
         let mut v = [0.; 4];
-        for c in 0..4 {
+        for (c, value) in v.iter_mut().enumerate() {
             let w = s.sizes[c] as usize;
             if w > 0 {
-                v[c] = br.r(w) as f32 * s.scale[c] + s.offset[c];
+                *value = br.r(w) as f32 * s.scale[c] + s.offset[c];
             }
         }
         out.push(v);
@@ -139,11 +139,11 @@ fn decode_smallest3(v: u32, signed_components: bool, mode: u32) -> [f32; 4] {
         _ => code as usize,
     };
     let mut k = 0;
-    for i in 0..4 {
+    for (i, value) in out.iter_mut().enumerate() {
         if i == index {
-            out[i] = omitted
+            *value = omitted
         } else {
-            out[i] = a[k];
+            *value = a[k];
             k += 1;
         }
     }

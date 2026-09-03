@@ -14,7 +14,7 @@ fn write_tga(path: &PathBuf, width: u32, height: u32, rgba: &[u8]) -> Result<(),
     out.extend_from_slice(&(height as u16).to_le_bytes());
     out.push(32);
     out.push(0x28); // 8-bit alpha + top-left origin.
-    for px in rgba.chunks_exact(4) {
+    for px in rgba.as_chunks::<4>().0 {
         out.extend_from_slice(&[px[2], px[1], px[0], px[3]]);
     }
     if let Some(parent) = path.parent() {
@@ -60,8 +60,13 @@ fn main() -> Result<(), String> {
         }
     };
     let rgba = texture.base_rgba8(&pak)?;
-    let opaque = rgba.chunks_exact(4).filter(|p| p[3] == 255).count();
-    let transparent = rgba.chunks_exact(4).filter(|p| p[3] == 0).count();
+    let opaque = rgba
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .filter(|p| p[3] == 255)
+        .count();
+    let transparent = rgba.as_chunks::<4>().0.iter().filter(|p| p[3] == 0).count();
     let partial = rgba.len() / 4 - opaque - transparent;
     write_tga(&output, texture.width, texture.height, &rgba)?;
     println!("EXTRACT source='{}' {}x{} format={:?} alpha[opaque={} transparent={} partial={}] output='{}'", texture.source_path, texture.width, texture.height, texture.format, opaque, transparent, partial, output.display());

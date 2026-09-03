@@ -58,13 +58,13 @@ impl ScreenProfileRuntimeState {
                                 };
                             }
                         }
-                        "nodes.editor.script_editor.code/completion_visible" => {
-                            if change.value.as_bool() == Some(false) {
-                                if let Some(session) = self.script_editor.session.as_mut() {
-                                    session.dismiss_completion();
-                                }
-                                completion_dismissed = true;
+                        "nodes.editor.script_editor.code/completion_visible"
+                            if change.value.as_bool() == Some(false) =>
+                        {
+                            if let Some(session) = self.script_editor.session.as_mut() {
+                                session.dismiss_completion();
                             }
+                            completion_dismissed = true;
                         }
                         _ => {}
                     }

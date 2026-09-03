@@ -46,7 +46,7 @@ fn main() -> Result<(), String> {
             let start = a;
             let len = 256usize.min(pak.bytes().len() - start);
             let b = pak.slice(start, len)?;
-            for row in 0..(len + 15) / 16 {
+            for row in 0..len.div_ceil(16) {
                 let st = row * 16;
                 let en = (st + 16).min(len);
                 print!("   +{:03x}: ", st);

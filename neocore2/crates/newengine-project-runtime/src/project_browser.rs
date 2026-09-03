@@ -242,9 +242,11 @@ mod tests {
 
     #[test]
     fn game_launch_selector_prefers_declared_game_preset() {
-        let mut manifest = ProjectManifest::default();
-        manifest.launch_profile = Some(RuntimeLaunchProfile::Game);
-        manifest.default_launch = Some("editor".to_owned());
+        let mut manifest = ProjectManifest {
+            launch_profile: Some(RuntimeLaunchProfile::Game),
+            default_launch: Some("editor".to_owned()),
+            ..ProjectManifest::default()
+        };
         manifest.launch.insert(
             "game".to_owned(),
             newengine_project_api::ProjectLaunchPreset {

@@ -288,10 +288,12 @@ impl RuntimeRenderController {
             newengine_scene_bridge_runtime::editor_viewport_adapter::apply_camera_projection(
                 &mut self.editor_viewport,
                 &mut view_frame,
-                world_bounds.center,
-                world_bounds.radius,
-                selection_bounds.map(|bounds| bounds.center),
-                selection_bounds.map(|bounds| bounds.radius),
+                newengine_scene_bridge_runtime::editor_viewport_adapter::CameraProjectionBounds {
+                    world_center: world_bounds.center,
+                    world_radius: world_bounds.radius,
+                    selection_center: selection_bounds.map(|bounds| bounds.center),
+                    selection_radius: selection_bounds.map(|bounds| bounds.radius),
+                },
                 input.wheel_y,
                 [vp_w, vp_h],
             );

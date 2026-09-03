@@ -8,15 +8,19 @@ mod viewport;
 
 pub(super) fn editor_components(
     descriptor: &UiScreenProfileDescriptor,
-    runtime_mode: UiEditorRuntimeMode,
-    runtime_paused: bool,
-    viewport_state: &UiEditorViewportState,
-    scene_snapshot: &UiEditorSceneSnapshot,
-    inspector_snapshot: &UiEditorInspectorSnapshot,
-    authoring_state: &UiInGameEditorState,
-    layout: &EditorLayoutMetrics,
-    active_menu_id: Option<&str>,
+    context: EditorScreenFrameContext<'_>,
 ) -> Vec<UiComponentNode> {
+    let EditorScreenFrameContext {
+        runtime_mode,
+        runtime_paused,
+        viewport_state,
+        scene_snapshot,
+        inspector_snapshot,
+        authoring_state,
+        layout,
+        active_menu_id,
+        ..
+    } = context;
     let mut out = Vec::new();
     push_editor_regions(&mut out, layout);
     top_chrome::push_top_chrome(&mut out, authoring_state, layout, active_menu_id);

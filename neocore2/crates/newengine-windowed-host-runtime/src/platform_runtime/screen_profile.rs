@@ -118,4 +118,17 @@ use self::panels_and_tests::*;
 use self::profiles::*;
 use self::types::*;
 
+#[derive(Clone, Copy)]
+struct EditorScreenFrameContext<'a> {
+    frame_index: u64,
+    runtime_mode: UiEditorRuntimeMode,
+    runtime_paused: bool,
+    viewport_state: &'a UiEditorViewportState,
+    scene_snapshot: &'a UiEditorSceneSnapshot,
+    inspector_snapshot: &'a UiEditorInspectorSnapshot,
+    authoring_state: &'a UiInGameEditorState,
+    layout: &'a EditorLayoutMetrics,
+    active_menu_id: Option<&'a str>,
+}
+
 pub(crate) use self::types::ScreenProfileRuntimeState;

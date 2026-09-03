@@ -110,7 +110,7 @@ fn main() -> Result<(), String> {
                 }
             }
             let mut dominant_sorted = dominant.into_iter().collect::<Vec<_>>();
-            dominant_sorted.sort_by(|a, b| b.1.cmp(&a.1));
+            dominant_sorted.sort_by_key(|entry| std::cmp::Reverse(entry.1));
             let mut weighted_sorted = weighted.into_iter().collect::<Vec<_>>();
             weighted_sorted
                 .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));

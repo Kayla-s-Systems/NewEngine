@@ -9,30 +9,8 @@ impl Default for EditorScreen {
 }
 
 impl EditorScreen {
-    pub(super) fn surface_node(
-        &self,
-        frame_index: u64,
-        runtime_mode: UiEditorRuntimeMode,
-        runtime_paused: bool,
-        viewport_state: &UiEditorViewportState,
-        scene_snapshot: &UiEditorSceneSnapshot,
-        inspector_snapshot: &UiEditorInspectorSnapshot,
-        authoring_state: &UiInGameEditorState,
-        layout: &EditorLayoutMetrics,
-        active_menu_id: Option<&str>,
-    ) -> UiSurfaceNode {
-        editor_screen_surface_node(
-            &self.descriptor,
-            frame_index,
-            runtime_mode,
-            runtime_paused,
-            viewport_state,
-            scene_snapshot,
-            inspector_snapshot,
-            authoring_state,
-            layout,
-            active_menu_id,
-        )
+    pub(super) fn surface_node(&self, context: EditorScreenFrameContext<'_>) -> UiSurfaceNode {
+        editor_screen_surface_node(&self.descriptor, context)
     }
 }
 
@@ -284,16 +262,10 @@ pub(super) fn headless_screen_descriptor() -> UiScreenProfileDescriptor {
 
 pub(super) fn editor_screen_surface_node(
     descriptor: &UiScreenProfileDescriptor,
-    frame_index: u64,
-    runtime_mode: UiEditorRuntimeMode,
-    runtime_paused: bool,
-    viewport_state: &UiEditorViewportState,
-    scene_snapshot: &UiEditorSceneSnapshot,
-    inspector_snapshot: &UiEditorInspectorSnapshot,
-    authoring_state: &UiInGameEditorState,
-    layout: &EditorLayoutMetrics,
-    active_menu_id: Option<&str>,
+    context: EditorScreenFrameContext<'_>,
 ) -> UiSurfaceNode {
+    let frame_index = context.frame_index;
+    let layout = context.layout;
     let body_lines = Vec::new();
     let footer_lines =
         vec!["Live World Editor · Hold RMB to Fly · Ctrl+S Save · F2 Exit".to_owned()];
@@ -370,17 +342,7 @@ pub(super) fn editor_screen_surface_node(
         theme_id: UI_THEME_NORTHSTAR_EDITOR.to_owned(),
         style_ref: Some(UI_THEME_ASSET_NORTHSTAR_EDITOR.to_owned()),
         component_id: UI_COMPONENT_PANEL.to_owned(),
-        components: editor_components(
-            descriptor,
-            runtime_mode,
-            runtime_paused,
-            viewport_state,
-            scene_snapshot,
-            inspector_snapshot,
-            authoring_state,
-            layout,
-            active_menu_id,
-        ),
+        components: editor_components(descriptor, context),
         message: None,
         style: UiSurfaceStyle {
             anchor: UiSurfaceAnchor::TopLeft,
