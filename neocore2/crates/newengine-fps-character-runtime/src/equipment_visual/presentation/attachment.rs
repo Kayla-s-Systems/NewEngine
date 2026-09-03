@@ -321,6 +321,35 @@ fn update_weapon_attachment(
             (weapon_position + forward * offset, forward)
         };
         if let Some(muzzle) = EquippedWeaponMuzzle::new(muzzle_position, muzzle_forward) {
+            let (sight, sight_rotation) = presentation
+                .as_ref()
+                .and_then(|presentation| {
+                    let weapon_root = crate::weapon_grip::WeaponRootTransform {
+                        position: weapon_position,
+                        rotation: weapon_rotation,
+                    };
+                    let rear =
+                        crate::weapon_grip::weapon_rear_sight_position(presentation, weapon_root);
+                    let forward =
+                        crate::weapon_grip::weapon_sight_forward(presentation, weapon_root);
+                    if !rear.is_finite() || forward.length_squared() <= 1.0e-8 {
+                        return None;
+                    }
+                    let root_forward = (weapon_rotation * Vec3::Z).normalize_or_zero();
+                    let sight_rotation = if root_forward.length_squared() > 1.0e-8 {
+                        (Quat::from_rotation_arc(root_forward, forward) * weapon_rotation)
+                            .normalize_or_identity()
+                    } else {
+                        Quat::from_rotation_arc(Vec3::Z, forward).normalize_or_identity()
+                    };
+                    let sight = newengine_engine_runtime::gameplay::EquippedWeaponSight::new(
+                        rear, forward,
+                    )?;
+                    Some((sight, sight_rotation))
+                })
+                .map_or((None, None), |(sight, rotation)| {
+                    (Some(sight), Some(rotation))
+                });
             let previous = world
                 .get::<WeaponEntitySockets>(root)
                 .and_then(|sockets| sockets.muzzle);
@@ -333,16 +362,31 @@ fn update_weapon_attachment(
                     .copied()
                     .unwrap_or_default();
                 sockets.muzzle = Some(socket_pose);
+                if let (Some(sight), Some(sight_rotation)) = (sight, sight_rotation) {
+                    let previous_sight = sockets.sight;
+                    sockets.sight = WeaponSocketPose::stationary(sight.position, sight_rotation)
+                        .map(|pose| pose.with_measured_motion(previous_sight, dt));
+                } else {
+                    sockets.sight = None;
+                }
                 let _ = world.insert(root, sockets);
             }
-            // Compatibility projection while combat/audio callers migrate to the weapon entity.
+            // Compatibility projections while gameplay callers migrate to weapon-entity sockets.
             let _ = world.insert(owner, muzzle);
+            if let Some(sight) = sight {
+                let _ = world.insert(owner, sight);
+            } else {
+                let _ =
+                    world.remove::<newengine_engine_runtime::gameplay::EquippedWeaponSight>(owner);
+            }
         } else {
             if let Some(mut sockets) = world.get::<WeaponEntitySockets>(root).copied() {
                 sockets.muzzle = None;
+                sockets.sight = None;
                 let _ = world.insert(root, sockets);
             }
             let _ = world.remove::<EquippedWeaponMuzzle>(owner);
+            let _ = world.remove::<newengine_engine_runtime::gameplay::EquippedWeaponSight>(owner);
         }
     }
 

@@ -239,6 +239,16 @@ pub(super) fn shot_origin_and_direction_with_profiles(
         .filter(|presentation| presentation.enabled)
         .map(|presentation| presentation.first_person_hip_convergence_m)
         .unwrap_or(12.0);
+    // ADS is sight-authoritative: presentation already rotates the rendered rear->front sight axis
+    // toward gameplay aim, so combat must consume that exact rendered line instead of reconstructing
+    // a second finite-distance camera convergence. Hip fire keeps camera convergence because there is
+    // no sight lock in that stance. If presentation has not published a valid sight yet, retain the
+    // existing camera-convergence fallback rather than inventing a direction.
+    let sight_forward = aiming
+        .then(|| active_equipped_weapon_sight(world, player))
+        .flatten()
+        .map(|sight| sight.forward.normalize_or_zero())
+        .filter(|forward| forward.is_finite() && forward.length_squared() > 1.0e-8);
     let convergence_distance = if aiming {
         tuning.range.clamp(12.0, 80.0)
     } else {
@@ -246,11 +256,13 @@ pub(super) fn shot_origin_and_direction_with_profiles(
     };
     let aim_point = view_origin + camera_forward * convergence_distance;
     let ballistic_forward = (aim_point - muzzle_origin).normalize_or_zero();
-    let forward = if ballistic_forward.length_squared() > 1.0e-8 {
-        ballistic_forward
-    } else {
-        muzzle_forward
-    };
+    let forward = sight_forward.unwrap_or_else(|| {
+        if ballistic_forward.length_squared() > 1.0e-8 {
+            ballistic_forward
+        } else {
+            muzzle_forward
+        }
+    });
 
     let spread_state = if aiming {
         profiles.spread.ads

@@ -558,6 +558,8 @@ impl WeaponSocketPose {
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct WeaponEntitySockets {
     pub muzzle: Option<WeaponSocketPose>,
+    /// Rear-sight pose. `rotation * +Z` is the rendered rear->front sight axis.
+    pub sight: Option<WeaponSocketPose>,
     pub casing_ejection: Option<WeaponSocketPose>,
 }
 
@@ -572,6 +574,25 @@ pub struct EquippedWeaponMuzzle {
 }
 
 impl EquippedWeaponMuzzle {
+    #[inline]
+    pub fn new(position: Vec3, forward: Vec3) -> Option<Self> {
+        let forward = forward.normalize_or_zero();
+        (position.is_finite() && forward.length_squared() > 1.0e-8)
+            .then_some(Self { position, forward })
+    }
+}
+
+/// Latest world-space iron-sight line published by the rendered equipped weapon.
+///
+/// `position` is the rear sight and `forward` is the normalized rear->front sight axis. The weapon
+/// entity socket is authoritative; this owner-side component is a compatibility projection.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EquippedWeaponSight {
+    pub position: Vec3,
+    pub forward: Vec3,
+}
+
+impl EquippedWeaponSight {
     #[inline]
     pub fn new(position: Vec3, forward: Vec3) -> Option<Self> {
         let forward = forward.normalize_or_zero();

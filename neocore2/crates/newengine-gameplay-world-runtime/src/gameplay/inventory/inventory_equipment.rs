@@ -11,7 +11,7 @@ mod components;
 pub use components::{
     active_equipped_weapon_component_modifiers, active_equipped_weapon_component_overrides,
     active_equipped_weapon_component_stat_modifiers, active_equipped_weapon_muzzle,
-    install_weapon_component, remove_weapon_component,
+    active_equipped_weapon_sight, install_weapon_component, remove_weapon_component,
 };
 
 fn publish_weapon_equipment_event(

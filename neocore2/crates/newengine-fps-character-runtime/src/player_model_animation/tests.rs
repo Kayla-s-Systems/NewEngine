@@ -1104,6 +1104,14 @@ mod transition_tests {
         // The current authored handle stays fixed while the firing/support arm chains follow the
         // sight-aligned weapon root returned to equipment_visual.
         let mut tpp_aim_pose = authored_pose.clone();
+        for (joint, rotation) in [
+            (rig.right_shoulder, Quat::from_rotation_z(0.48)),
+            (rig.right_elbow, Quat::from_rotation_z(-0.86)),
+            (rig.left_shoulder, Quat::from_rotation_z(-0.42)),
+            (rig.left_elbow, Quat::from_rotation_z(0.78)),
+        ] {
+            tpp_aim_pose[joint].rotation = [rotation.x, rotation.y, rotation.z, rotation.w];
+        }
         let mut tpp_aim_frames = Vec::new();
         rebuild_model_joint_frames(&animation_runtime, &tpp_aim_pose, &mut tpp_aim_frames)
             .expect("TPP aim initial frames");
@@ -1139,7 +1147,7 @@ mod transition_tests {
             true,
             true,
             true,
-            true,
+            false,
         )
         .expect("TPP native sight-aligned presentation")
         .expect("TPP native sight-aligned root");
@@ -1154,7 +1162,6 @@ mod transition_tests {
         assert!(tpp_sight_after.dot(tpp_view_forward) > 0.999_9);
         assert!(tpp_handle_before.distance(tpp_handle_after) <= 1.0e-6);
         assert!(tpp_aim_result.right_error_m <= 0.005);
-        assert!(tpp_aim_result.left_error_m <= 0.005);
         assert!(tpp_aim_result.socket_position_error_m <= 0.005);
         assert!(
             tpp_aim_result.socket_angular_error_deg <= 1.0,

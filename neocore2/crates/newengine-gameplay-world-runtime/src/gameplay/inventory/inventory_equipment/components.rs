@@ -30,6 +30,32 @@ pub fn active_equipped_weapon_muzzle(
     world.get::<EquippedWeaponMuzzle>(owner).copied()
 }
 
+/// Resolves the active weapon's rendered iron-sight line.
+///
+/// The weapon entity socket is authoritative. The owner-side projection exists only for compatibility
+/// and tests; no camera/body synthesis is allowed here.
+pub fn active_equipped_weapon_sight(world: &World, owner: EntityId) -> Option<EquippedWeaponSight> {
+    if let Some(binding) = world.get::<EquippedWeaponBinding>(owner).copied() {
+        if let Some(link) = world
+            .get::<EquippedWeaponEntity>(owner)
+            .copied()
+            .filter(|link| link.instance_id == binding.instance_id && link.item == binding.item)
+        {
+            if let Some(socket) = world
+                .get::<WeaponEntitySockets>(link.entity)
+                .and_then(|sockets| sockets.sight)
+            {
+                let forward = (socket.rotation * Vec3::Z).normalize_or_zero();
+                if let Some(sight) = EquippedWeaponSight::new(socket.position, forward) {
+                    return Some(sight);
+                }
+            }
+        }
+    }
+
+    world.get::<EquippedWeaponSight>(owner).copied()
+}
+
 pub fn active_equipped_weapon_component_modifiers(
     world: &World,
     owner: EntityId,

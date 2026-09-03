@@ -274,9 +274,9 @@ fn apply_equipped_weapon_support_ik(
             support_left_hand,
         )
     };
-    let base_root = base_contract.root;
+    let mut base_root = base_contract.root;
     let native_prop_owned = authored_prop_root.is_some();
-    let contract = if native_prop_owned {
+    let mut contract = if native_prop_owned {
         // A qualified prop socket is already the final authored weapon frame. Applying generic
         // secondary rotation here would detach the weapon from that frame and force anatomical IK
         // to compensate, which is exactly the arm inversion visible with native TLOU-style rigs.
@@ -369,27 +369,11 @@ fn apply_equipped_weapon_support_ik(
         .to_scale_rotation_translation()
         .1
         .normalize_or_identity();
-    let left_target = if native_prop_owned && stabilize_native_support_hand {
-        // The character prop branch already defines the moving weapon frame. Target the visible
-        // support palm directly at the weapon's authored foregrip; legacy palm offsets belong only
-        // to the compatibility ReadyHold solver and may come from a different animation baseline.
-        crate::weapon_grip::weapon_ready_left_grip_position(presentation, contract.root)
-    } else {
-        crate::weapon_grip::weapon_ready_left_palm_position(presentation, contract.root)
-    };
-    let left_rotation = if native_prop_owned && stabilize_native_support_hand {
-        native_left_palm_rotation
-    } else {
-        crate::weapon_grip::weapon_ready_left_palm_rotation(presentation, contract.root)
-    };
     if solve_right_hand && !right_target.is_finite() {
         return Err("weapon ReadyHold authored right-hand target is non-finite".to_owned());
     }
-    if solve_left_hand && !left_target.is_finite() {
-        return Err("weapon ReadyHold authored support-hand target is non-finite".to_owned());
-    }
 
-    if solve_right_hand {
+    let right_solved = if solve_right_hand {
         solve_arm_to_palm_contact(
             skeleton,
             animation_runtime,
@@ -403,7 +387,49 @@ fn apply_equipped_weapon_support_ik(
             contract.right_elbow_pole,
             right_rotation,
             "right",
-        )?;
+        )?
+    } else {
+        false
+    };
+
+    // Sight alignment is never allowed to detach the rendered rifle from the firing hand. If the
+    // anatomical right arm cannot reach the requested camera-aligned contract without violating the
+    // safe-extension gate, keep the original authored prop root for this frame. Large yaw is then
+    // resolved by body turn-in-place instead of rubber-arm stretching or a floating weapon.
+    let native_view_aim_committed = if native_view_aim && !right_solved {
+        if let Some(authored_root) = authored_prop_root {
+            contract.root = authored_root;
+            base_root = authored_root;
+            let stock_from_handle = Vec3::new(
+                presentation.stock_contact_from_handle[0],
+                presentation.stock_contact_from_handle[1],
+                presentation.stock_contact_from_handle[2],
+            );
+            contract.stock_contact =
+                crate::weapon_grip::weapon_handle_position(presentation, authored_root)
+                    + crate::weapon_grip::weapon_handle_rotation(presentation, authored_root)
+                        * stock_from_handle;
+        }
+        false
+    } else {
+        true
+    };
+
+    let left_target = if native_prop_owned && stabilize_native_support_hand {
+        // The character prop branch already defines the moving weapon frame. Target the visible
+        // support palm directly at the weapon's authored foregrip; legacy palm offsets belong only
+        // to the compatibility ReadyHold solver and may come from a different animation baseline.
+        crate::weapon_grip::weapon_ready_left_grip_position(presentation, contract.root)
+    } else {
+        crate::weapon_grip::weapon_ready_left_palm_position(presentation, contract.root)
+    };
+    let left_rotation = if native_prop_owned && stabilize_native_support_hand {
+        native_left_palm_rotation
+    } else {
+        crate::weapon_grip::weapon_ready_left_palm_rotation(presentation, contract.root)
+    };
+    if solve_left_hand && !left_target.is_finite() {
+        return Err("weapon ReadyHold authored support-hand target is non-finite".to_owned());
     }
     if solve_left_hand {
         solve_arm_to_palm_contact(
@@ -441,7 +467,7 @@ fn apply_equipped_weapon_support_ik(
     let socket_angular_error = socket_frame_error
         .map(|error| error.angular_degrees)
         .unwrap_or(0.0);
-    let right_error = if solve_right_hand {
+    let right_error = if solve_right_hand && native_view_aim_committed {
         (frames[rig.right_palm].transform_point3(Vec3::ZERO) - right_target).length()
     } else {
         0.0

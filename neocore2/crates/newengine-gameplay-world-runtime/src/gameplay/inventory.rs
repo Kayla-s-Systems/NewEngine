@@ -45,9 +45,10 @@ pub use operations::{
     reorder_inventory_instance, split_inventory_stack,
 };
 pub use storage::{
-    EquippedWeaponBinding, EquippedWeaponEntity, EquippedWeaponMuzzle, InventoryCapacityState,
-    InventoryEntry, InventoryEvent, InventoryEventBus, InventoryEventKind, InventoryMutation,
-    ItemPickup, PlayerInventory, WeaponEntityRuntime, WeaponEntitySockets, WeaponSocketPose,
+    EquippedWeaponBinding, EquippedWeaponEntity, EquippedWeaponMuzzle, EquippedWeaponSight,
+    InventoryCapacityState, InventoryEntry, InventoryEvent, InventoryEventBus, InventoryEventKind,
+    InventoryMutation, ItemPickup, PlayerInventory, WeaponEntityRuntime, WeaponEntitySockets,
+    WeaponSocketPose,
 };
 
 pub use inventory_equipment::{
@@ -55,11 +56,11 @@ pub use inventory_equipment::{
     active_equipped_weapon_can_fire, active_equipped_weapon_can_melee,
     active_equipped_weapon_component_modifiers, active_equipped_weapon_component_overrides,
     active_equipped_weapon_component_stat_modifiers, active_equipped_weapon_muzzle,
-    consume_equipped_ammo, equip_first_item, equip_item_instance, equipped_reserve_ammo,
-    install_weapon_component, persist_equipped_weapon_state, play_equipped_weapon_audio,
-    play_weapon_item_audio, preload_weapon_audio_definition, remove_weapon_component,
-    select_equipment_slot, select_highest_ranked_equipped_weapon, sync_equipped_weapon_runtime,
-    unequip_slot, use_item, use_item_instance,
+    active_equipped_weapon_sight, consume_equipped_ammo, equip_first_item, equip_item_instance,
+    equipped_reserve_ammo, install_weapon_component, persist_equipped_weapon_state,
+    play_equipped_weapon_audio, play_weapon_item_audio, preload_weapon_audio_definition,
+    remove_weapon_component, select_equipment_slot, select_highest_ranked_equipped_weapon,
+    sync_equipped_weapon_runtime, unequip_slot, use_item, use_item_instance,
 };
 pub use inventory_world::try_collect_item_pickup;
 pub use inventory_world::{

@@ -239,11 +239,8 @@ mod tests {
         );
         let _ = world.insert(
             actor,
-            EquippedWeaponMuzzle::new(
-                Vec3::new(0.18, 1.20, -0.62),
-                Vec3::new(0.0, 0.0, -1.0),
-            )
-            .expect("AI test muzzle"),
+            EquippedWeaponMuzzle::new(Vec3::new(0.18, 1.20, -0.62), Vec3::new(0.0, 0.0, -1.0))
+                .expect("AI test muzzle"),
         );
         newengine_engine_runtime::gameplay::apply_loadout(
             &mut world,
@@ -285,10 +282,7 @@ mod tests {
             .expect("AI must enter the ordinary pending hitscan pipeline");
         assert_eq!(world.get::<Health>(target).unwrap().current, 100.0);
 
-        let map = BTreeMap::from([
-            (actor.stable_u64(), actor),
-            (target.stable_u64(), target),
-        ]);
+        let map = BTreeMap::from([(actor.stable_u64(), actor), (target.stable_u64(), target)]);
         resolve_combat_queries(
             &mut world,
             41,
@@ -1354,6 +1348,42 @@ fn hitscan_direction_tracks_mouse_look_pitch() {
     assert!(
         (direction - camera_forward).length() > 1.0e-5,
         "off-axis muzzle must converge toward the view axis rather than pretending the bullet originated at the camera"
+    );
+}
+
+#[test]
+fn ads_hitscan_uses_rendered_weapon_sight_axis_instead_of_rebuilding_camera_convergence() {
+    let mut world = World::new();
+    let player = world.spawn();
+    let _ = world.insert(player, Transform::default());
+    let mut motor = CharacterMotor::default();
+    motor.yaw = 0.35;
+    motor.pitch = -0.18;
+    let _ = world.insert(player, motor);
+    let _ = world.insert(player, PlayerStanceState::standing(0.72));
+    let muzzle = EquippedWeaponMuzzle::new(Vec3::new(0.28, 1.24, -0.61), Vec3::new(0.0, 0.0, -1.0))
+        .expect("physical muzzle");
+    let _ = world.insert(player, muzzle);
+    let rendered_sight_forward = Vec3::new(-0.22, 0.17, -0.96).normalize_or_zero();
+    let sight = EquippedWeaponSight::new(Vec3::new(0.21, 1.34, -0.42), rendered_sight_forward)
+        .expect("rendered sight");
+    let _ = world.insert(player, sight);
+    let mut tuning = HitscanWeaponTuning::default();
+    tuning.hip_spread_radians = 0.0;
+    tuning.aim_spread_radians = 0.0;
+
+    let (origin, direction) =
+        shot_origin_and_direction(&world, player, tuning, true, 77).expect("ADS sight hitscan");
+    assert!((origin - (muzzle.position + muzzle.forward * 0.008)).length() < 1.0e-6);
+    assert!(
+        direction.dot(rendered_sight_forward) > 0.999_999,
+        "ADS ballistic direction must be the exact rendered rear->front sight axis"
+    );
+    let camera_forward = (Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0) * -Vec3::Z)
+        .normalize_or_zero();
+    assert!(
+        (direction - camera_forward).length() > 1.0e-3,
+        "test must prove ADS consumes the published sight rather than silently rebuilding camera forward"
     );
 }
 
