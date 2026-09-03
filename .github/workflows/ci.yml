@@ -10,6 +10,10 @@ env:
   RUST_BACKTRACE: 1
   CARGO_TERM_COLOR: always
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ${{ matrix.os }}
@@ -23,6 +27,14 @@ jobs:
         working-directory: neocore2
     steps:
       - uses: actions/checkout@v7
+
+      - name: Verify checkout revision
+        shell: bash
+        run: |
+          actual="$(git rev-parse HEAD)"
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          echo "HEAD=$actual"
+          test "$actual" = "$GITHUB_SHA"
 
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -95,6 +107,13 @@ jobs:
         working-directory: neocore2
     steps:
       - uses: actions/checkout@v7
+      - name: Verify checkout revision
+        shell: bash
+        run: |
+          actual="$(git rev-parse HEAD)"
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          echo "HEAD=$actual"
+          test "$actual" = "$GITHUB_SHA"
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: miri
@@ -120,6 +139,13 @@ jobs:
         working-directory: neocore2
     steps:
       - uses: actions/checkout@v7
+      - name: Verify checkout revision
+        shell: bash
+        run: |
+          actual="$(git rev-parse HEAD)"
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          echo "HEAD=$actual"
+          test "$actual" = "$GITHUB_SHA"
       - uses: dtolnay/rust-toolchain@stable
       - name: Install Linux system dependencies
         run: |
