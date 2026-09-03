@@ -5,7 +5,8 @@ static GLOBAL_SHUTDOWN: AtomicBool = AtomicBool::new(false);
 
 /// Cooperative shutdown token.
 ///
-/// Platform adapter may set it from ctrl-c, window close, etc.
+/// Instance requests stop only the owning host/runtime. Process-wide shutdown
+/// (for example Ctrl-C) must be requested explicitly through `global_request`.
 #[derive(Clone)]
 pub struct ShutdownToken {
     flag: Arc<AtomicBool>,
@@ -29,7 +30,6 @@ impl ShutdownToken {
     #[inline]
     pub fn request(&self) {
         self.flag.store(true, Ordering::Relaxed);
-        GLOBAL_SHUTDOWN.store(true, Ordering::Relaxed);
     }
 
     #[inline]
@@ -40,5 +40,21 @@ impl ShutdownToken {
     #[inline]
     pub fn global_request() {
         GLOBAL_SHUTDOWN.store(true, Ordering::Relaxed);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn instance_shutdown_does_not_poison_independent_host_token() {
+        let first = ShutdownToken::new();
+        let second = ShutdownToken::new();
+
+        first.request();
+
+        assert!(first.is_requested());
+        assert!(!second.is_requested());
     }
 }
