@@ -176,6 +176,7 @@ fn wide_to_string(value: &[u16]) -> Option<String> {
     (!value.is_empty()).then_some(value)
 }
 
+#[cfg(windows)]
 fn bytes_to_mb_option(bytes: u64) -> Option<u64> {
     (bytes > 0).then_some(bytes / (1024 * 1024))
 }
