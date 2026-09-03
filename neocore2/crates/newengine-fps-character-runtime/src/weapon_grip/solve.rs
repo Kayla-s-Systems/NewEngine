@@ -43,6 +43,7 @@ pub(crate) fn weapon_ready_solve_contract_aimed(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn weapon_ready_solve_contract_presented(
     presentation: &WeaponPresentationDefinition,
     chest: Mat4,
@@ -170,6 +171,7 @@ pub(crate) fn weapon_ready_solve_contract_presented(
 /// fields that are already authored in YTYP: hip handle offset, sight points, camera-to-rear-sight
 /// offset and hip convergence distance. The result is still the ordinary world weapon entity;
 /// both real arms are solved to this root afterwards, so there is no duplicate viewmodel.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn weapon_first_person_solve_contract_presented(
     presentation: &WeaponPresentationDefinition,
     eye_position_model: Vec3,

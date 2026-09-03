@@ -1,3 +1,4 @@
+#[allow(clippy::too_many_arguments)]
 fn spawn_runtime_ydd_prefab_batch(
     world: &mut newengine_ecs::World,
     prims: &mut PrimitiveRegistry,

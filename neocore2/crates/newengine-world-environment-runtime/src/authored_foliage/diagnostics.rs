@@ -1,4 +1,5 @@
 #[inline]
+#[allow(clippy::too_many_arguments)]
 pub(super) fn log_foliage_prefab_placement(
     prefab_id: &str,
     source: &str,

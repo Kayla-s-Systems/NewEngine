@@ -54,7 +54,6 @@ pub fn launch_game_ready_profile_with(
 /// The runtime-profile crate intentionally does not choose a concrete game module.
 /// Distribution/plugin composition constructs `GameReadyRuntimeProfile` with the selected
 /// game-module factories and calls `launch_game_ready_profile_with`.
-
 pub const GAME_READY_CONTENT_SETS: &[ContentSetSpec] = &[ContentSetSpec::runtime_app(
     "game-ready.primary",
     GAME_READY_APP_DIR_NAME,

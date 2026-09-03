@@ -203,8 +203,10 @@ pub(crate) fn apply_weapon_ytyp_namespace(
         }
 
         if namespace.get("presentation").is_some() {
-            let mut presentation = AuthoredWeaponPresentationDefinition::default();
-            presentation.enabled = bool_value(namespace, "presentation", "enabled").unwrap_or(true);
+            let mut presentation = AuthoredWeaponPresentationDefinition {
+                enabled: bool_value(namespace, "presentation", "enabled").unwrap_or(true),
+                ..Default::default()
+            };
             macro_rules! v3 {
                 ($field:ident) => {
                     if let Some(value) = vec3(namespace, "presentation", stringify!($field)) {
@@ -279,11 +281,13 @@ pub(crate) fn apply_weapon_ytyp_namespace(
         }
 
         if namespace.get("casing").is_some() {
-            let mut casing = AuthoredWeaponCasingDefinition::default();
-            casing.model_dictionary =
-                string(namespace, "casing", "model_dictionary").unwrap_or_default();
-            casing.variants = string_list(namespace, "casing", "variants").unwrap_or_default();
-            casing.material_ref = string(namespace, "casing", "material_ref").unwrap_or_default();
+            let mut casing = AuthoredWeaponCasingDefinition {
+                model_dictionary: string(namespace, "casing", "model_dictionary")
+                    .unwrap_or_default(),
+                variants: string_list(namespace, "casing", "variants").unwrap_or_default(),
+                material_ref: string(namespace, "casing", "material_ref").unwrap_or_default(),
+                ..Default::default()
+            };
             if let Some(value) = vec3(namespace, "casing", "half_extents") {
                 casing.half_extents = value;
             }

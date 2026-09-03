@@ -13,6 +13,7 @@ struct PlayerAnimationFinalizeTiming {
 
 /// Phase 3: compose the visible pose, solve authored IK, enforce continuity/eye invariants,
 /// build the skin palette, derive foot contacts and run secondary motion.
+#[allow(clippy::too_many_arguments)]
 fn finalize_player_pose_and_palette(
     player: newengine_ecs::EntityId,
     binding: &mut PlayerAnimationRuntimeBinding,
@@ -91,7 +92,7 @@ fn finalize_player_pose_and_palette(
     // base pose first; then let weapon IK be the last writer for the arm chains.
     let phase_started = std::time::Instant::now();
     let continuity_key = PoseContinuityKey {
-        clip_hash: animation_source_hash(&clip_ref),
+        clip_hash: animation_source_hash(clip_ref),
         turn_sequence: binding.turn_sequence,
         unarmed_attack_sequence,
         equipment_stance: equipment_stance as u8,
@@ -154,12 +155,6 @@ fn finalize_player_pose_and_palette(
                 EquipmentPresentationStance::Reload | EquipmentPresentationStance::None => false,
             }
         });
-    let relative_rifle_ads_active = frame.equipment_pose_family.as_deref() == Some("rifle")
-        && equipment_stance == EquipmentPresentationStance::Aim
-        && !first_person_active;
-    binding
-        .equipment_relative_ads
-        .update_activation(relative_rifle_ads_active, rifle_view_rotation_model);
     let strict_rifle_contact_contract = frame.equipment_pose_family.as_deref() == Some("rifle")
         && matches!(
             equipment_stance,
@@ -207,7 +202,7 @@ fn finalize_player_pose_and_palette(
                 rifle_reload_progress
                     .map(|progress| progress <= 0.08 || progress >= 0.92)
                     .unwrap_or(true),
-                Some(&mut binding.equipment_relative_ads),
+                Some(&mut binding.equipment_aim_controller),
             ) {
                 Ok(Some(result)) => {
                     binding.equipment_resolved_weapon_root = Some(result.base_root);
@@ -398,7 +393,7 @@ fn finalize_player_pose_and_palette(
     if let Err(error) = super::validation::validate_player_palette(
         &binding.palette_scratch,
         expected_palette_joints,
-        &clip_ref,
+        clip_ref,
     ) {
         newengine_ulog_api::ulog::warn!(
             "fps-character: unstable player skin palette rejected player={} state='{}' clip='{}': {}",

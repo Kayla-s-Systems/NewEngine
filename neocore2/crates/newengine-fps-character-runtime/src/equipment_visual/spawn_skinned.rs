@@ -1,3 +1,4 @@
+#[allow(clippy::too_many_arguments)]
 fn spawn_skinned_equipped_weapon_visual(
     world: &mut newengine_ecs::World,
     prims: &mut PrimitiveRegistry,

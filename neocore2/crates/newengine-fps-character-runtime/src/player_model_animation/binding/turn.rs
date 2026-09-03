@@ -281,9 +281,7 @@ fn resolve_foot_joint_binding(skeleton: &ModelSkeletonMetadata) -> Option<Player
             let name = joint
                 .name
                 .to_ascii_lowercase()
-                .replace('.', "_")
-                .replace(':', "_")
-                .replace('-', "_");
+                .replace(['.', ':', '-'], "_");
             patterns.iter().any(|pattern| {
                 name == *pattern || name.starts_with(pattern) || name.ends_with(pattern)
             })

@@ -134,7 +134,7 @@ impl SkeletalSecondaryMotionRuntime {
                     .transform_point3(Vec3::ZERO),
             );
         }
-        let colliders = self.collider_bindings.from_joint_frames(joint_frames)?;
+        let colliders = self.collider_bindings.resolve_from_joint_frames(joint_frames)?;
         let one_sided_back_normal = colliders
             .boxes
             .iter()
@@ -317,9 +317,14 @@ impl SkeletalSecondaryMotionRuntime {
         let guide_centerline = secondary_motion_centerline(&particle_guide, &self.authored);
         let current_centerline = secondary_motion_centerline(&self.points, &self.authored);
         let mut desired = chain_guide.clone();
-        for lane in self.authored.dynamic_start..self.chain_joints.len() {
+        for (lane, desired_point) in desired
+            .iter_mut()
+            .enumerate()
+            .take(self.chain_joints.len())
+            .skip(self.authored.dynamic_start)
+        {
             let t = normalized_polyline_parameter(&self.bind_chain_points, lane);
-            desired[lane] += sample_polyline_normalized(&current_centerline, t)
+            *desired_point += sample_polyline_normalized(&current_centerline, t)
                 - sample_polyline_normalized(&guide_centerline, t);
         }
         for lane in self.authored.dynamic_start..self.chain_joints.len() {

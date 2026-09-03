@@ -113,8 +113,7 @@ fn player_joint_channels_text(
     for token in raw
         .trim()
         .to_ascii_lowercase()
-        .replace('+', ",")
-        .replace('|', ",")
+        .replace(['+', '|'], ",")
         .split(',')
         .map(str::trim)
         .filter(|token| !token.is_empty())

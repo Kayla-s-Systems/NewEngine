@@ -6,6 +6,7 @@ fn fallback_weapon_socket(position: Vec3, forward: Vec3) -> Option<WeaponSocketP
     let rotation = Quat::from_rotation_arc(Vec3::Z, forward).normalize_or_identity();
     WeaponSocketPose::stationary(position, rotation)
 }
+#[allow(clippy::too_many_arguments)]
 fn spawn_weapon_segment_effect(
     world: &mut World,
     owner: EntityId,
@@ -50,6 +51,7 @@ fn spawn_weapon_segment_effect(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_weapon_ricochet_fx(
     world: &mut World,
     owner: EntityId,

@@ -40,6 +40,7 @@ pub fn resolve_weapon_shot_hit_fx(
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn resolve_weapon_shot_hit_fx_segment(
     world: &mut World,
     owner: EntityId,

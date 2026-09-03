@@ -88,7 +88,7 @@ pub enum GameReadyDefinitionApplyMode {
     InstantiateMarker,
 }
 impl GameReadyDefinitionApplyMode {
-    pub fn from_str(value: &str) -> Self {
+    pub fn parse_authored(value: &str) -> Self {
         match value.trim().to_ascii_lowercase().as_str() {
             "instantiate" | "instantiate_marker" | "marker" | "diagnostic_marker" => {
                 Self::InstantiateMarker

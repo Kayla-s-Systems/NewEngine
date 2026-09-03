@@ -44,20 +44,16 @@ fn evaluate_player_animation_presentation(
     let relative_rifle_ads_active = equipment_pose_family == Some("rifle")
         && equipment_stance == EquipmentPresentationStance::Aim
         && !frame.first_person_active;
-    binding
-        .equipment_relative_ads
-        .update_activation(relative_rifle_ads_active, frame.rifle_view_rotation_model);
-    if relative_rifle_ads_active {
-        let entry_sight = binding
-            .equipment_resolved_weapon_root
-            .zip(frame.weapon_presentation.as_ref())
-            .map(|(root, presentation)| {
-                crate::weapon_grip::weapon_sight_forward(presentation, root)
-            });
-        binding
-            .equipment_relative_ads
-            .capture_entry_sight_if_unset(entry_sight);
-    }
+    let visible_sight = binding
+        .equipment_resolved_weapon_root
+        .zip(frame.weapon_presentation.as_ref())
+        .map(|(root, presentation)| crate::weapon_grip::weapon_sight_forward(presentation, root));
+    binding.equipment_aim_controller.update(
+        relative_rifle_ads_active,
+        dt,
+        frame.rifle_view_rotation_model,
+        visible_sight,
+    );
     binding.equipment_resolved_weapon_root = None;
     if unarmed_active {
         if binding.unarmed_attack_sequence != unarmed_attack_sequence {

@@ -120,6 +120,7 @@ fn evaluate_locomotion_presentation_layer(
     Some((active_state, transitioned, clip_ref))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn evaluate_native_turn_presentation_layer(
     player: newengine_ecs::EntityId,
     binding: &mut PlayerAnimationRuntimeBinding,
@@ -151,14 +152,22 @@ fn evaluate_native_turn_presentation_layer(
     let weapon_aim_authority = equipment_stance == EquipmentPresentationStance::Aim;
     let look_allowed =
         unarmed_attack_sequence == 0 && equipment_allows_authored_head_look(equipment_stance);
-    let aim_turn_hysteresis = binding
-        .minimum_turn_step_radians()
-        .map(|angle| angle * 0.5)
-        .unwrap_or(f32::INFINITY);
+    // Weapon aim owns a real free-aim cone around the torso. TLOU/GTA-style body follow only
+    // begins after the camera leaves that sector; the body then consumes one authored turn step
+    // instead of continuously stealing mouse yaw from the arms. Cyberpunk-style rubber-band damping
+    // remains inside ThirdPersonWeaponAimState.
+    const WEAPON_AIM_FREE_YAW_LIMIT: f32 = 52.0_f32.to_radians();
+    const WEAPON_AIM_BODY_FOLLOW_HYSTERESIS: f32 = 5.0_f32.to_radians();
+    let minimum_turn_step = binding.minimum_turn_step_radians();
+    let aim_turn_hysteresis = WEAPON_AIM_BODY_FOLLOW_HYSTERESIS;
     let (live_turn_yaw_delta, live_turn_hysteresis) = if native_turn_allowed && weapon_aim_authority
     {
-        let residual = if view_body_yaw_delta.abs() > aim_turn_hysteresis {
-            view_body_yaw_delta
+        let beyond_sector = view_body_yaw_delta.abs()
+            > WEAPON_AIM_FREE_YAW_LIMIT + WEAPON_AIM_BODY_FOLLOW_HYSTERESIS;
+        let residual = if beyond_sector {
+            minimum_turn_step
+                .map(|step| step.copysign(view_body_yaw_delta))
+                .unwrap_or(0.0)
         } else {
             0.0
         };

@@ -119,6 +119,7 @@ pub(super) fn world_item_render_options() -> newengine_model_domain_api::MeshRen
     options
 }
 
+#[allow(clippy::too_many_arguments)]
 fn bind_world_item_model_from_decoded(
     world: &mut newengine_ecs::World,
     prims: &mut PrimitiveRegistry,

@@ -31,11 +31,13 @@ fn test_character(id: &str, model: &str) -> FpsPlayableCharacterPolicy {
 }
 
 fn install_test_character_policy(world: &mut World) {
-    let mut policy = FpsGameplayPolicySnapshot::default();
-    policy.characters = vec![
-        test_character(TEST_CHARACTER_A, "models/test/alpha.ydd@alpha"),
-        test_character(TEST_CHARACTER_B, "models/test/beta.ydd@beta"),
-    ];
+    let policy = FpsGameplayPolicySnapshot {
+        characters: vec![
+            test_character(TEST_CHARACTER_A, "models/test/alpha.ydd@alpha"),
+            test_character(TEST_CHARACTER_B, "models/test/beta.ydd@beta"),
+        ],
+        ..Default::default()
+    };
     world.insert_resource(policy);
     world.insert_resource(FpsCharacterMenuPolicySnapshot {
         toggle_action: fps_action::CHARACTER_SELECT_TOGGLE.to_owned(),

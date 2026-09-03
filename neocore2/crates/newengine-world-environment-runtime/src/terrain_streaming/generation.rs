@@ -137,6 +137,7 @@ pub(super) fn generate_terrain_for_chunk(
     GeneratedTerrainChunk { terrain, mesh }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn spawn_generated_terrain_chunk(
     world: &mut newengine_ecs::World,
     root: EntityId,
@@ -189,6 +190,7 @@ pub(super) fn spawn_generated_terrain_chunk(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn spawn_streamed_terrain_chunk(
     world: &mut newengine_ecs::World,
     root: EntityId,

@@ -56,6 +56,7 @@ fn casing_contact_class(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn publish_shell_physics_event(
     world: &mut World,
     casing_entity: EntityId,

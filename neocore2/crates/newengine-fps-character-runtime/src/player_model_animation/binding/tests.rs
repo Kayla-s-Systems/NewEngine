@@ -3,8 +3,10 @@ use super::*;
 #[test]
 fn equipment_family_ready_phase_overrides_generic_phase_only_for_that_family() {
     let generic = EquipmentPoseSet::default();
-    let mut pistol = EquipmentPoseSet::default();
-    pistol.ready_sample_phase = Some(1.0);
+    let pistol = EquipmentPoseSet {
+        ready_sample_phase: Some(1.0),
+        ..Default::default()
+    };
     let mut families = std::collections::BTreeMap::new();
     families.insert("pistol".to_owned(), pistol);
 

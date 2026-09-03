@@ -551,7 +551,7 @@ pub(super) fn prepare_player_animation_binding(
         equipment_overlay_locals_b: bind_locals,
         equipment_ik,
         equipment_ik_residual_diag_cooldown: 0.0,
-        equipment_relative_ads: EquipmentRelativeAdsState::default(),
+        equipment_aim_controller: ThirdPersonWeaponAimState::default(),
         equipment_resolved_weapon_root: None,
     }))
 }

@@ -1315,9 +1315,11 @@ fn hitscan_direction_tracks_mouse_look_pitch() {
     let mut world = World::new();
     let player = world.spawn();
     let _ = world.insert(player, Transform::default());
-    let mut motor = CharacterMotor::default();
-    motor.yaw = 0.61;
-    motor.pitch = -0.37;
+    let motor = CharacterMotor {
+        yaw: 0.61,
+        pitch: -0.37,
+        ..Default::default()
+    };
     let _ = world.insert(player, motor);
     let _ = world.insert(
         player,
@@ -1329,9 +1331,11 @@ fn hitscan_direction_tracks_mouse_look_pitch() {
     let muzzle = EquippedWeaponMuzzle::new(Vec3::new(0.2, 1.3, -0.55), Vec3::new(0.0, 0.0, -1.0))
         .expect("physical muzzle");
     let _ = world.insert(player, muzzle);
-    let mut tuning = HitscanWeaponTuning::default();
-    tuning.hip_spread_radians = 0.0;
-    tuning.aim_spread_radians = 0.0;
+    let tuning = HitscanWeaponTuning {
+        hip_spread_radians: 0.0,
+        aim_spread_radians: 0.0,
+        ..Default::default()
+    };
 
     let (origin, direction) =
         shot_origin_and_direction(&world, player, tuning, true, 1).expect("view-aligned hitscan");
@@ -1356,9 +1360,11 @@ fn ads_hitscan_uses_rendered_weapon_sight_axis_instead_of_rebuilding_camera_conv
     let mut world = World::new();
     let player = world.spawn();
     let _ = world.insert(player, Transform::default());
-    let mut motor = CharacterMotor::default();
-    motor.yaw = 0.35;
-    motor.pitch = -0.18;
+    let motor = CharacterMotor {
+        yaw: 0.35,
+        pitch: -0.18,
+        ..Default::default()
+    };
     let _ = world.insert(player, motor);
     let _ = world.insert(player, PlayerStanceState::standing(0.72));
     let muzzle = EquippedWeaponMuzzle::new(Vec3::new(0.28, 1.24, -0.61), Vec3::new(0.0, 0.0, -1.0))
@@ -1368,9 +1374,11 @@ fn ads_hitscan_uses_rendered_weapon_sight_axis_instead_of_rebuilding_camera_conv
     let sight = EquippedWeaponSight::new(Vec3::new(0.21, 1.34, -0.42), rendered_sight_forward)
         .expect("rendered sight");
     let _ = world.insert(player, sight);
-    let mut tuning = HitscanWeaponTuning::default();
-    tuning.hip_spread_radians = 0.0;
-    tuning.aim_spread_radians = 0.0;
+    let tuning = HitscanWeaponTuning {
+        hip_spread_radians: 0.0,
+        aim_spread_radians: 0.0,
+        ..Default::default()
+    };
 
     let (origin, direction) =
         shot_origin_and_direction(&world, player, tuning, true, 77).expect("ADS sight hitscan");
@@ -1394,9 +1402,11 @@ fn hitscan_rejects_camera_only_fire_without_a_physical_muzzle() {
     let _ = world.insert(player, Transform::default());
     let _ = world.insert(player, CharacterMotor::default());
     let _ = world.insert(player, PlayerStanceState::standing(0.72));
-    let mut tuning = HitscanWeaponTuning::default();
-    tuning.hip_spread_radians = 0.0;
-    tuning.aim_spread_radians = 0.0;
+    let tuning = HitscanWeaponTuning {
+        hip_spread_radians: 0.0,
+        aim_spread_radians: 0.0,
+        ..Default::default()
+    };
 
     assert!(
         shot_origin_and_direction(&world, player, tuning, true, 1).is_none(),
@@ -1414,16 +1424,18 @@ fn hitscan_origin_is_physical_muzzle_while_direction_converges_to_view_axis() {
     let muzzle = EquippedWeaponMuzzle::new(Vec3::new(0.35, 1.25, -0.65), Vec3::new(0.0, 0.0, -1.0))
         .expect("valid muzzle");
     let _ = world.insert(player, muzzle);
-    let mut tuning = HitscanWeaponTuning::default();
-    tuning.hip_spread_radians = 0.0;
-    tuning.aim_spread_radians = 0.0;
+    let tuning = HitscanWeaponTuning {
+        hip_spread_radians: 0.0,
+        aim_spread_radians: 0.0,
+        ..Default::default()
+    };
 
     let (origin, direction) =
         shot_origin_and_direction(&world, player, tuning, true, 9).expect("muzzle hitscan");
     assert!((origin - (muzzle.position + muzzle.forward * 0.008)).length() < 1.0e-6);
     let view_origin = Vec3::Y * 0.72;
     let camera_forward = -Vec3::Z;
-    let target = view_origin + camera_forward * tuning.range.min(80.0).max(12.0);
+    let target = view_origin + camera_forward * tuning.range.clamp(12.0, 80.0);
     let expected = (target - origin).normalize_or_zero();
     assert!(direction.dot(expected) > 0.999_999);
     assert!(
@@ -1454,9 +1466,11 @@ fn blocked_hitscan_uses_safe_muzzle_on_player_side_of_obstacle() {
             fixed_tick: 7,
         },
     );
-    let mut tuning = HitscanWeaponTuning::default();
-    tuning.hip_spread_radians = 0.0;
-    tuning.aim_spread_radians = 0.0;
+    let tuning = HitscanWeaponTuning {
+        hip_spread_radians: 0.0,
+        aim_spread_radians: 0.0,
+        ..Default::default()
+    };
     let (origin, _) =
         shot_origin_and_direction(&world, player, tuning, true, 10).expect("blocked hitscan");
     assert!((origin - safe).length() < 1.0e-6);
@@ -1471,9 +1485,11 @@ fn interaction_ray_tracks_mouse_look_pitch() {
     let mut world = World::new();
     let player = world.spawn();
     let _ = world.insert(player, Transform::default());
-    let mut motor = CharacterMotor::default();
-    motor.yaw = -0.42;
-    motor.pitch = 0.29;
+    let motor = CharacterMotor {
+        yaw: -0.42,
+        pitch: 0.29,
+        ..Default::default()
+    };
     let _ = world.insert(player, motor);
     let _ = world.insert(player, PlayerStanceState::standing(0.72));
 

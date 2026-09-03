@@ -438,6 +438,38 @@ pub fn register_ecs_gateway_best_effort(scene: Arc<newengine_scene_runtime::Scen
     }
 }
 
+pub const RUNTIME_UNIT_SPEC: newengine_runtime_unit_api::EngineRuntimeUnitSpec =
+    newengine_runtime_unit_api::EngineRuntimeUnitSpec::new(
+        "engine.runtime.ecs",
+        1,
+        newengine_runtime_unit_api::EngineRuntimeUnitKind::Provider,
+        &[newengine_ecs_api::ECS_BACKEND_CAPABILITY_ID],
+        &["scene.backend"],
+        newengine_runtime_unit_api::STATIC_PROVIDER_TAGS,
+    );
+
+fn runtime_unit_factory(
+    engine: &mut newengine_runtime_unit_api::Engine<()>,
+    _: &newengine_runtime_unit_api::StartupConfig,
+) -> newengine_runtime_unit_api::EngineResult<Option<Box<dyn newengine_runtime_unit_api::Module<()>>>>
+{
+    let scene = engine
+        .resources_mut()
+        .get::<std::sync::Arc<newengine_scene_runtime::SceneBridge>>()
+        .cloned()
+        .ok_or_else(|| newengine_runtime_unit_api::EngineError::Other(
+            "ECS runtime unit requires instance Arc<SceneBridge> resource before materialization".to_owned(),
+        ))?;
+    register_ecs_gateway_best_effort(scene);
+    Ok(None)
+}
+
+pub const RUNTIME_UNIT_REGISTRATION: newengine_runtime_unit_api::RuntimeUnitRegistration =
+    newengine_runtime_unit_api::RuntimeUnitRegistration::new(
+        RUNTIME_UNIT_SPEC,
+        runtime_unit_factory,
+    );
+
 #[cfg(test)]
 mod semantic_component_tests {
     use super::*;
@@ -632,35 +664,3 @@ mod semantic_component_tests {
         assert!(message.contains("provider-backed component authority"));
     }
 }
-
-pub const RUNTIME_UNIT_SPEC: newengine_runtime_unit_api::EngineRuntimeUnitSpec =
-    newengine_runtime_unit_api::EngineRuntimeUnitSpec::new(
-        "engine.runtime.ecs",
-        1,
-        newengine_runtime_unit_api::EngineRuntimeUnitKind::Provider,
-        &[newengine_ecs_api::ECS_BACKEND_CAPABILITY_ID],
-        &["scene.backend"],
-        newengine_runtime_unit_api::STATIC_PROVIDER_TAGS,
-    );
-
-fn runtime_unit_factory(
-    engine: &mut newengine_runtime_unit_api::Engine<()>,
-    _: &newengine_runtime_unit_api::StartupConfig,
-) -> newengine_runtime_unit_api::EngineResult<Option<Box<dyn newengine_runtime_unit_api::Module<()>>>>
-{
-    let scene = engine
-        .resources_mut()
-        .get::<std::sync::Arc<newengine_scene_runtime::SceneBridge>>()
-        .cloned()
-        .ok_or_else(|| newengine_runtime_unit_api::EngineError::Other(
-            "ECS runtime unit requires instance Arc<SceneBridge> resource before materialization".to_owned(),
-        ))?;
-    register_ecs_gateway_best_effort(scene);
-    Ok(None)
-}
-
-pub const RUNTIME_UNIT_REGISTRATION: newengine_runtime_unit_api::RuntimeUnitRegistration =
-    newengine_runtime_unit_api::RuntimeUnitRegistration::new(
-        RUNTIME_UNIT_SPEC,
-        runtime_unit_factory,
-    );

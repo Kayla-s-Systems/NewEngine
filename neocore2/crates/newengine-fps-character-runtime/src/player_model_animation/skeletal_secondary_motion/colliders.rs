@@ -146,7 +146,7 @@ impl SecondaryMotionColliderBindings {
         Ok(Self { capsules, boxes })
     }
 
-    fn from_joint_frames(
+    fn resolve_from_joint_frames(
         &self,
         joint_frames: &[Mat4],
     ) -> Result<SecondaryMotionColliderSet, String> {

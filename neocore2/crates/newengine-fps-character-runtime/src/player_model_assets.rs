@@ -313,7 +313,7 @@ fn derive_first_person_owner_body_mesh(
     let triangle_count = mesh.indices.len() / 3;
     let mut removed = Vec::with_capacity(triangle_count);
     let mut removed_count = 0usize;
-    for tri in mesh.indices.chunks_exact(3) {
+    for tri in mesh.indices.as_chunks::<3>().0 {
         let [a, b, c] = [tri[0] as usize, tri[1] as usize, tri[2] as usize];
         if a >= weights.len() || b >= weights.len() || c >= weights.len() {
             return None;
@@ -338,7 +338,7 @@ fn derive_first_person_owner_body_mesh(
 
     let mut edge_domains = HashMap::<(u32, u32), u8>::new();
     let mut indices = Vec::with_capacity(mesh.indices.len());
-    for (triangle_index, tri) in mesh.indices.chunks_exact(3).enumerate() {
+    for (triangle_index, tri) in mesh.indices.as_chunks::<3>().0.iter().enumerate() {
         let domain = if removed[triangle_index] { 0b10 } else { 0b01 };
         for (a, b) in [(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
             *edge_domains.entry(normalized_edge(a, b)).or_default() |= domain;
@@ -429,7 +429,7 @@ fn ensure_runtime_model_parts(
     let mut registered_indices = 0usize;
     for (part_index, part) in bundle.parts.into_iter().enumerate() {
         let skin = part.skin.clone();
-        let first_person_build = derive_first_person.then(|| ()).and_then(|_| {
+        let first_person_build = derive_first_person.then_some(()).and_then(|_| {
             skin.as_ref().and_then(|skin| {
                 skeleton.as_ref().and_then(|skeleton| {
                     derive_first_person_owner_body_mesh(&part.mesh, skin, skeleton)

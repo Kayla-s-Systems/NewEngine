@@ -30,6 +30,7 @@ fn clamp_vec3_length(value: Vec3, max_length: f32) -> Vec3 {
 /// rigid body: authored grip animation remains authoritative and only a few degrees of secondary
 /// long-gun inertia are permitted. Fast target rotation injects angular lag; player acceleration
 /// injects a smaller mass-response impulse. ADS, recoil and obstruction progressively tighten it.
+#[allow(clippy::too_many_arguments)]
 fn step_long_gun_secondary_dynamics(
     mut state: WeaponSecondaryDynamicsState,
     presentation: &newengine_engine_runtime::gameplay::WeaponPresentationDefinition,

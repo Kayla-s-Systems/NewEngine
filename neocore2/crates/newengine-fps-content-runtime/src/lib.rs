@@ -472,6 +472,11 @@ impl FpsGameplayPolicyProvider for EmbeddedTestPolicyProvider {
     }
 }
 
+pub use world_runtime::{
+    install_fps_content_world_runtime, install_fps_content_world_runtime_adapter,
+    FpsContentWorldRuntimeAdapter, FpsContentWorldRuntimeBinding, FpsContentWorldRuntimeProvider,
+};
+
 #[cfg(test)]
 mod shared_weapon_catalog_tests {
     use super::*;
@@ -561,8 +566,3 @@ mod shared_weapon_catalog_tests {
         );
     }
 }
-
-pub use world_runtime::{
-    install_fps_content_world_runtime, install_fps_content_world_runtime_adapter,
-    FpsContentWorldRuntimeAdapter, FpsContentWorldRuntimeBinding, FpsContentWorldRuntimeProvider,
-};

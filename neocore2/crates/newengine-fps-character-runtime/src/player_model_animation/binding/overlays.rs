@@ -88,6 +88,7 @@ fn apply_character_rotation_overlay(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_equipment_full_body_directional_pose(
     clip_a: Option<&PlayerAnimationRuntimeClip>,
     clip_b: Option<&PlayerAnimationRuntimeClip>,
@@ -291,6 +292,7 @@ fn apply_equipment_additive_overlay(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_equipment_relative_delta_overlay(
     reference: Option<&PlayerAnimationRuntimeClip>,
     additive: Option<&PlayerAnimationRuntimeClip>,

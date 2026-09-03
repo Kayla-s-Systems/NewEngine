@@ -1,3 +1,4 @@
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn bind_equipped_weapon_animation(
     world: &mut newengine_ecs::World,
     root: EntityId,

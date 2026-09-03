@@ -12,6 +12,7 @@ fn mission_position(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_mission_primitive(
     world: &mut newengine_ecs::World,
     prims: &PrimitiveRegistry,

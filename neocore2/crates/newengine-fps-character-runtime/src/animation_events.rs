@@ -37,6 +37,7 @@ pub fn timeline_event(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn collect_timeline_events(
     entity: newengine_ecs::EntityId,
     clip_ref: &str,

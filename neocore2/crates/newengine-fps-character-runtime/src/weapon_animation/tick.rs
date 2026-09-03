@@ -1,3 +1,4 @@
+#[allow(clippy::too_many_arguments)]
 fn sample_weapon_runtime_clip(
     entity: EntityId,
     animation_runtime: &AnimationSkeletonRuntime,
@@ -189,13 +190,9 @@ pub(crate) fn tick_equipped_weapon_animations(world: &mut newengine_ecs::World, 
                     &mut runtime.occurrence_scratch,
                     &mut runtime.timeline_event_scratch,
                 )
-            } else if runtime.spawn_pose.is_some() {
+            } else if let Some(spawn) = runtime.spawn_pose.as_mut() {
                 let animation_runtime = &runtime.animation_runtime;
                 let sampled_locals = &mut runtime.sampled_locals;
-                let spawn = runtime
-                    .spawn_pose
-                    .as_mut()
-                    .expect("spawn pose checked above");
                 let sample_time = spawn.clip.duration_seconds;
                 sample_weapon_runtime_clip(
                     root,

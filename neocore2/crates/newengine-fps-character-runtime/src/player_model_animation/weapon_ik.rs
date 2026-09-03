@@ -35,7 +35,7 @@ fn apply_native_rifle_clavicle_aim_delta(
     }
     const MAX_ARM_AIM_RADIANS: f32 = 65.0_f32.to_radians();
     let angle = (2.0 * delta.w.clamp(-1.0, 1.0).acos()).abs();
-    if angle > MAX_ARM_AIM_RADIANS && angle > 1.0e-6 {
+    if angle > MAX_ARM_AIM_RADIANS {
         delta = Quat::IDENTITY
             .slerp(delta, MAX_ARM_AIM_RADIANS / angle)
             .normalize_or_identity();
@@ -76,6 +76,7 @@ fn apply_native_rifle_clavicle_aim_delta(
 /// only a compatibility fallback for equipment without an authored hand-contact pose. IK is terminal
 /// contact stabilization for recoil/obstruction/secondary motion and must be an identity solve at the
 /// canonical authored pose. Reload may release constraints.
+#[allow(clippy::too_many_arguments)]
 fn apply_equipped_weapon_support_ik(
     presentation: &newengine_engine_runtime::gameplay::WeaponPresentationDefinition,
     rig: Option<&WeaponArmIkRig>,
@@ -97,7 +98,7 @@ fn apply_equipped_weapon_support_ik(
     stabilize_native_support_hand: bool,
     support_right_hand: bool,
     support_left_hand: bool,
-    relative_ads_state: Option<&mut EquipmentRelativeAdsState>,
+    aim_controller: Option<&mut ThirdPersonWeaponAimState>,
 ) -> Result<Option<WeaponIkSolveResult>, String> {
     let Some(rig) = rig else {
         return Ok(None);
@@ -166,15 +167,9 @@ fn apply_equipped_weapon_support_ik(
                 recoil_yaw_radians,
             )
         });
-    let mut relative_ads_state = relative_ads_state;
     let native_relative_target = authored_prop_root
         .filter(|_| !first_person_active)
-        .and_then(|root| {
-            let authored_sight = crate::weapon_grip::weapon_sight_forward(presentation, root);
-            relative_ads_state.as_deref_mut().and_then(|state| {
-                view_rotation_model.and_then(|view| state.relative_sight_target(view, authored_sight))
-            })
-        });
+        .and_then(|_| aim_controller.as_deref().and_then(ThirdPersonWeaponAimState::sight_target));
 
     // Native TPP rifle aim is arm-owned. Move both clavicle/arm chains first; the weapon root is then
     // re-read from the moved right prop socket. This cannot be cancelled by a right-arm reach failure
@@ -211,7 +206,7 @@ fn apply_equipped_weapon_support_ik(
         authored_prop_root
             .filter(|_| !first_person_active)
             .and_then(|root| {
-                let target = match relative_ads_state.as_ref() {
+                let target = match aim_controller.as_ref() {
                     Some(_) => native_relative_target,
                     None => (aim_alpha > 1.0e-4).then_some(view_forward_model).flatten(),
                 }?;

@@ -1,64 +1,102 @@
 #[derive(Clone, Copy, Debug, Default)]
-struct EquipmentRelativeAdsState {
-    view_rotation_model_at_entry: Option<Quat>,
-    sight_forward_model_at_entry: Option<Vec3>,
+struct ThirdPersonWeaponAimState {
+    active: bool,
+    sight_yaw_radians: f32,
+    sight_pitch_radians: f32,
+    target_yaw_radians: f32,
+    target_pitch_radians: f32,
 }
 
-impl EquipmentRelativeAdsState {
+impl ThirdPersonWeaponAimState {
+    // Reference envelope: TLOU authored aim-space + GTA-style free aim, with Cyberpunk-like
+    // rubber-band/body handoff. The weapon owns this sector; body turn consumes overflow.
+    const YAW_LIMIT_RADIANS: f32 = 52.0_f32.to_radians();
+    const PITCH_UP_LIMIT_RADIANS: f32 = 45.0_f32.to_radians();
+    const PITCH_DOWN_LIMIT_RADIANS: f32 = 38.0_f32.to_radians();
+    const RESPONSE_PER_SECOND: f32 = 18.0;
+
     #[inline]
-    fn update_activation(&mut self, active: bool, view_rotation_model: Option<Quat>) {
+    fn direction_to_yaw_pitch(forward: Vec3) -> Option<(f32, f32)> {
+        if !forward.is_finite() {
+            return None;
+        }
+        let forward = forward.normalize_or_zero();
+        if forward.length_squared() <= 1.0e-8 {
+            return None;
+        }
+        let yaw = (-forward.x).atan2(-forward.z);
+        let pitch = forward.y.clamp(-1.0, 1.0).asin();
+        (yaw.is_finite() && pitch.is_finite()).then_some((yaw, pitch))
+    }
+
+    #[inline]
+    fn yaw_pitch_to_direction(yaw: f32, pitch: f32) -> Vec3 {
+        ((Quat::from_rotation_y(yaw) * Quat::from_rotation_x(pitch)) * -Vec3::Z)
+            .normalize_or_zero()
+    }
+
+    #[inline]
+    fn update(
+        &mut self,
+        active: bool,
+        dt: f32,
+        view_rotation_model: Option<Quat>,
+        visible_sight_forward_model: Option<Vec3>,
+    ) {
         if !active {
             *self = Self::default();
             return;
         }
-        if self.view_rotation_model_at_entry.is_none() {
-            self.view_rotation_model_at_entry = view_rotation_model
-                .filter(|rotation| rotation.is_finite())
-                .map(|rotation| rotation.normalize_or_identity());
-        }
-    }
+        let view_forward = view_rotation_model
+            .filter(|rotation| rotation.is_finite())
+            .map(|rotation| (rotation.normalize_or_identity() * -Vec3::Z).normalize_or_zero())
+            .and_then(Self::direction_to_yaw_pitch);
+        let Some((target_yaw, target_pitch)) = view_forward else {
+            return;
+        };
+        self.target_yaw_radians = target_yaw.clamp(
+            -Self::YAW_LIMIT_RADIANS,
+            Self::YAW_LIMIT_RADIANS,
+        );
+        self.target_pitch_radians = target_pitch.clamp(
+            -Self::PITCH_DOWN_LIMIT_RADIANS,
+            Self::PITCH_UP_LIMIT_RADIANS,
+        );
 
-    #[inline]
-    fn capture_entry_sight_if_unset(&mut self, sight_forward_model: Option<Vec3>) {
-        if self.sight_forward_model_at_entry.is_some()
-            || self.view_rotation_model_at_entry.is_none()
-        {
+        if !self.active {
+            self.active = true;
+            let (entry_yaw, entry_pitch) = visible_sight_forward_model
+                .and_then(Self::direction_to_yaw_pitch)
+                .unwrap_or((self.target_yaw_radians, self.target_pitch_radians));
+            // Preserve the actually visible pre-ADS sight exactly on entry. Limits constrain the
+            // requested camera target, not the current pose; the spring pulls an out-of-envelope
+            // carry pose back into the authored aim sector without a one-frame snap.
+            self.sight_yaw_radians = entry_yaw;
+            self.sight_pitch_radians = entry_pitch;
             return;
         }
-        self.sight_forward_model_at_entry = sight_forward_model
-            .filter(|forward| forward.is_finite())
-            .map(Vec3::normalize_or_zero)
-            .filter(|forward| forward.length_squared() > 1.0e-8);
+
+        let dt = if dt.is_finite() { dt.clamp(0.0, 0.1) } else { 0.0 };
+        let response = 1.0 - (-Self::RESPONSE_PER_SECOND * dt).exp();
+        self.sight_yaw_radians +=
+            (self.target_yaw_radians - self.sight_yaw_radians) * response;
+        self.sight_pitch_radians +=
+            (self.target_pitch_radians - self.sight_pitch_radians) * response;
     }
 
     #[inline]
-    fn relative_sight_target(
-        &mut self,
-        current_view_rotation_model: Quat,
-        current_sight_forward_model: Vec3,
-    ) -> Option<Vec3> {
-        let entry_view = self.view_rotation_model_at_entry?;
-        if !current_view_rotation_model.is_finite() || !current_sight_forward_model.is_finite() {
+    fn sight_target(&self) -> Option<Vec3> {
+        if !self.active {
             return None;
         }
-        let current_sight = current_sight_forward_model.normalize_or_zero();
-        if current_sight.length_squared() <= 1.0e-8 {
-            return None;
-        }
-        let entry_sight = match self.sight_forward_model_at_entry {
-            Some(forward) => forward,
-            None => {
-                self.sight_forward_model_at_entry = Some(current_sight);
-                current_sight
-            }
-        };
-        let view_delta = (current_view_rotation_model.normalize_or_identity()
-            * entry_view.inverse())
-        .normalize_or_identity();
-        let target = (view_delta * entry_sight).normalize_or_zero();
+        let target = Self::yaw_pitch_to_direction(
+            self.sight_yaw_radians,
+            self.sight_pitch_radians,
+        );
         (target.is_finite() && target.length_squared() > 1.0e-8).then_some(target)
     }
 }
+
 
 pub(super) struct PlayerAnimationRuntimeBinding {
     clips: [Option<PlayerAnimationRuntimeClip>; 8],
@@ -155,7 +193,7 @@ pub(super) struct PlayerAnimationRuntimeBinding {
     equipment_ik_residual_diag_cooldown: f32,
     /// Relative RMB/ADS anchor. Entry view+sight are captured once so the complete rifle chain follows
     /// mouse/view deltas from its current pose instead of snapping to absolute camera-forward.
-    equipment_relative_ads: EquipmentRelativeAdsState,
+    equipment_aim_controller: ThirdPersonWeaponAimState,
     /// Torso-owned, reach-fitted weapon root before secondary dynamics. Render consumes this exact root.
     equipment_resolved_weapon_root: Option<crate::weapon_grip::WeaponRootTransform>,
 }

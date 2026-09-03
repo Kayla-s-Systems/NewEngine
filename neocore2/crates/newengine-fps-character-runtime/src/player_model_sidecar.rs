@@ -203,6 +203,7 @@ pub(super) fn prepare_player_skin_sidecar(
     }))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn bind_prepared_player_skin_sidecar(
     world: &mut newengine_ecs::World,
     prims: &PrimitiveRegistry,

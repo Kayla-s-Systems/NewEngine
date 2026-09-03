@@ -1,3 +1,4 @@
+#[allow(clippy::too_many_arguments)]
 pub fn defer_foliage_prefabs(
     world: &mut newengine_ecs::World,
     root: EntityId,
@@ -58,6 +59,7 @@ pub fn tick_deferred_foliage_prefabs(
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_foliage_prefabs(
     world: &mut newengine_ecs::World,
     prims: &mut PrimitiveRegistry,

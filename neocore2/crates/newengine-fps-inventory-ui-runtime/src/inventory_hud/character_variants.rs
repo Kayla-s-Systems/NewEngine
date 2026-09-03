@@ -47,10 +47,7 @@ pub fn variant_from_action<'a>(
     variant_by_id(world, token)
 }
 
-pub fn selected_variant<'a>(
-    world: &'a World,
-    player: EntityId,
-) -> Option<&'a FpsPlayableCharacterPolicy> {
+pub fn selected_variant(world: &World, player: EntityId) -> Option<&FpsPlayableCharacterPolicy> {
     if let Some(selection) = world.get::<PlayableCharacterSelection>(player) {
         if let Some(variant) = variant_by_id(world, &selection.variant_id) {
             return Some(variant);
@@ -265,11 +262,13 @@ mod tests {
 
     fn world_with_characters() -> World {
         let mut world = World::new();
-        let mut policy = FpsGameplayPolicySnapshot::default();
-        policy.characters = vec![
-            character("test.alpha", "legacy_alpha", "models/test/alpha.ydd@alpha"),
-            character("test.beta", "legacy_beta", "models/test/beta.ydd@beta"),
-        ];
+        let policy = FpsGameplayPolicySnapshot {
+            characters: vec![
+                character("test.alpha", "legacy_alpha", "models/test/alpha.ydd@alpha"),
+                character("test.beta", "legacy_beta", "models/test/beta.ydd@beta"),
+            ],
+            ..Default::default()
+        };
         world.insert_resource(policy);
         world
     }

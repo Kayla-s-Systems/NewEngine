@@ -362,8 +362,12 @@ fn ensure_shard_primitives(primitives: &mut PrimitiveRegistry) {
         PersistentImpactDebrisKind::Glass,
     ] {
         let kind_index = debris_kind_index(kind);
-        for variant in 0..SHARD_VARIANTS_PER_SURFACE {
-            let primitive_id = IMPACT_SHARD_PRIMITIVE_IDS[kind_index][variant];
+        for (variant, primitive_id) in IMPACT_SHARD_PRIMITIVE_IDS[kind_index]
+            .iter()
+            .copied()
+            .enumerate()
+            .take(SHARD_VARIANTS_PER_SURFACE)
+        {
             if !primitives.is_registered(primitive_id) {
                 primitives.register_mesh(
                     primitive_id,

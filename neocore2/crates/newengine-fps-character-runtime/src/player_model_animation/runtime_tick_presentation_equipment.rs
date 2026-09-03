@@ -141,10 +141,10 @@ fn equipment_loop_phase(duration_seconds: f32, elapsed_seconds: f32) -> f32 {
     (elapsed_seconds.rem_euclid(duration) / duration).clamp(0.0, 1.0)
 }
 
-fn equipment_transition_clip<'a>(
-    set: &'a EquipmentPoseSet,
+fn equipment_transition_clip(
+    set: &EquipmentPoseSet,
     kind: EquipmentTransitionKind,
-) -> Option<&'a PlayerAnimationRuntimeClip> {
+) -> Option<&PlayerAnimationRuntimeClip> {
     match kind {
         EquipmentTransitionKind::ReadyToAim => set.transitions.ready_to_aim.as_ref(),
         EquipmentTransitionKind::AimToReady => set.transitions.aim_to_ready.as_ref(),
@@ -283,6 +283,7 @@ fn begin_or_advance_equipment_transition(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_equipment_grip_layers(
     space: &EquipmentAimPoseSpace,
     layer_phase: f32,
@@ -330,6 +331,7 @@ fn apply_equipment_grip_layers(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_equipment_ready_pose(
     pose_set: Option<&EquipmentPoseSet>,
     body_stance: EquipmentPoseBodyStance,
@@ -378,6 +380,7 @@ fn apply_equipment_ready_pose(
     Ok(self_contained)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_layered_equipment_aim_pose(
     pose_set: &EquipmentPoseSet,
     body_stance: EquipmentPoseBodyStance,

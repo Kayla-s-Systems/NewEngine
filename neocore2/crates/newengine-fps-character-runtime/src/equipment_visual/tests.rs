@@ -151,9 +151,11 @@ mod alignment_tests {
     #[test]
     fn authored_secondary_motion_tuning_changes_runtime_response() {
         let dt = 1.0 / 60.0;
-        let mut loose = newengine_engine_runtime::gameplay::WeaponPresentationDefinition::default();
-        loose.secondary_angular_inertia_gain = 0.8;
-        loose.secondary_hip_max_angle_radians = 0.12;
+        let loose = newengine_engine_runtime::gameplay::WeaponPresentationDefinition {
+            secondary_angular_inertia_gain: 0.8,
+            secondary_hip_max_angle_radians: 0.12,
+            ..Default::default()
+        };
         let loose = loose.sanitized();
         let mut tight = loose.clone();
         tight.secondary_angular_inertia_gain = 0.08;

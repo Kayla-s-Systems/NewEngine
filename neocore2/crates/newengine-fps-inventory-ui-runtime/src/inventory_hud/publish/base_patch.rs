@@ -1,3 +1,4 @@
+#[allow(clippy::too_many_arguments)]
 fn base_patch(
     frame_index: u64,
     state: &InventoryHudState,

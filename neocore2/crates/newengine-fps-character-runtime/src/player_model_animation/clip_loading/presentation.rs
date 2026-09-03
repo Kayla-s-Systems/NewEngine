@@ -15,21 +15,21 @@ fn load_equipment_pose_sets(
             assignment.animation_for_slot("equipment.ready"),
             assignment,
             skeleton,
-            &animation_runtime,
+            animation_runtime,
         )?,
         aim: load_authored_presentation_clip(
             "equipment_aim",
             assignment.animation_for_slot("equipment.aim"),
             assignment,
             skeleton,
-            &animation_runtime,
+            animation_runtime,
         )?,
         reload: load_authored_presentation_clip(
             "equipment_reload",
             assignment.animation_for_slot("equipment.reload"),
             assignment,
             skeleton,
-            &animation_runtime,
+            animation_runtime,
         )?,
         ready_sample_phase: None,
         ..EquipmentPoseSet::default()
@@ -61,23 +61,25 @@ fn load_equipment_pose_sets(
                     assignment.animation_for_slot(&slot),
                     assignment,
                     skeleton,
-                    &animation_runtime,
+                    animation_runtime,
                 )
             };
 
         // A classified weapon never inherits another class's generic pose. Missing authored
         // layers remain absent and fail closed; compatibility fields are family-local only.
-        let mut set = EquipmentPoseSet::default();
-        set.ready_sample_phase = assignment
-            .presentation
-            .equipment_ready_sample_phases
-            .get(&family)
-            .copied()
-            .filter(|phase| phase.is_finite())
-            .map(|phase| phase.clamp(0.0, 1.0));
-        set.ready = load_family_clip("ready")?;
-        set.aim = load_family_clip("aim")?;
-        set.reload = load_family_clip("reload")?;
+        let mut set = EquipmentPoseSet {
+            ready_sample_phase: assignment
+                .presentation
+                .equipment_ready_sample_phases
+                .get(&family)
+                .copied()
+                .filter(|phase| phase.is_finite())
+                .map(|phase| phase.clamp(0.0, 1.0)),
+            ready: load_family_clip("ready")?,
+            aim: load_family_clip("aim")?,
+            reload: load_family_clip("reload")?,
+            ..Default::default()
+        };
         set.transitions.ready_to_aim = load_family_clip("transition.ready_to_aim")?;
         set.transitions.aim_to_ready = load_family_clip("transition.aim_to_ready")?;
 
@@ -130,7 +132,7 @@ fn load_authored_look_binding(
             look_slot(semantic),
             assignment,
             skeleton,
-            &animation_runtime,
+            animation_runtime,
         )
     };
     let build_look_space =
@@ -140,7 +142,7 @@ fn load_authored_look_binding(
                 load_look_clip(base_semantic, base_semantic)?,
                 load_look_clip(range_semantic, range_semantic)?,
                 skeleton,
-                &animation_runtime,
+                animation_runtime,
                 eye_only,
             )
         };

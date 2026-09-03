@@ -84,6 +84,7 @@ fn receiver_material(mats: &MaterialRegistry, receive_shadows: bool) -> Material
 }
 
 #[inline]
+#[allow(clippy::too_many_arguments)]
 fn spawn_fixture(
     world: &mut newengine_ecs::World,
     prims: &PrimitiveRegistry,
@@ -506,8 +507,10 @@ mod tests {
 
     #[test]
     fn torture_cycle_has_deterministic_cache_window() {
-        assert!(TORTURE_ANIMATED_SECONDS > 0.0);
-        assert!(TORTURE_CYCLE_SECONDS > TORTURE_ANIMATED_SECONDS);
+        const {
+            assert!(TORTURE_ANIMATED_SECONDS > 0.0);
+            assert!(TORTURE_CYCLE_SECONDS > TORTURE_ANIMATED_SECONDS);
+        }
         assert_eq!(TORTURE_CYCLE_SECONDS - TORTURE_ANIMATED_SECONDS, 4.0);
     }
 }

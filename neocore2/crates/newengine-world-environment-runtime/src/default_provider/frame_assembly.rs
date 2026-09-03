@@ -112,7 +112,7 @@ pub(super) fn assemble(
             night_sky_visibility: time_of_day.night_blend * (1.0 - cloud_coverage * 0.65),
         },
         sky,
-        atmosphere: atmosphere.clone(),
+        atmosphere,
         weather: weather.clone(),
         clouds,
         wind,

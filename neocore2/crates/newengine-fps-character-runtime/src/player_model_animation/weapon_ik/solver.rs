@@ -170,6 +170,7 @@ fn rotate_pose_joint_toward(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn solve_two_bone_arm_with_pole(
     skeleton: &ModelSkeletonMetadata,
     animation_runtime: &AnimationSkeletonRuntime,
@@ -250,6 +251,7 @@ fn solve_two_bone_arm_with_pole(
     Ok(true)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn solve_arm_to_palm_contact(
     skeleton: &ModelSkeletonMetadata,
     animation_runtime: &AnimationSkeletonRuntime,
@@ -363,6 +365,7 @@ struct WeaponIkSolveResult {
     base_root: crate::weapon_grip::WeaponRootTransform,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn arm_reach_fit_correction(
     pose: &[JointLocalPose],
     frames: &[Mat4],
@@ -488,7 +491,7 @@ fn fit_weapon_contract_to_supported_arm_reach(
             break;
         }
         if correction_len > remaining {
-            correction = correction * (remaining / correction_len);
+            correction *= remaining / correction_len;
         }
         contract.root.position += correction;
         contract.stock_contact += correction;

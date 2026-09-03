@@ -109,6 +109,7 @@ fn spawn_foliage_collision_proxies(
     spawned
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn spawn_runtime_ydd_prefab_instance(
     world: &mut newengine_ecs::World,
     prims: &PrimitiveRegistry,

@@ -3,44 +3,46 @@ mod transition_tests {
     use super::*;
 
     #[test]
-    fn relative_rmb_ads_anchor_starts_at_current_sight_and_tracks_only_view_delta() {
-        let mut state = EquipmentRelativeAdsState::default();
-        let entry_view = Quat::from_euler(newengine_math::EulerRot::YXZ, 0.42, -0.17, 0.0);
+    fn game_style_rmb_ads_starts_from_visible_sight_then_springs_toward_camera_inside_free_aim_cone() {
+        let mut state = ThirdPersonWeaponAimState::default();
+        let entry_view = Quat::from_euler(newengine_math::EulerRot::YXZ, 0.28, -0.08, 0.0);
         let visible_ready_sight = Vec3::new(-0.18, 0.11, -0.977).normalize_or_zero();
-        let newly_sampled_aim_sight = Vec3::new(0.07, 0.16, -0.985).normalize_or_zero();
-        state.update_activation(true, Some(entry_view));
-        state.capture_entry_sight_if_unset(Some(visible_ready_sight));
-
-        let first = state
-            .relative_sight_target(entry_view, newly_sampled_aim_sight)
-            .expect("entry sight target");
+        state.update(true, 0.016, Some(entry_view), Some(visible_ready_sight));
+        let first = state.sight_target().expect("entry sight target");
         assert!(
             first.dot(visible_ready_sight) > 0.999_999,
-            "RMB press must preserve the previously visible weapon sight instead of snapping to camera or newly sampled AIM orientation"
+            "RMB entry must start from the weapon sight that was actually visible before ADS"
         );
 
-        let mouse_delta = Quat::from_rotation_y(0.19) * Quat::from_rotation_x(-0.08);
-        let current_view = (mouse_delta * entry_view).normalize_or_identity();
-        let expected = (mouse_delta * visible_ready_sight).normalize_or_zero();
-        let moved = state
-            .relative_sight_target(current_view, newly_sampled_aim_sight)
-            .expect("relative sight target after mouse delta");
+        let moved_view = Quat::from_euler(newengine_math::EulerRot::YXZ, 0.34, 0.14, 0.0);
+        let camera_target = (moved_view * -Vec3::Z).normalize_or_zero();
+        state.update(true, 0.016, Some(moved_view), Some(visible_ready_sight));
+        let one_frame = state.sight_target().expect("one-frame aim target");
         assert!(
-            moved.dot(expected) > 0.999_999,
-            "weapon sight must follow the relative mouse/view delta from the RMB entry pose"
+            one_frame.dot(camera_target) < 0.999_99,
+            "weapon aim must spring toward camera input instead of snapping in one frame"
+        );
+        for _ in 0..30 {
+            state.update(true, 1.0 / 60.0, Some(moved_view), None);
+        }
+        let settled = state.sight_target().expect("settled aim target");
+        assert!(
+            settled.dot(camera_target) > 0.999,
+            "weapon sight must converge on the camera target while RMB remains held"
         );
 
-        state.update_activation(false, None);
-        let next_entry_view = Quat::from_rotation_y(-0.31);
-        let next_entry_sight = Vec3::new(0.14, -0.06, -0.988).normalize_or_zero();
-        state.update_activation(true, Some(next_entry_view));
-        let restarted = state
-            .relative_sight_target(next_entry_view, next_entry_sight)
-            .expect("new RMB entry sight");
-        assert!(
-            restarted.dot(next_entry_sight) > 0.999_999,
-            "releasing RMB must clear the previous anchor so the next aim starts from the new current pose"
-        );
+        let outside_cone = Quat::from_euler(newengine_math::EulerRot::YXZ, 85_f32.to_radians(), 70_f32.to_radians(), 0.0);
+        for _ in 0..60 {
+            state.update(true, 1.0 / 60.0, Some(outside_cone), None);
+        }
+        let clamped = state.sight_target().expect("clamped aim target");
+        let (yaw, pitch) = ThirdPersonWeaponAimState::direction_to_yaw_pitch(clamped)
+            .expect("clamped aim angles");
+        assert!(yaw.abs() <= ThirdPersonWeaponAimState::YAW_LIMIT_RADIANS + 1.0e-4);
+        assert!(pitch <= ThirdPersonWeaponAimState::PITCH_UP_LIMIT_RADIANS + 1.0e-4);
+
+        state.update(false, 0.016, None, None);
+        assert!(state.sight_target().is_none());
     }
 
     #[test]
@@ -752,10 +754,11 @@ mod transition_tests {
                 eye_height: 1.6,
             },
         };
-        let mut presentation =
-            newengine_engine_runtime::gameplay::PlayerCharacterPresentation::default();
-        presentation.equipment_arm_ik = true;
-        presentation.equipment_arm_ik_rig = None;
+        let presentation = newengine_engine_runtime::gameplay::PlayerCharacterPresentation {
+            equipment_arm_ik: true,
+            equipment_arm_ik_rig: None,
+            ..Default::default()
+        };
 
         assert!(resolve_authored_equipment_arm_ik(&skeleton, &presentation).is_none());
     }
@@ -1059,6 +1062,9 @@ mod transition_tests {
         socket_presentation.handle_rotation_from_root = [0.0, 0.0, 0.0, 1.0];
         socket_presentation.ready_right_palm_to_weapon = [0.0, 0.0, 0.0, 1.0];
         socket_presentation.right_palm_to_handle = [0.0; 3];
+        // Match the production camera/sight convention: gameplay forward is -Z in model space.
+        socket_presentation.ads_rear_sight_from_handle = [0.0, 0.0, 0.0];
+        socket_presentation.ads_front_sight_from_handle = [0.0, 0.0, -0.20];
         // Keep the synthetic support target reachable so this fixture exercises the strict
         // left-only solve rather than the solver's intentional unreachable-target fail-open path.
         socket_presentation.left_grip_from_handle = [0.30, 0.05, 0.0];
@@ -1242,8 +1248,8 @@ mod transition_tests {
         // exactly where it is; subsequent mouse/view delta moves the complete weapon contract from
         // that entry pose. Absolute camera-forward is intentionally different here to prove no snap.
         let entry_view = Quat::from_euler(newengine_math::EulerRot::YXZ, 0.43, -0.12, 0.0);
-        let mut relative_ads = EquipmentRelativeAdsState::default();
-        relative_ads.update_activation(true, Some(entry_view));
+        let mut relative_ads = ThirdPersonWeaponAimState::default();
+        relative_ads.update(true, 0.0, Some(entry_view), Some(tpp_sight_before));
         let mut relative_entry_pose = tpp_authored_pose_for_relative_ads.clone();
         let mut relative_entry_frames = Vec::new();
         let relative_entry = apply_equipped_weapon_support_ik(
@@ -1282,7 +1288,10 @@ mod transition_tests {
 
         let mouse_delta = Quat::from_rotation_y(0.045) * Quat::from_rotation_x(-0.025);
         let moved_view = (mouse_delta * entry_view).normalize_or_identity();
-        let expected_relative_sight = (mouse_delta * tpp_sight_before).normalize_or_zero();
+        for _ in 0..24 {
+            relative_ads.update(true, 1.0 / 60.0, Some(moved_view), None);
+        }
+        let expected_relative_sight = relative_ads.sight_target().expect("game-style moved sight target");
         let mut relative_moved_pose = tpp_authored_pose_for_relative_ads.clone();
         let mut relative_moved_frames = Vec::new();
         let relative_moved = apply_equipped_weapon_support_ik(
@@ -1776,12 +1785,14 @@ mod transition_tests {
                 .collect::<Vec<_>>()
         };
         let ready_rotation = Quat::from_rotation_z(0.61);
-        let mut complete_ready_set = EquipmentPoseSet::default();
-        complete_ready_set.ready = Some(make_clip(
-            "complete-ready",
-            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-            ready_rotation,
-        ));
+        let mut complete_ready_set = EquipmentPoseSet {
+            ready: Some(make_clip(
+                "complete-ready",
+                vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+                ready_rotation,
+            )),
+            ..Default::default()
+        };
         let ready_add_rotation = Quat::from_rotation_y(0.27);
         complete_ready_set.stand.grip.additive = Some(make_clip(
             "complete-ready-native-add",
@@ -1824,12 +1835,14 @@ mod transition_tests {
             "READY must preserve its carry base and must not consume stand-AIM grip layers"
         );
 
-        let mut incomplete_ready_set = EquipmentPoseSet::default();
-        incomplete_ready_set.ready = Some(make_clip(
-            "incomplete-ready",
-            vec![2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-            ready_rotation,
-        ));
+        let incomplete_ready_set = EquipmentPoseSet {
+            ready: Some(make_clip(
+                "incomplete-ready",
+                vec![2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+                ready_rotation,
+            )),
+            ..Default::default()
+        };
         let mut incomplete_ready_target = bind_pose();
         assert!(!apply_equipment_ready_pose(
             Some(&incomplete_ready_set),

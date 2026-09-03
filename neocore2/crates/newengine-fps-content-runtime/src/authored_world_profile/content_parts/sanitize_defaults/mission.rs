@@ -293,7 +293,7 @@ pub(in super::super) fn sanitize_definition_instance_spec(
         );
         return None;
     }
-    let apply_mode = GameReadyDefinitionApplyMode::from_str(&raw.apply_mode);
+    let apply_mode = GameReadyDefinitionApplyMode::parse_authored(&raw.apply_mode);
     Some(GameReadyDefinitionInstanceSpec {
         definition_ref,
         position: arr3(raw.position),

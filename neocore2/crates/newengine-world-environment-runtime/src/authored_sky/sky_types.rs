@@ -94,6 +94,7 @@ pub fn sky_atmosphere_from_spec(spec: &GameReadySkySpec) -> SkyAtmosphereRuntime
 }
 
 #[inline]
+#[allow(clippy::too_many_arguments)]
 pub fn attach_sky_visual_runtime(
     world: &mut newengine_ecs::World,
     mats: &MaterialRegistry,

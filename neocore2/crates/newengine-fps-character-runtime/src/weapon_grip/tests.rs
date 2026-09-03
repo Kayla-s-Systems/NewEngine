@@ -143,7 +143,7 @@ fn abby_rifle_final_composed_prop_frame_is_terminal_weapon_handle_frame() {
         -0.001_487_134,
     )
     .normalize_or_identity();
-    let socket_position = Vec3::new(0.146_948_82, 1.322_840_83, -0.305_767_25);
+    let socket_position = Vec3::new(0.146_948_82, 1.322_840_8, -0.305_767_25);
     let socket = Mat4::from_scale_rotation_translation(Vec3::ONE, socket_rotation, socket_position);
     let root = weapon_root_from_authored_prop_frame(&p, socket).expect("final composed rifle root");
     let muzzle_forward = weapon_muzzle_forward(root);

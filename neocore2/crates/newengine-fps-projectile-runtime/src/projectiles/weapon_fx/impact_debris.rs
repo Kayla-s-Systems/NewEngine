@@ -131,6 +131,7 @@ fn impact_source_material_id(world: &World, target: Option<EntityId>) -> u64 {
         .unwrap_or(0)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_persistent_impact_debris(
     world: &mut World,
     owner: EntityId,

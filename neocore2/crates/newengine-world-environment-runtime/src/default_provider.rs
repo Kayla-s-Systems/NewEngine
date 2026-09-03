@@ -74,7 +74,7 @@ pub(crate) fn build_default_environment_frame_with_history(
         world_time_seconds,
         previous: history.map(ColumnMemory::from_frame),
     });
-    let fallback_atmosphere = graph.atmosphere.clone();
+    let fallback_atmosphere = graph.atmosphere;
     let fallback_cloud_coverage = graph.cloud_coverage;
     let fallback_overcast = graph.overcast;
     let fallback_wind = graph.wind;
@@ -151,7 +151,7 @@ pub(crate) fn build_default_environment_frame_with_history(
     let (atmosphere, mut weather, mut clouds, wind, mut pattern) =
         if let Some(cell) = observer_spatial_cell {
             (
-                cell.atmosphere.clone(),
+                cell.atmosphere,
                 cell.weather.clone(),
                 cell.clouds.clone(),
                 cell.wind,
