@@ -27,16 +27,9 @@ pub trait AuthoredMapSceneBootstrapContributor: Send + Sync {
     ) -> Result<SceneBootstrapResult, String>;
 }
 
+#[derive(Default)]
 pub struct AuthoredMapSceneBootstrapProvider {
     contributors: Vec<Arc<dyn AuthoredMapSceneBootstrapContributor>>,
-}
-
-impl Default for AuthoredMapSceneBootstrapProvider {
-    fn default() -> Self {
-        Self {
-            contributors: Vec::new(),
-        }
-    }
 }
 
 impl AuthoredMapSceneBootstrapProvider {

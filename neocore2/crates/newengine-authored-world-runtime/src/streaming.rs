@@ -284,19 +284,18 @@ fn placement_is_spawn(placement: &newengine_assets_api::MapPlacementV1) -> bool 
     )
 }
 
+type ProjectedCellPlacements = (
+    Vec<AuthoredWorldPlacementSpec>,
+    Vec<AuthoredWorldPlacementSpec>,
+    Vec<String>,
+    usize,
+);
+
 fn project_cell_placements(
     logical_map_ref: &str,
     resolved: &newengine_assets_api::MapResolvedCellV2,
     definition_cache: &AuthoredMapDefinitionCache,
-) -> Result<
-    (
-        Vec<AuthoredWorldPlacementSpec>,
-        Vec<AuthoredWorldPlacementSpec>,
-        Vec<String>,
-        usize,
-    ),
-    String,
-> {
+) -> Result<ProjectedCellPlacements, String> {
     let mut render_placements = Vec::new();
     let mut simulation_placements = Vec::new();
     let mut placement_ids = Vec::new();

@@ -99,7 +99,7 @@ impl AuthoredMapStreamingRuntimeTuning {
             ),
             cell_jobs_limit: var_usize(
                 "NEWENGINE_AUTHORED_MAP_CELL_JOBS",
-                spec.max_cells_per_tick.max(1).min(4),
+                spec.max_cells_per_tick.clamp(1, 4),
                 1,
                 8,
             ),
