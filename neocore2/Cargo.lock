@@ -4334,7 +4334,6 @@ dependencies = [
 name = "newengine-texture-container"
 version = "0.1.0"
 dependencies = [
- "newengine-asset-format-nef8",
  "newengine-assets-api",
  "serde",
  "serde_json",

@@ -7,7 +7,6 @@ description = "NewEngine NEF8/YTD texture dictionary payload container"
 
 [dependencies]
 newengine-assets-api = { path = "../newengine-assets-api" }
-newengine-asset-format-nef8 = { path = "../newengine-asset-format-nef8" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"

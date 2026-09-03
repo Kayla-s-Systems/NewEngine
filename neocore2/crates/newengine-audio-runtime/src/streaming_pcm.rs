@@ -67,7 +67,7 @@ impl StreamingStats {
     fn subtract_queued(&self, samples: usize) {
         let _ = self
             .queued_samples
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
                 Some(value.saturating_sub(samples))
             });
     }

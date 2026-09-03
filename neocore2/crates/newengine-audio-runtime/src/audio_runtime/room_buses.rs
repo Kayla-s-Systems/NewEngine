@@ -161,7 +161,7 @@ impl RoomBusIngressRegistry {
     fn release_binding(&self, slot: u32) {
         if slot != NO_ROOM_BUS_SLOT {
             if let Some(count) = self.binding_counts.get(slot as usize) {
-                let _ = count.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+                let _ = count.try_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
                     Some(value.saturating_sub(1))
                 });
             }

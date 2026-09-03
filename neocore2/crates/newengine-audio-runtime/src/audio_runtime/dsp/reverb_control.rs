@@ -112,9 +112,14 @@ impl EarlyReflectionFieldControl {
             .min(AUDIO_MAX_EARLY_REFLECTION_TAPS as u32) as u8;
         let mut field = AudioEarlyReflectionField::empty();
         field.count = count;
-        for index in 0..usize::from(count) {
+        for (index, tap) in field
+            .taps
+            .iter_mut()
+            .take(usize::from(count))
+            .enumerate()
+        {
             let base = 1 + index * EARLY_REFLECTION_TAP_WORDS;
-            field.taps[index] = AudioEarlyReflectionTap {
+            *tap = AudioEarlyReflectionTap {
                 delay_ms: f32::from_bits(self.words[base].load(Ordering::Relaxed)),
                 gain: f32::from_bits(self.words[base + 1].load(Ordering::Relaxed)),
                 high_frequency_gain: f32::from_bits(self.words[base + 2].load(Ordering::Relaxed)),
