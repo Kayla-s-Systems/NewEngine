@@ -32,19 +32,21 @@ volume = 0.5
 
 #[test]
 fn enabled_logo_ids_must_be_unique_and_non_empty() {
-    let mut manifest = StartupIntroManifest::default();
-    manifest.sequence = vec![
-        StartupIntroEntry {
-            id: "northstar".to_owned(),
-            source: "logo.mp4".to_owned(),
-            ..StartupIntroEntry::default()
-        },
-        StartupIntroEntry {
-            id: " northstar ".to_owned(),
-            source: "logo2.mp4".to_owned(),
-            ..StartupIntroEntry::default()
-        },
-    ];
+    let manifest = StartupIntroManifest {
+        sequence: vec![
+            StartupIntroEntry {
+                id: "northstar".to_owned(),
+                source: "logo.mp4".to_owned(),
+                ..StartupIntroEntry::default()
+            },
+            StartupIntroEntry {
+                id: " northstar ".to_owned(),
+                source: "logo2.mp4".to_owned(),
+                ..StartupIntroEntry::default()
+            },
+        ],
+        ..StartupIntroManifest::default()
+    };
 
     let error = crate::resolver::validate_manifest(&manifest).unwrap_err();
     assert!(error.contains("duplicated"));
