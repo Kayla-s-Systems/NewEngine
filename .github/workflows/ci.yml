@@ -156,9 +156,25 @@ jobs:
           workspaces: neocore2
       - name: Cargo workspace metadata preflight
         run: cargo metadata --format-version 1 --no-deps > /dev/null
-      - uses: taiki-e/install-action@cargo-tarpaulin
+      - name: Install cargo-tarpaulin
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-tarpaulin@0.37.0
+      - name: Coverage tool diagnostics
+        run: |
+          cargo tarpaulin --version
+          rustc --version --verbose
+          rustc --print target-libdir
       - name: Coverage
-        run: cargo tarpaulin --workspace --out Xml --exclude-files '*/tests/*'
+        shell: bash
+        run: |
+          rust_libdir="$(rustc --print target-libdir)"
+          export LD_LIBRARY_PATH="${rust_libdir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+          cargo tarpaulin \
+            --workspace \
+            --engine llvm \
+            --out Xml \
+            --exclude-files '*/tests/*'
       - uses: codecov/codecov-action@v3
         with:
           files: neocore2/cobertura.xml
