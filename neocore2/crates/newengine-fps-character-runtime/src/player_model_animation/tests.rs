@@ -1885,16 +1885,17 @@ mod transition_tests {
             left_prop_helper: None,
             left_prop_attachment: Some(11),
         };
-        let mut presentation =
-            newengine_engine_runtime::gameplay::WeaponPresentationDefinition::default();
-        presentation.enabled = true;
-        presentation.handle_from_root = [0.0, 0.0, 0.0];
-        presentation.handle_rotation_from_root = [0.0, 0.0, 0.0, 1.0];
-        presentation.authored_socket_to_weapon_handle_basis = [0.0, 0.0, 0.0, 1.0];
-        presentation.stock_contact_from_handle = [0.0, 0.0, 0.25];
-        presentation.ads_rear_sight_from_handle = [0.0, 0.0, 0.0];
-        presentation.ads_front_sight_from_handle = [0.0, 0.0, -0.25];
-        let presentation = presentation.sanitized();
+        let presentation = newengine_engine_runtime::gameplay::WeaponPresentationDefinition {
+            enabled: true,
+            handle_from_root: [0.0, 0.0, 0.0],
+            handle_rotation_from_root: [0.0, 0.0, 0.0, 1.0],
+            authored_socket_to_weapon_handle_basis: [0.0, 0.0, 0.0, 1.0],
+            stock_contact_from_handle: [0.0, 0.0, 0.25],
+            ads_rear_sight_from_handle: [0.0, 0.0, 0.0],
+            ads_front_sight_from_handle: [0.0, 0.0, -0.25],
+            ..newengine_engine_runtime::gameplay::WeaponPresentationDefinition::default()
+        }
+        .sanitized();
 
         let mut frames = Vec::new();
         rebuild_model_joint_frames(&animation_runtime, &pose, &mut frames)

@@ -283,6 +283,7 @@ fn apply_native_rifle_bilateral_root_constraint(
     Ok(true)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_native_rifle_bilateral_weapon_constraint(
     presentation: &newengine_engine_runtime::gameplay::WeaponPresentationDefinition,
     skeleton: &ModelSkeletonMetadata,

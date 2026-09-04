@@ -176,7 +176,7 @@ fn abby_rifle_bilateral_prop_pair_fuses_one_common_weapon_frame() {
     .normalize_or_identity();
     let left_rotation = (Quat::from_rotation_y(0.000_15) * right_rotation).normalize_or_identity();
     let right_position = Vec3::new(0.146_948_82, 1.322_840_8, -0.305_767_25);
-    let left_position = Vec3::new(0.146_812_03, 1.322_966_5, -0.305_863_72);
+    let left_position = Vec3::new(0.146_812_03, 1.322_966_5, -0.305_863_7);
     let right = Mat4::from_scale_rotation_translation(Vec3::ONE, right_rotation, right_position);
     let left = Mat4::from_scale_rotation_translation(Vec3::ONE, left_rotation, left_position);
 

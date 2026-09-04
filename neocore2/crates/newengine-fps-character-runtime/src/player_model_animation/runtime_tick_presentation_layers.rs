@@ -145,6 +145,7 @@ fn weapon_aim_body_turn_request(
     (residual, BODY_FOLLOW_HYSTERESIS)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn evaluate_native_turn_presentation_layer(
     player: newengine_ecs::EntityId,
     binding: &mut PlayerAnimationRuntimeBinding,
