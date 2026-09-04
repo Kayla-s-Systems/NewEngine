@@ -291,7 +291,7 @@ impl GameplayCapabilityProvider for AudioPlayCapability {
             );
         }
         let play = play.sanitized();
-        return match newengine_audio_client::play_audio_clip(&play).map_err(|error| {
+        match newengine_audio_client::play_audio_clip(&play).map_err(|error| {
             format!("audio gateway failed clip='{clip}' route='{route}': {error}")
         })? {
             Some(ack) if ack.accepted => {
@@ -312,7 +312,7 @@ impl GameplayCapabilityProvider for AudioPlayCapability {
             None => Err(format!(
                 "audio play capability unavailable clip='{clip}' route='{route}'"
             )),
-        };
+        }
     }
 }
 
