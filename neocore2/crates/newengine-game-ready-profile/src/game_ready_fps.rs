@@ -265,13 +265,13 @@ mod tests {
 
     #[test]
     fn shipping_fps_disables_authoring_hot_reload_by_default() {
-        let value = GAME_READY_FPS_ENV_POLICY
-            .iter()
-            .find_map(|(key, value)| (*key == "NEWENGINE_DISABLE_ASSET_HOT_RELOAD").then_some(*value));
+        let value = GAME_READY_FPS_ENV_POLICY.iter().find_map(|(key, value)| {
+            (*key == "NEWENGINE_DISABLE_ASSET_HOT_RELOAD").then_some(*value)
+        });
         assert_eq!(value, Some("1"));
-        assert!(GAME_READY_CORE_ENV_POLICY.iter().any(|(key, value)| {
-            *key == "NEWENGINE_DISABLE_ASSET_HOT_RELOAD" && *value == "1"
-        }));
+        assert!(GAME_READY_CORE_ENV_POLICY
+            .iter()
+            .any(|(key, value)| { *key == "NEWENGINE_DISABLE_ASSET_HOT_RELOAD" && *value == "1" }));
     }
 
     #[test]
