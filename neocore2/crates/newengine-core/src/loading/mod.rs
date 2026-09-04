@@ -2,6 +2,7 @@
 
 mod boot_frame;
 mod kernel;
+mod logo_layout;
 mod profile;
 
 #[cfg(test)]
@@ -12,7 +13,8 @@ pub use boot_frame::{
     LoadingProgressSnapshot,
 };
 pub use kernel::EngineLoadingKernel;
+pub use logo_layout::layout_logo_rects;
 pub use profile::{
     LoadingPhase, LoadingProfile, LoadingVisualRefs, LoadingVisualRole, ResolvedLoadingAssignment,
-    ENGINE_LOADING_PLUGIN_ID,
+    ENGINE_LOADING_PLUGIN_ID, MAX_LOADING_LOGOS,
 };

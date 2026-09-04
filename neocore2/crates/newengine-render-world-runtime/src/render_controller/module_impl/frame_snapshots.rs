@@ -1,7 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 use newengine_bounds::Bounds;
-use newengine_core::render::Extent2D;
+use newengine_core::render::{BindGroupId, Extent2D, PipelineId, TextureId};
 use newengine_materials::MaterialRef;
 use newengine_math::{Mat4, Vec3};
 use newengine_model_domain_api::{FoliageInstanceRuntime, MeshRenderOptions};
@@ -16,6 +16,8 @@ use newengine_gameplay_world_runtime::gameplay::{
     EnvironmentDomeRenderState, PlayerSkinBinding, PlayerVisualKind, PlayerVisualPart,
     WorldItemPresentation, WorldItemVisualPart,
 };
+
+use crate::render_controller::gpu::{PlayerSkinGpu, PrimitiveGpu};
 
 use super::{scene, RuntimeRenderController};
 
@@ -126,6 +128,43 @@ pub(super) struct SkinnedShadowSceneEntry {
     pub(super) proxy_center_ws: Vec3,
     pub(super) proxy_radius_ws: f32,
     pub(super) pose_generation: u64,
+}
+
+/// GPU/material state resolved once per frame for all skinned shadow views.
+///
+/// The renderer remains the owner of every native resource. This immutable plan stores only
+/// frame-local handles and draw constants so directional cascades do not repeat ECS/material/GPU
+/// cache resolution. Cascade-specific visibility and light matrices intentionally remain outside.
+pub(in crate::render_controller) struct PreparedSkinnedShadowFramePlan {
+    pub(super) frame_index: u64,
+    pub(super) scene_key: usize,
+    pub(super) runtime: bool,
+    pub(super) entries: Box<[PreparedSkinnedShadowCaster]>,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct PreparedSkinnedShadowCaster {
+    pub(super) entity: newengine_ecs::EntityId,
+    pub(super) primitive: Primitive,
+    pub(super) render_model: Mat4,
+    pub(super) proxy_center_ws: Vec3,
+    pub(super) proxy_radius_ws: f32,
+    pub(super) primitive_gpu: PrimitiveGpu,
+    pub(super) skin_gpu: PlayerSkinGpu,
+    pub(super) palette_bg: BindGroupId,
+    pub(super) base_texture: TextureId,
+    pub(super) pipeline: PipelineId,
+    pub(super) alpha_cutoff: f32,
+    pub(super) uv_transform: [f32; 4],
+}
+
+impl PreparedSkinnedShadowFramePlan {
+    #[inline]
+    pub(super) fn matches(&self, frame_index: u64, scene: &Scene, runtime: bool) -> bool {
+        self.frame_index == frame_index
+            && self.scene_key == scene as *const Scene as usize
+            && self.runtime == runtime
+    }
 }
 
 impl SkinnedShadowSceneSnapshot {

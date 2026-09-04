@@ -288,10 +288,12 @@ mod tests {
     fn ymap_audio_emitters_project_to_native_audio_components() {
         let xml = r#"<YmapMapDefinition schema="newengine.map.definition.v2">
   <map id="audio-test"><profile><audio><emitters>
-    <Emitter id="room_bed" cue="audio/ambience/room/room.ysncd@room_tone"
-             position="0,2,-3" gain="0.16" spatial="false" occlusion_enabled="false" />
-    <Emitter id="air_leak" cue="audio/ambience/room/room.ysncd@air_leak"
-             position="4.5,2.2,-3" gain="0.10" spatial="true" occlusion_enabled="true" />
+    <Emitter id="room_bed" source="audio/ambience/room/room_tone.xvag"
+             position="0,2,-3" gain="0.16" looping="true" spatial="false" occlusion_enabled="false" />
+    <Emitter id="air_leak" source="audio/ambience/room/wind_window.xvag"
+             position="4.5,2.2,-3" gain="0.10" looping="true" spatial="true"
+             attenuation_min_distance="1.25" attenuation_max_distance="14.0"
+             attenuation_curve="inverse" attenuation_rolloff="0.78" occlusion_enabled="true" />
   </emitters></audio></profile></map>
 </YmapMapDefinition>"#;
         let value = parse_ymap_xml_payload(xml.as_bytes(), "maps/audio-test.ymap")
@@ -307,7 +309,16 @@ mod tests {
         assert!((bed.emitter.gain - 0.16).abs() < 1.0e-6);
         let leak = &profile.audio_emitters[1];
         assert!(leak.emitter.spatial);
+        assert!(leak.emitter.looping);
         assert!(leak.emitter.occlusion.enabled);
-        assert_eq!(leak.emitter.cue, "audio/ambience/room/room.ysncd@air_leak");
+        assert_eq!(leak.emitter.source, "audio/ambience/room/wind_window.xvag");
+        let attenuation = leak
+            .emitter
+            .attenuation
+            .as_ref()
+            .expect("native XVAG attenuation");
+        assert!((attenuation.min_distance - 1.25).abs() < 1.0e-6);
+        assert!((attenuation.max_distance - 14.0).abs() < 1.0e-6);
+        assert!((attenuation.rolloff - 0.78).abs() < 1.0e-6);
     }
 }

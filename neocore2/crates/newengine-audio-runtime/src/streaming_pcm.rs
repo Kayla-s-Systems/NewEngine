@@ -514,6 +514,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "live decoder seek depends on native worker scheduling; Miri is used for UB semantics"
+    )]
     fn streaming_source_supports_live_seek_and_refills_new_generation() {
         let samples = (0..48_000)
             .map(|index| if index < 24_000 { 4_000 } else { 20_000 })

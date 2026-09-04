@@ -548,10 +548,12 @@ pub(super) fn prepare_player_animation_binding(
         equipment_aim_rotation_weights,
         equipment_reload_rotation_weights,
         equipment_overlay_locals: bind_locals.clone(),
-        equipment_overlay_locals_b: bind_locals,
+        equipment_overlay_locals_b: bind_locals.clone(),
+        equipment_composed_locals: bind_locals,
         equipment_ik,
         equipment_ik_residual_diag_cooldown: 0.0,
-        equipment_aim_controller: ThirdPersonWeaponAimState::default(),
+        equipment_aim_controller: WeaponAimControllerState::default(),
+        equipment_transition_weapon_root: None,
         equipment_resolved_weapon_root: None,
     }))
 }

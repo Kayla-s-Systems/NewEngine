@@ -12,7 +12,10 @@ pub(super) fn build_overlay_surface_node(
     let body_lines = spec.body_lines(status, progress.percent);
     let footer_lines = spec.footer_lines();
     let style_tags = spec.style_tags();
-    let visuals = newengine_core::loading::LoadingVisualRefs::from_last_startup_config_or_default();
+    let visuals =
+        newengine_core::loading::LoadingVisualRefs::from_last_startup_config_for_phase_or_default(
+            newengine_core::loading::LoadingPhase::RuntimeLoading,
+        );
     let components = spec.components(status, progress, frame_index, &visuals);
     static LOADING_VISUALS_LOGGED: std::sync::atomic::AtomicBool =
         std::sync::atomic::AtomicBool::new(false);
@@ -27,11 +30,11 @@ pub(super) fn build_overlay_surface_node(
             .is_ok()
     {
         newengine_ulog_api::ulog::info!(
-            "loading overlay production visuals: frame={} source='{}' background={} logo={} spinner={} components={} image_layers={}",
+            "loading overlay production visuals: frame={} source='{}' background={} logos=[{}] spinner={} components={} image_layers={}",
             frame_index,
             visuals.source,
             visuals.background.as_deref().unwrap_or("<none>"),
-            visuals.logo.as_deref().unwrap_or("<none>"),
+            visuals.logo_refs().join(","),
             visuals.spinner.as_deref().unwrap_or("<none>"),
             components.len(),
             visuals.image_layer_count()
@@ -58,7 +61,8 @@ pub(super) fn build_overlay_surface_node(
         serde_json::json!({
             "source": visuals.source.as_str(),
             "background": visuals.background.as_deref().unwrap_or(""),
-            "logo": visuals.logo.as_deref().unwrap_or(""),
+            "logo": visuals.primary_logo().unwrap_or(""),
+            "logos": visuals.logo_refs(),
             "spinner": visuals.spinner.as_deref().unwrap_or(""),
             "image_layers": visuals.image_layer_count(),
         }),

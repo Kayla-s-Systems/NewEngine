@@ -380,6 +380,51 @@ fn apply_equipment_ready_pose(
     Ok(self_contained)
 }
 
+
+fn equipment_bilateral_weapon_root_for_pose(
+    presentation: &newengine_engine_runtime::gameplay::WeaponPresentationDefinition,
+    rig: &WeaponArmIkRig,
+    animation_runtime: &AnimationSkeletonRuntime,
+    pose: &[JointLocalPose],
+    frames: &mut Vec<Mat4>,
+) -> Result<Option<crate::weapon_grip::WeaponRootTransform>, String> {
+    let (Some(right), Some(left)) = (rig.right_prop_attachment, rig.left_prop_attachment) else {
+        return Ok(None);
+    };
+    rebuild_model_joint_frames(animation_runtime, pose, frames)?;
+    let Some(right_frame) = frames.get(right).copied() else {
+        return Ok(None);
+    };
+    let Some(left_frame) = frames.get(left).copied() else {
+        return Ok(None);
+    };
+    Ok(crate::weapon_grip::weapon_root_from_bilateral_authored_prop_frames(
+        presentation,
+        right_frame,
+        left_frame,
+    )
+    .map(|pair| pair.root))
+}
+
+#[inline]
+fn interpolate_equipment_weapon_root(
+    source: crate::weapon_grip::WeaponRootTransform,
+    target: crate::weapon_grip::WeaponRootTransform,
+    alpha: f32,
+) -> Option<crate::weapon_grip::WeaponRootTransform> {
+    let alpha = alpha.clamp(0.0, 1.0);
+    let position = source.position.lerp(target.position, alpha);
+    let rotation = source
+        .rotation
+        .normalize_or_identity()
+        .slerp(target.rotation.normalize_or_identity(), alpha)
+        .normalize_or_identity();
+    (position.is_finite() && rotation.is_finite()).then_some(crate::weapon_grip::WeaponRootTransform {
+        position,
+        rotation,
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 fn apply_layered_equipment_aim_pose(
     pose_set: &EquipmentPoseSet,
@@ -391,6 +436,7 @@ fn apply_layered_equipment_aim_pose(
     animation_runtime: &AnimationSkeletonRuntime,
     scratch_a: &mut Vec<JointLocalPose>,
     scratch_b: &mut Vec<JointLocalPose>,
+    composed_target: &mut Vec<JointLocalPose>,
     target: &mut [JointLocalPose],
     root_joint: Option<usize>,
     weights: &[ResolvedJointBlendRule],
@@ -400,6 +446,24 @@ fn apply_layered_equipment_aim_pose(
         return Ok(false);
     }
     let aim_alpha = aim_alpha.clamp(0.0, 1.0);
+    if aim_alpha <= 1.0e-6 {
+        return Ok(true);
+    }
+
+    // Naughty Dog rifle AIM is authored as one composed target pose:
+    // MM base -> ADD -> ARMS -> HANDS. Their compatible READY<->AIM transition then moves the
+    // character between complete authored states. When that transition belongs to a foreign joint
+    // partition (Abby's original 1074-node reference domain), NorthStar must reproduce the same
+    // semantics by composing the destination at full weight first and blending exactly once.
+    // Blending every layer independently by aim_alpha manufactures an intermediate socket pose that
+    // does not exist in the source graph and can visibly detach/freeze the rendered weapon.
+    if composed_target.len() != target.len() {
+        composed_target.clear();
+        composed_target.extend_from_slice(target);
+    } else {
+        composed_target.copy_from_slice(target);
+    }
+
     let directional = equipment_directional_blend(space, aim_velocity_local);
     let mut base_applied = false;
     if let Some(blend) = directional {
@@ -418,10 +482,10 @@ fn apply_layered_equipment_aim_pose(
             animation_runtime,
             scratch_a,
             scratch_b,
-            target,
+            composed_target,
             phase,
             root_joint,
-            aim_alpha,
+            1.0,
         )?;
     }
     if !base_applied {
@@ -436,16 +500,13 @@ fn apply_layered_equipment_aim_pose(
             animation_runtime,
             scratch_a,
             scratch_b,
-            target,
+            composed_target,
             phase,
             root_joint,
-            aim_alpha,
+            1.0,
         )?;
     }
 
-    // Joint ownership is an authority/binding invariant, not a reason to skip authored grip
-    // composition. Native TLOU MM rifle bases already own the arm joints but still require the
-    // same-partition stand/crouch ADD + ARMS + HANDS layers to produce the final firing grip.
     let finger_phase = space
         .grip
         .fingers
@@ -456,17 +517,17 @@ fn apply_layered_equipment_aim_pose(
         space,
         0.0,
         finger_phase,
-        aim_alpha,
+        1.0,
         animation_runtime,
         scratch_a,
-        target,
+        composed_target,
         weights,
     )?;
 
-    // A paired blocked `sub/add` contract is evaluated as a relative pose delta: subtract the
-    // authored reference and add the blocked target. This preserves the current firing-hand root;
-    // weapon/contact IK remains the final authority after animation evaluation.
-    let blocked_weight = obstruction_alpha.clamp(0.0, 1.0) * aim_alpha;
+    // Blocked/sub-add is part of the destination AIM pose, so obstruction is resolved there before
+    // the single stance blend. This mirrors the source graph ordering instead of applying a second
+    // partially weighted transform after the weapon frame has already been established.
+    let blocked_weight = obstruction_alpha.clamp(0.0, 1.0);
     if blocked_weight > 1.0e-5 {
         apply_equipment_relative_delta_overlay(
             space.blocked_subtractive.as_ref(),
@@ -474,11 +535,20 @@ fn apply_layered_equipment_aim_pose(
             animation_runtime,
             scratch_a,
             scratch_b,
-            target,
+            composed_target,
             0.0,
             weights,
             blocked_weight,
         )?;
+    }
+
+    for (joint_index, (dst, src)) in target.iter_mut().zip(composed_target.iter()).enumerate() {
+        if Some(joint_index) == root_joint {
+            continue;
+        }
+        blend_joint_translation_only(dst, src, aim_alpha);
+        blend_joint_rotation_only(dst, src, aim_alpha);
+        blend_joint_scale_only(dst, src, aim_alpha);
     }
     Ok(true)
 }

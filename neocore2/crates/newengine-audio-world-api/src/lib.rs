@@ -606,7 +606,7 @@ pub struct AudioOcclusionObservation {
 #[derive(Clone, Debug, PartialEq)]
 pub struct AudioEmitterRuntime {
     pub voice_id: Option<u64>,
-    pub cue: String,
+    pub source: String,
     pub provider: String,
     pub obstruction: f32,
     pub occlusion: f32,
@@ -634,7 +634,7 @@ impl Default for AudioEmitterRuntime {
     fn default() -> Self {
         Self {
             voice_id: None,
-            cue: String::new(),
+            source: String::new(),
             provider: String::new(),
             obstruction: 0.0,
             occlusion: 0.0,

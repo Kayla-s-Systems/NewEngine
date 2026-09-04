@@ -38,10 +38,22 @@ pub(super) fn loading_overlay_components(
         components.push(background);
     }
 
-    if let Some(texture_ref) = valid_visual_ref(visuals.logo.as_deref()) {
-        let mut logo = UiComponentNode::text("loading.logo", "")
+    let logo_refs = visuals.logo_refs();
+    let logo_count = logo_refs.len();
+    let grid_columns = match logo_count {
+        0..=3 => logo_count.max(1),
+        4..=6 => 3,
+        _ => 4,
+    };
+    let logo_size = if logo_count <= 1 { 360.0 } else { 220.0 };
+    for (index, texture_ref) in logo_refs.into_iter().enumerate() {
+        let Some(texture_ref) = valid_visual_ref(Some(texture_ref)) else {
+            continue;
+        };
+        let mut logo = UiComponentNode::text(format!("loading.logo.{index}"), "")
             .tagged("startup-logo")
-            .tagged("loading-brand-logo");
+            .tagged("loading-brand-logo")
+            .tagged("multi-logo");
         logo.component_id = newengine_ui_api::UI_COMPONENT_EXTERNAL_TEXTURE.to_owned();
         set_ytd_texture_ref(&mut logo, texture_ref);
         set_production_paint_only(&mut logo);
@@ -52,11 +64,29 @@ pub(super) fn loading_overlay_components(
         logo.props
             .insert("anchor".to_owned(), serde_json::json!("center"));
         logo.props
-            .insert("w_px".to_owned(), serde_json::json!(360.0));
+            .insert("layout".to_owned(), serde_json::json!("centered_logo_grid"));
         logo.props
-            .insert("h_px".to_owned(), serde_json::json!(360.0));
+            .insert("logo_index".to_owned(), serde_json::json!(index));
         logo.props
-            .insert("z_order".to_owned(), serde_json::json!(10));
+            .insert("logo_count".to_owned(), serde_json::json!(logo_count));
+        logo.props
+            .insert("grid_columns".to_owned(), serde_json::json!(grid_columns));
+        logo.props.insert(
+            "grid_row".to_owned(),
+            serde_json::json!(index / grid_columns),
+        );
+        logo.props.insert(
+            "grid_column".to_owned(),
+            serde_json::json!(index % grid_columns),
+        );
+        logo.props
+            .insert("gap_px".to_owned(), serde_json::json!(24.0));
+        logo.props
+            .insert("w_px".to_owned(), serde_json::json!(logo_size));
+        logo.props
+            .insert("h_px".to_owned(), serde_json::json!(logo_size));
+        logo.props
+            .insert("z_order".to_owned(), serde_json::json!(10 + index));
         components.push(logo);
     }
 

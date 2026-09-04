@@ -82,6 +82,14 @@ impl Default for HitscanWeaponTuning {
 }
 
 impl HitscanWeaponTuning {
+    /// Shared finite center-screen convergence distance for ADS presentation and ballistics.
+    /// Keeping this policy on the weapon tuning prevents character animation and combat from
+    /// silently choosing different toe-in distances for the same firearm.
+    #[inline]
+    pub fn ads_center_screen_convergence_m(self) -> f32 {
+        self.sanitized().range.clamp(12.0, 80.0)
+    }
+
     pub fn sanitized(self) -> Self {
         Self {
             magazine_capacity: self.magazine_capacity.clamp(1, 10_000),

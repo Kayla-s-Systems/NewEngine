@@ -74,6 +74,90 @@ pub(crate) fn weapon_root_from_authored_prop_frame(
         .then_some(WeaponRootTransform { position, rotation })
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct BilateralAuthoredPropRoot {
+    pub root: WeaponRootTransform,
+    pub position_residual_m: f32,
+    pub angular_residual_deg: f32,
+}
+
+/// TLOU-style long-gun authority is bilateral: both authored hand-prop attachments describe the
+/// same weapon/handle frame after `base -> add -> arms -> hands` composition. Runtime accepts that
+/// contract only while the two authored frames remain coherent, then fuses their tiny compression /
+/// sampling residual instead of arbitrarily choosing the firing side as the sole weapon authority.
+#[inline]
+pub(crate) fn weapon_root_from_bilateral_authored_prop_frames(
+    presentation: &WeaponPresentationDefinition,
+    right_frame: Mat4,
+    left_frame: Mat4,
+) -> Option<BilateralAuthoredPropRoot> {
+    const MAX_POSITION_RESIDUAL_M: f32 = 0.010;
+    const MAX_ANGULAR_RESIDUAL_DEG: f32 = 2.0;
+
+    let right = weapon_root_from_authored_prop_frame(presentation, right_frame)?;
+    let left = weapon_root_from_authored_prop_frame(presentation, left_frame)?;
+    let right_handle_position = weapon_handle_position(presentation, right);
+    let left_handle_position = weapon_handle_position(presentation, left);
+    let right_handle_rotation = weapon_handle_rotation(presentation, right).normalize_or_identity();
+    let mut left_handle_rotation = weapon_handle_rotation(presentation, left).normalize_or_identity();
+
+    let position_residual_m = right_handle_position.distance(left_handle_position);
+    let raw_dot = right_handle_rotation.dot(left_handle_rotation);
+    let angular_residual_deg = (2.0 * raw_dot.abs().clamp(-1.0, 1.0).acos()).to_degrees();
+    if !position_residual_m.is_finite()
+        || !angular_residual_deg.is_finite()
+        || position_residual_m > MAX_POSITION_RESIDUAL_M
+        || angular_residual_deg > MAX_ANGULAR_RESIDUAL_DEG
+    {
+        return None;
+    }
+
+    // Quaternions q and -q encode the same orientation. Keep both endpoints in one hemisphere before
+    // averaging so a valid authored pair cannot cancel itself numerically.
+    if raw_dot < 0.0 {
+        left_handle_rotation = Quat::from_xyzw(
+            -left_handle_rotation.x,
+            -left_handle_rotation.y,
+            -left_handle_rotation.z,
+            -left_handle_rotation.w,
+        );
+    }
+    let handle_position = (right_handle_position + left_handle_position) * 0.5;
+    let handle_rotation = right_handle_rotation
+        .slerp(left_handle_rotation, 0.5)
+        .normalize_or_identity();
+    let rotation = (handle_rotation * handle_rotation_from_root(presentation).inverse())
+        .normalize_or_identity();
+    let position = weapon_root_position_from_handle(presentation, handle_position, rotation);
+    if !position.is_finite() || !rotation.is_finite() {
+        return None;
+    }
+    Some(BilateralAuthoredPropRoot {
+        root: WeaponRootTransform { position, rotation },
+        position_residual_m,
+        angular_residual_deg,
+    })
+}
+
+/// Inverse of `weapon_root_from_authored_prop_frame`: resolve the common authored prop/socket frame
+/// that both hands must reproduce for a desired procedural weapon root.
+#[inline]
+pub(crate) fn authored_prop_frame_from_weapon_root(
+    presentation: &WeaponPresentationDefinition,
+    root: WeaponRootTransform,
+) -> Option<Mat4> {
+    if !root.position.is_finite() || !root.rotation.is_finite() {
+        return None;
+    }
+    let handle_position = weapon_handle_position(presentation, root);
+    let handle_rotation = weapon_handle_rotation(presentation, root).normalize_or_identity();
+    let socket_to_handle = q4(presentation.authored_socket_to_weapon_handle_basis);
+    let socket_rotation = (handle_rotation * socket_to_handle.inverse()).normalize_or_identity();
+    (handle_position.is_finite() && socket_rotation.is_finite()).then_some(
+        Mat4::from_scale_rotation_translation(Vec3::ONE, socket_rotation, handle_position),
+    )
+}
+
 #[allow(dead_code)]
 pub(crate) fn weapon_root_from_right_palm(
     presentation: &WeaponPresentationDefinition,

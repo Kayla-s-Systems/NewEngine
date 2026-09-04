@@ -245,6 +245,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "native worker scheduling and timeout behavior is validated outside Miri; Miri is used for UB semantics"
+    )]
     fn worker_wait_helps_ready_same_lane_task_instead_of_deadlocking() {
         use std::sync::mpsc;
         use std::time::Duration;
@@ -287,6 +291,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "native worker scheduling and timeout behavior is validated outside Miri; Miri is used for UB semantics"
+    )]
     fn nested_completion_cascades_through_grandchildren() {
         use newengine_loading_api::EngineTaskPhase;
         use std::sync::{mpsc, Condvar, Mutex};
@@ -457,6 +465,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "native worker scheduling and timeout behavior is validated outside Miri; Miri is used for UB semantics"
+    )]
     fn parent_completion_waits_for_nested_child_and_delays_dependents() {
         use newengine_loading_api::EngineTaskPhase;
         use std::sync::{mpsc, Condvar, Mutex};

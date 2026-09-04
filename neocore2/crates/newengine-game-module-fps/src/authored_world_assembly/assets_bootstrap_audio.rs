@@ -18,10 +18,10 @@ pub(super) fn spawn_authored_audio_emitters(
         );
         let _ = world.insert(entity, spec.emitter.clone());
         newengine_ulog_api::ulog::info!(
-            "fps-authored audio emitter: entity={:?} id='{}' cue='{}' position={:?} spatial={} gain={:.3} autoplay={} occlusion={} source='YMAP profile.audio.emitters'",
+            "fps-authored audio emitter: entity={:?} id='{}' source='{}' position={:?} spatial={} gain={:.3} autoplay={} occlusion={} source='YMAP profile.audio.emitters'",
             entity,
             spec.id,
-            spec.emitter.cue,
+            spec.emitter.source,
             spec.position,
             spec.emitter.spatial,
             spec.emitter.gain,

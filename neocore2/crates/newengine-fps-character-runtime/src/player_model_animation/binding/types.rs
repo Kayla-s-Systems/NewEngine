@@ -84,13 +84,13 @@ impl EquipmentGripLayerSet {
             || self.additive.is_some()
     }
 
-    /// Fallback layered grip contract for aim clips that do not already own the complete arm/prop
-    /// domain themselves. `reference` is intentionally excluded: it is a composition operand and
-    /// may originate from a different source joint partition, so its presence is not runtime socket
-    /// authority. The rendered arm + prop-hand + additive layers form the fallback contract.
+    /// TLOU rifle grip authority is established by the terminal prop-domain layer plus the authored
+    /// additive correction. `arms` is content/stance-specific: standing Vepr uses ADD+ARMS+HANDS,
+    /// while crouch uses ADD+PART, where PART owns the same l/r hand_prop attachment domain.
+    /// `reference` is deliberately excluded because Abby's refs live in the foreign 1074-node domain.
     #[inline]
     fn has_prop_socket_contract(&self) -> bool {
-        self.arms.is_some() && self.hands.is_some() && self.additive.is_some()
+        self.hands.is_some() && self.additive.is_some()
     }
 }
 

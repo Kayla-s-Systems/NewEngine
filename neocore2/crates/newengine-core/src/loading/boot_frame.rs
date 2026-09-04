@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use super::profile::{LoadingVisualRole, ResolvedLoadingAssignment};
+use super::{
+    logo_layout::layout_logo_rects,
+    profile::{LoadingVisualRole, ResolvedLoadingAssignment},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct BootViewport {
@@ -168,11 +171,6 @@ impl BootFrameDto {
         let fill_w = bar_w * progress.progress_01.clamp(0.0, 1.0);
 
         let shortest_side = safe_w.min(safe_h);
-        let logo_size_max = (shortest_side - 32.0).clamp(1.0, 360.0);
-        let logo_size_min = 180.0_f32.min(logo_size_max);
-        let logo_size = (shortest_side * 0.28).clamp(logo_size_min, logo_size_max);
-        let logo_x = ((safe_w - logo_size) * 0.5).max(0.0);
-        let logo_y = ((safe_h - logo_size) * 0.42).max(0.0);
         let spinner_size = shortest_side.clamp(1.0, 64.0);
 
         let mut commands = vec![BootDrawCommand::Clear { color: clear }];
@@ -192,17 +190,13 @@ impl BootFrameDto {
             });
         }
 
-        if let Some(texture_ref) = assignment
-            .visuals
-            .logo
-            .as_deref()
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-        {
+        let logo_refs = assignment.visuals.logo_refs();
+        let logo_rects = layout_logo_rects(viewport, logo_refs.len());
+        for (texture_ref, rect) in logo_refs.into_iter().zip(logo_rects) {
             commands.push(BootDrawCommand::Image {
                 role: LoadingVisualRole::Logo,
                 texture_ref: texture_ref.to_owned(),
-                rect: BootRect::new(logo_x, logo_y, logo_size, logo_size),
+                rect,
                 alpha: 1.0,
             });
         }

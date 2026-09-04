@@ -223,46 +223,15 @@ fn update_weapon_attachment(
                 rotation: weapon_rotation,
             };
 
-            // True full-body ADS is anchored from the weapon that is actually rendered, never from
-            // a second camera/viewmodel approximation. The firing hand owns the weapon; from that
-            // final root derive the real rear sight and resolve the weapon-authored per-axis camera
-            // translation policy against the stable anatomical eye. At aim_alpha=1 the requested
-            // eye-relief components are consumed without hiding weapon-specific policy in camera runtime.
-            // The base anchor publisher clears this every frame,
-            // so holster/switch/failure cannot leave a stale sight target behind.
+            // FPP ironsight is camera-primary. The character/weapon provider moves the authored
+            // bilateral grip to the camera-space sight frame; the camera must never chase a rear sight
+            // that is still transitioning or embedded in the hand. Keep the legacy/special-optic ADS
+            // camera anchor clear for ordinary no-scope ADS.
             if first_person_active {
-                if let Some(view_rotation_ws) =
-                    super::player_model::player_rifle_view_rotation_world(world, owner)
-                {
-                    let sight_forward =
-                        crate::weapon_grip::weapon_sight_forward(presentation, weapon_root);
-                    let view_forward = (view_rotation_ws * -Vec3::Z).normalize_or_zero();
-                    if sight_forward.length_squared() > 1.0e-8
-                        && view_forward.length_squared() > 1.0e-8
-                    {
-                        let eye_center_ws = world
-                            .get::<newengine_engine_runtime::gameplay::PlayerFirstPersonCameraAnchor>(
-                                owner,
-                            )
-                            .map(|anchor| anchor.eye_center_ws)
-                            .filter(|position| position.is_finite());
-                        if let Some(ads_camera_position_ws) =
-                            eye_center_ws.and_then(|eye_center_ws| {
-                                crate::weapon_grip::weapon_resolved_ads_camera_position(
-                                    presentation,
-                                    weapon_root,
-                                    view_rotation_ws,
-                                    eye_center_ws,
-                                )
-                            })
-                        {
-                            if let Some(anchor) = world.get_mut::<
-                                newengine_engine_runtime::gameplay::PlayerFirstPersonCameraAnchor,
-                            >(owner) {
-                                anchor.ads_camera_position_ws = Some(ads_camera_position_ws);
-                            }
-                        }
-                    }
+                if let Some(anchor) = world.get_mut::<
+                    newengine_engine_runtime::gameplay::PlayerFirstPersonCameraAnchor,
+                >(owner) {
+                    anchor.ads_camera_position_ws = None;
                 }
             }
 

@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 pub use newengine_audio_api::{AcousticSurface, AudioEmitter, AudioEnvironmentZone, AudioPortal};
 use newengine_audio_api::{
     AudioAcousticState, AudioCuePlayRequest, AudioEnvironmentState, AudioOcclusionSettings,
-    AudioVoiceUpdateRequest,
+    AudioPlayRequest, AudioVoiceUpdateRequest,
 };
 use newengine_core::{EngineResult, Module, ModuleCtx};
 use newengine_ecs::EntityId;
@@ -14,7 +14,7 @@ use newengine_transform::{read_entity_world_pose_local_chain, Transform};
 use crate::audio_environment::{AudioEnvironmentFrame, AudioEnvironmentResolution};
 use crate::AudioWorldScene;
 use newengine_audio_client::{
-    audio_service_info, play_audio_cue, stop_audio_voice, update_audio_voice,
+    audio_service_info, play_audio_clip, play_audio_cue, stop_audio_voice, update_audio_voice,
 };
 use newengine_audio_world_api::{
     AudioEdgeDiffractionObservation, AudioEdgeDiffractionPathObservation, AudioEmitterRuntime,
@@ -50,7 +50,7 @@ struct EmitterFrameState {
 #[derive(Clone, Debug)]
 struct ManagedVoice {
     voice_id: u64,
-    cue: String,
+    source: String,
 }
 
 /// Presentation-cadence ECS bridge from authored `AudioEmitter` components into
@@ -158,7 +158,7 @@ impl AudioSceneRuntimeModule {
         }
     }
 
-    fn record_error(&mut self, stable_key: u64, cue: &str, error: String) {
+    fn record_error(&mut self, stable_key: u64, source: &str, error: String) {
         if self
             .last_errors
             .get(&stable_key)
@@ -168,9 +168,9 @@ impl AudioSceneRuntimeModule {
         }
         self.last_errors.insert(stable_key, error.clone());
         newengine_ulog_api::ulog::warn!(
-            "audio emitter: entity_key={} cue='{}' err='{}'",
+            "audio emitter: entity_key={} source='{}' err='{}'",
             stable_key,
-            cue,
+            source,
             error
         );
     }
@@ -305,8 +305,8 @@ impl AudioSceneRuntimeModule {
         for frame in &mut frame_emitters {
             let snapshot = &frame.snapshot;
             let stable_key = snapshot.stable_key;
-            let cue = snapshot.emitter.cue.trim();
-            if !snapshot.emitter.enabled || cue.is_empty() {
+            let source = snapshot.emitter.source.trim();
+            if !snapshot.emitter.enabled || source.is_empty() {
                 self.stop_managed(stable_key);
                 self.autoplay_armed.remove(&stable_key);
                 self.retry_after_tick.remove(&stable_key);
@@ -323,7 +323,7 @@ impl AudioSceneRuntimeModule {
             if self
                 .managed
                 .get(&stable_key)
-                .is_some_and(|managed| managed.cue != cue)
+                .is_some_and(|managed| managed.source != source)
             {
                 self.stop_managed(stable_key);
                 self.autoplay_armed.remove(&stable_key);
@@ -347,14 +347,14 @@ impl AudioSceneRuntimeModule {
                         // autoplay arm so it does not loop itself every frame.
                         self.managed.remove(&stable_key);
                         if !ack.message.is_empty() && ack.message != "voice not found" {
-                            self.record_error(stable_key, cue, ack.message);
+                            self.record_error(stable_key, source, ack.message);
                         }
                     }
                     Ok(None) => {
                         self.managed.remove(&stable_key);
                     }
                     Err(error) => {
-                        self.record_error(stable_key, cue, error);
+                        self.record_error(stable_key, source, error);
                     }
                 }
                 continue;
@@ -364,7 +364,7 @@ impl AudioSceneRuntimeModule {
                 || self
                     .autoplay_armed
                     .get(&stable_key)
-                    .is_some_and(|armed_cue| armed_cue == cue)
+                    .is_some_and(|armed_source| armed_source == source)
                 || self
                     .retry_after_tick
                     .get(&stable_key)
@@ -373,19 +373,39 @@ impl AudioSceneRuntimeModule {
                 continue;
             }
 
-            let mut request = AudioCuePlayRequest::new(cue.to_owned());
-            request.gain = snapshot.emitter.sanitized_gain();
-            request.position = snapshot.emitter.spatial.then_some(snapshot.position);
-            request.seed = Some(stable_key ^ self.tick.rotate_left(17));
-            request.scope_id = Some(stable_key);
-            request.acoustic = frame.acoustic;
-            request.environment = frame.environment;
-            match play_audio_cue(&request) {
+            let is_native_xvag = source.to_ascii_lowercase().ends_with(".xvag");
+            let play_result =
+                if is_native_xvag {
+                    let mut request = AudioPlayRequest::new(source.to_owned());
+                    request.route = snapshot.emitter.route.clone();
+                    request.gain = snapshot.emitter.sanitized_gain();
+                    request.looping = snapshot.emitter.looping;
+                    request.spatial = snapshot.emitter.spatial.then_some(
+                        newengine_audio_api::AudioSpatialParams {
+                            position: snapshot.position,
+                        },
+                    );
+                    request.attenuation = snapshot.emitter.attenuation.clone();
+                    request.acoustic = frame.acoustic;
+                    request.environment = frame.environment;
+                    play_audio_clip(&request)
+                } else {
+                    let mut request = AudioCuePlayRequest::new(source.to_owned());
+                    request.route = snapshot.emitter.route.clone();
+                    request.gain = snapshot.emitter.sanitized_gain();
+                    request.position = snapshot.emitter.spatial.then_some(snapshot.position);
+                    request.seed = Some(stable_key ^ self.tick.rotate_left(17));
+                    request.scope_id = Some(stable_key);
+                    request.acoustic = frame.acoustic;
+                    request.environment = frame.environment;
+                    play_audio_cue(&request)
+                };
+            match play_result {
                 Ok(Some(ack)) if ack.accepted => {
                     newengine_ulog_api::ulog::info!(
-                        "audio emitter autoplay accepted entity_key={} cue={} provider={} voice_id={:?} voice_ids={:?} virtualized={} message={} diagnostics={:?}",
+                        "audio emitter autoplay accepted entity_key={} source={} provider={} voice_id={:?} voice_ids={:?} virtualized={} message={} diagnostics={:?}",
                         stable_key,
-                        cue,
+                        source,
                         ack.provider,
                         ack.voice_id,
                         ack.voice_ids,
@@ -412,10 +432,10 @@ impl AudioSceneRuntimeModule {
                             stable_key,
                             ManagedVoice {
                                 voice_id,
-                                cue: cue.to_owned(),
+                                source: source.to_owned(),
                             },
                         );
-                        self.autoplay_armed.insert(stable_key, cue.to_owned());
+                        self.autoplay_armed.insert(stable_key, source.to_owned());
                         self.retry_after_tick.remove(&stable_key);
                         self.clear_error(stable_key);
                     }
@@ -424,7 +444,7 @@ impl AudioSceneRuntimeModule {
                     self.retry_after_tick
                         .insert(stable_key, self.tick.saturating_add(30));
                     if !ack.message.is_empty() {
-                        self.record_error(stable_key, cue, ack.message);
+                        self.record_error(stable_key, source, ack.message);
                     }
                 }
                 Ok(None) => {
@@ -434,7 +454,7 @@ impl AudioSceneRuntimeModule {
                 Err(error) => {
                     self.retry_after_tick
                         .insert(stable_key, self.tick.saturating_add(30));
-                    self.record_error(stable_key, cue, error);
+                    self.record_error(stable_key, source, error);
                 }
             }
         }
@@ -463,7 +483,7 @@ impl AudioSceneRuntimeModule {
             let environment_resolution = &frame.environment_resolution;
             let runtime = AudioEmitterRuntime {
                 voice_id: managed.map(|managed| managed.voice_id),
-                cue: snapshot.emitter.cue.clone(),
+                source: snapshot.emitter.source.clone(),
                 provider: provider.clone(),
                 obstruction: acoustic.obstruction,
                 occlusion: acoustic.occlusion,

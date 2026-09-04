@@ -4,8 +4,8 @@ use super::super::state::{
 };
 use super::registry::gateway_registry_snapshot;
 use newengine_service_api::{
-    CapabilityId, CapabilityMatrix, CapabilityRequirement, CapabilityRequirementLevel,
-    CompositionRequirement, RequirementStrength,
+    CapabilityMatrix, CapabilityRequirement, CapabilityRequirementLevel, CompositionRequirement,
+    RequirementStrength,
 };
 
 /// Declares a complete composition requirement matrix without constructing providers.
@@ -89,43 +89,44 @@ pub fn declare_engine_capability_requirement(
     spec: CapabilityRequirement,
     declared_by: &str,
 ) -> Result<(), String> {
+    declare_owned_engine_capability_requirement(CompositionRequirement::from_spec(
+        &spec,
+        declared_by,
+    ))
+}
+
+fn declare_owned_engine_capability_requirement(
+    mut incoming: CompositionRequirement,
+) -> Result<(), String> {
     crate::host_context::reject_topology_mutation_from_host_callback(
         "declare_engine_capability_requirement",
     )?;
-    let gateway_id =
-        newengine_service_api::normalize_engine_gateway_id(spec.capability.gateway_id())
-            .ok_or_else(|| {
-                format!(
-                    "capability '{}' is bound to invalid engine gateway '{}'",
-                    spec.capability.as_str(),
-                    spec.capability.gateway_id()
-                )
-            })?;
-    let service_kind = newengine_service_api::normalize_service_kind(
-        spec.capability.service_kind(),
-    )
-    .ok_or_else(|| {
-        format!(
-            "capability '{}' is bound to invalid service kind '{}'",
-            spec.capability.as_str(),
-            spec.capability.service_kind()
-        )
-    })?;
+    let gateway_id = newengine_service_api::normalize_engine_gateway_id(&incoming.gateway_id)
+        .ok_or_else(|| {
+            format!(
+                "capability '{}' is bound to invalid engine gateway '{}'",
+                incoming.capability_id, incoming.gateway_id
+            )
+        })?;
+    let service_kind = newengine_service_api::normalize_service_kind(&incoming.service_kind)
+        .ok_or_else(|| {
+            format!(
+                "capability '{}' is bound to invalid service kind '{}'",
+                incoming.capability_id, incoming.service_kind
+            )
+        })?;
     if !newengine_service_api::engine_gateway_matches_service_kind(&gateway_id, &service_kind) {
         return Err(format!(
             "capability '{}' route binding mismatch: gateway='{gateway_id}' service_kind='{service_kind}' expected='{}'",
-            spec.capability.as_str(),
+            incoming.capability_id,
             newengine_service_api::service_kind_from_engine_gateway_id(&gateway_id)
                 .unwrap_or_else(|| "<invalid>".to_owned())
         ));
     }
-
-    let declared_by = declared_by.trim();
-    if declared_by.is_empty() {
+    if incoming.declared_by.trim().is_empty() {
         return Err("capability requirement declared_by must not be empty".to_owned());
     }
 
-    let mut incoming = CompositionRequirement::from_spec(&spec, declared_by);
     incoming.gateway_id = gateway_id.clone();
     incoming.service_kind = service_kind;
 
@@ -177,18 +178,29 @@ pub fn declare_engine_capability_slot<S>(
 where
     S: AsRef<str>,
 {
-    let gateway_id = Box::leak(gateway_id.to_owned().into_boxed_str());
-    let service_kind = Box::leak(service_kind.as_ref().to_owned().into_boxed_str());
-    let capability = CapabilityId::new(gateway_id, gateway_id, service_kind);
-    let spec = CapabilityRequirement::new(
-        capability,
-        if required {
-            RequirementStrength::Required
-        } else {
-            RequirementStrength::Optional
-        },
-    );
-    declare_engine_capability_requirement(spec, declared_by)
+    let level = if required {
+        RequirementStrength::Required
+    } else {
+        RequirementStrength::Optional
+    };
+    declare_owned_engine_capability_requirement(CompositionRequirement {
+        capability_id: gateway_id.to_owned(),
+        gateway_id: gateway_id.to_owned(),
+        service_kind: service_kind.as_ref().to_owned(),
+        level,
+        min_capability_version: 0,
+        max_capability_version: None,
+        contract_id: None,
+        min_contract_version: 0,
+        max_contract_version: None,
+        required_tags: Vec::new(),
+        preferred_tags: Vec::new(),
+        conflict_tags: Vec::new(),
+        fallback_provider_ids: Vec::new(),
+        min_cardinality: u16::from(required),
+        max_cardinality: 1,
+        declared_by: declared_by.to_owned(),
+    })
 }
 
 pub fn list_engine_capability_slots() -> Vec<EngineCapabilitySlotSnapshot> {

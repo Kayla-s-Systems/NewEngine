@@ -239,10 +239,11 @@ fn semantic_frame_state(
 
 #[inline]
 fn equipment_allows_authored_head_look(equipment: EquipmentPresentationStance) -> bool {
-    !matches!(
-        equipment,
-        EquipmentPresentationStance::Aim | EquipmentPresentationStance::Reload
-    )
+    // During firearm AIM the head/eyes and the weapon consume the same live view intent in parallel.
+    // The authored look layer is presentation-only here: weapon free-aim/body-follow keeps its own
+    // authority and terminal rifle IK remains the final writer for clavicle/arm/socket chains. Reload
+    // is the only firearm stance that suppresses look tracking to protect the authored interaction.
+    equipment != EquipmentPresentationStance::Reload
 }
 
 fn resolve_authored_look_state(
@@ -337,7 +338,7 @@ pub(crate) fn tick_player_skin_animation(
             let Some(binding) = world.get_mut::<PlayerAnimationRuntimeBinding>(player) else {
                 continue;
             };
-            evaluate_player_animation_presentation(player, binding, dt, &frame)
+            evaluate_player_animation_presentation(player, binding, dt, &frame, frame_index)
         };
         let evaluate_total_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
         let Some(output) = output else {

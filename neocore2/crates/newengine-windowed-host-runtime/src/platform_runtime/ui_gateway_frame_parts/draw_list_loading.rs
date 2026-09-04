@@ -16,7 +16,10 @@ pub(super) fn ensure_production_loading_images(
             .render_surface_ids
             .iter()
             .any(|surface_id| surface_id == UI_SURFACE_ENGINE_LOADING);
-    let visuals = newengine_core::loading::LoadingVisualRefs::from_last_startup_config_or_default();
+    let visuals =
+        newengine_core::loading::LoadingVisualRefs::from_last_startup_config_for_phase_or_default(
+            newengine_core::loading::LoadingPhase::RuntimeLoading,
+        );
     let early_loading_bootstrap = request.frame_index <= 4 && visuals.image_layer_count() > 0;
     if !loading_surface_requested && !early_loading_bootstrap {
         return;
@@ -58,15 +61,28 @@ pub(super) fn ensure_production_loading_images(
         emitted += 1;
     }
 
-    if let Some(texture_ref) = valid_loading_texture_ref(visuals.logo.as_deref()) {
-        let logo = 360.0_f32.min(sw * 0.42).min(sh * 0.55).max(96.0);
+    let logo_refs: Vec<_> = visuals
+        .logo_refs()
+        .into_iter()
+        .filter_map(|texture_ref| valid_loading_texture_ref(Some(texture_ref)))
+        .collect();
+    let logo_rects = newengine_core::loading::layout_logo_rects(
+        newengine_core::loading::BootViewport {
+            width: sw,
+            height: sh,
+            scale: request.pixels_per_point.max(0.01),
+        },
+        logo_refs.len(),
+    );
+    for (index, (texture_ref, rect)) in logo_refs.into_iter().zip(logo_rects).enumerate() {
+        let node_id = format!("loading.logo.{index}");
         push_loading_image(
             draw_list,
-            "loading.logo",
+            &node_id,
             "loading-brand-logo",
             texture_ref,
-            [(sw - logo) * 0.5, (sh - logo) * 0.5, logo, logo],
-            10,
+            [rect.x, rect.y, rect.w, rect.h],
+            10 + index as i32,
             clip,
             0.0,
             None,
@@ -97,11 +113,11 @@ pub(super) fn ensure_production_loading_images(
 
     if emitted > 0 {
         draw_list.paint.diagnostics.push(format!(
-            "engine.ui.loading production image fallback emitted={} source='{}' background={} logo={} spinner={}",
+            "engine.ui.loading production image fallback emitted={} source='{}' background={} logos=[{}] spinner={}",
             emitted,
             visuals.source,
             visuals.background.as_deref().unwrap_or(""),
-            visuals.logo.as_deref().unwrap_or(""),
+            visuals.logo_refs().join(","),
             visuals.spinner.as_deref().unwrap_or(""),
         ));
         if request.frame_index <= 4 || request.frame_index % 120 == 1 {

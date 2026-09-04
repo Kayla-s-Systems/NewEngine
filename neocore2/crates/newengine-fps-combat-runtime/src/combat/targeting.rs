@@ -219,14 +219,13 @@ pub(super) fn shot_origin_and_direction_with_profiles(
     if muzzle_forward.length_squared() <= 1.0e-8 {
         return None;
     }
-    let obstruction = world
-        .get::<WeaponObstructionState>(player)
-        .copied()
-        .filter(|state| state.blocked && state.alpha > 0.001);
-    let muzzle_origin = obstruction
-        .map(|state| state.safe_muzzle_position)
-        .filter(|position| position.is_finite())
-        .unwrap_or_else(|| muzzle.position + muzzle_forward * 0.008);
+    // The rendered barrel socket is the unique physical origin of every firearm discharge.
+    // Obstruction may change presentation/allowed direction or make the ray hit immediately, but it
+    // must never teleport the bullet origin away from the visible muzzle.
+    let muzzle_origin = muzzle.position;
+    if !muzzle_origin.is_finite() {
+        return None;
+    }
 
     let hip_convergence = world
         .get::<EquippedWeaponBinding>(player)
@@ -239,30 +238,23 @@ pub(super) fn shot_origin_and_direction_with_profiles(
         .filter(|presentation| presentation.enabled)
         .map(|presentation| presentation.first_person_hip_convergence_m)
         .unwrap_or(12.0);
-    // ADS is sight-authoritative: presentation already rotates the rendered rear->front sight axis
-    // toward gameplay aim, so combat must consume that exact rendered line instead of reconstructing
-    // a second finite-distance camera convergence. Hip fire keeps camera convergence because there is
-    // no sight lock in that stance. If presentation has not published a valid sight yet, retain the
-    // existing camera-convergence fallback rather than inventing a direction.
-    let sight_forward = aiming
-        .then(|| active_equipped_weapon_sight(world, player))
-        .flatten()
-        .map(|sight| sight.forward.normalize_or_zero())
-        .filter(|forward| forward.is_finite() && forward.length_squared() > 1.0e-8);
+    // The center-screen camera ray owns gameplay intent in both TPP and FPP. Presentation may lag,
+    // sway or recoil visually, but a rendered sight line must never become a second ballistic authority.
+    // Resolve one target point on the camera/reticle axis, then fire from the real (or obstruction-safe)
+    // muzzle toward that point. This preserves physical muzzle parallax at close range while making the
+    // reticle the unique target-selection contract.
     let convergence_distance = if aiming {
-        tuning.range.clamp(12.0, 80.0)
+        tuning.ads_center_screen_convergence_m()
     } else {
         hip_convergence.clamp(4.0, tuning.range.max(4.0))
     };
     let aim_point = view_origin + camera_forward * convergence_distance;
     let ballistic_forward = (aim_point - muzzle_origin).normalize_or_zero();
-    let forward = sight_forward.unwrap_or_else(|| {
-        if ballistic_forward.length_squared() > 1.0e-8 {
-            ballistic_forward
-        } else {
-            muzzle_forward
-        }
-    });
+    let forward = if ballistic_forward.length_squared() > 1.0e-8 {
+        ballistic_forward
+    } else {
+        muzzle_forward
+    };
 
     let spread_state = if aiming {
         profiles.spread.ads

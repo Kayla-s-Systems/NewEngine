@@ -3,11 +3,33 @@ mod transition_tests {
     use super::*;
 
     #[test]
-    fn game_style_rmb_ads_starts_from_visible_sight_then_springs_toward_camera_inside_free_aim_cone() {
-        let mut state = ThirdPersonWeaponAimState::default();
+    fn game_style_weapon_aim_keeps_body_still_inside_free_aim_sector_and_steps_after_limit() {
+        let step = 45.0_f32.to_radians();
+        let (inside, hysteresis) =
+            weapon_aim_body_turn_request(50.0_f32.to_radians(), Some(step), false);
+        assert!(inside.abs() <= 1.0e-6);
+        assert!((hysteresis - 5.0_f32.to_radians()).abs() <= 1.0e-6);
+
+        let (right, _) = weapon_aim_body_turn_request(60.0_f32.to_radians(), Some(step), false);
+        let (left, _) = weapon_aim_body_turn_request(-60.0_f32.to_radians(), Some(step), false);
+        assert!((right - step).abs() <= 1.0e-6);
+        assert!((left + step).abs() <= 1.0e-6);
+    }
+
+    #[test]
+    fn game_style_rmb_ads_starts_from_visible_sight_then_springs_toward_camera_inside_free_aim_cone(
+    ) {
+        let mut state = WeaponAimControllerState::default();
         let entry_view = Quat::from_euler(newengine_math::EulerRot::YXZ, 0.28, -0.08, 0.0);
         let visible_ready_sight = Vec3::new(-0.18, 0.11, -0.977).normalize_or_zero();
-        state.update(true, 0.016, Some(entry_view), Some(visible_ready_sight));
+        state.update(
+            true,
+            WeaponAimPresentationMode::ThirdPerson,
+            0.016,
+            Some(entry_view),
+            None,
+            Some(visible_ready_sight),
+        );
         let first = state.sight_target().expect("entry sight target");
         assert!(
             first.dot(visible_ready_sight) > 0.999_999,
@@ -16,14 +38,28 @@ mod transition_tests {
 
         let moved_view = Quat::from_euler(newengine_math::EulerRot::YXZ, 0.34, 0.14, 0.0);
         let camera_target = (moved_view * -Vec3::Z).normalize_or_zero();
-        state.update(true, 0.016, Some(moved_view), Some(visible_ready_sight));
+        state.update(
+            true,
+            WeaponAimPresentationMode::ThirdPerson,
+            0.016,
+            Some(moved_view),
+            None,
+            Some(visible_ready_sight),
+        );
         let one_frame = state.sight_target().expect("one-frame aim target");
         assert!(
             one_frame.dot(camera_target) < 0.999_99,
             "weapon aim must spring toward camera input instead of snapping in one frame"
         );
         for _ in 0..30 {
-            state.update(true, 1.0 / 60.0, Some(moved_view), None);
+            state.update(
+                true,
+                WeaponAimPresentationMode::ThirdPerson,
+                1.0 / 60.0,
+                Some(moved_view),
+                None,
+                None,
+            );
         }
         let settled = state.sight_target().expect("settled aim target");
         assert!(
@@ -31,18 +67,150 @@ mod transition_tests {
             "weapon sight must converge on the camera target while RMB remains held"
         );
 
-        let outside_cone = Quat::from_euler(newengine_math::EulerRot::YXZ, 85_f32.to_radians(), 70_f32.to_radians(), 0.0);
+        let outside_cone = Quat::from_euler(
+            newengine_math::EulerRot::YXZ,
+            85_f32.to_radians(),
+            70_f32.to_radians(),
+            0.0,
+        );
         for _ in 0..60 {
-            state.update(true, 1.0 / 60.0, Some(outside_cone), None);
+            state.update(
+                true,
+                WeaponAimPresentationMode::ThirdPerson,
+                1.0 / 60.0,
+                Some(outside_cone),
+                None,
+                None,
+            );
         }
         let clamped = state.sight_target().expect("clamped aim target");
-        let (yaw, pitch) = ThirdPersonWeaponAimState::direction_to_yaw_pitch(clamped)
-            .expect("clamped aim angles");
-        assert!(yaw.abs() <= ThirdPersonWeaponAimState::YAW_LIMIT_RADIANS + 1.0e-4);
-        assert!(pitch <= ThirdPersonWeaponAimState::PITCH_UP_LIMIT_RADIANS + 1.0e-4);
+        let (yaw, pitch) =
+            WeaponAimControllerState::direction_to_yaw_pitch(clamped).expect("clamped aim angles");
+        assert!(yaw.abs() <= WeaponAimControllerState::THIRD_PERSON_YAW_LIMIT_RADIANS + 1.0e-4);
+        assert!(pitch <= WeaponAimControllerState::THIRD_PERSON_PITCH_UP_LIMIT_RADIANS + 1.0e-4);
 
-        state.update(false, 0.016, None, None);
+        state.update(
+            false,
+            WeaponAimPresentationMode::ThirdPerson,
+            0.016,
+            None,
+            None,
+            None,
+        );
         assert!(state.sight_target().is_none());
+    }
+
+    #[test]
+    fn first_person_aim_uses_shared_controller_without_tpp_clamp_or_body_handoff() {
+        let mut state = WeaponAimControllerState::default();
+        let visible_sight = Vec3::new(-0.08, 0.03, -0.996).normalize_or_zero();
+        let wide_camera = Quat::from_euler(
+            newengine_math::EulerRot::YXZ,
+            70.0_f32.to_radians(),
+            30.0_f32.to_radians(),
+            0.0,
+        );
+        let camera_forward = (wide_camera * -Vec3::Z).normalize_or_zero();
+
+        state.update(
+            true,
+            WeaponAimPresentationMode::FirstPerson,
+            0.0,
+            Some(wide_camera),
+            None,
+            Some(visible_sight),
+        );
+        assert!(
+            state
+                .sight_target()
+                .expect("FPP entry target")
+                .dot(visible_sight)
+                > 0.999_999,
+            "FPP ADS must enter from the sight that was actually visible, never snap to camera"
+        );
+
+        state.update(
+            true,
+            WeaponAimPresentationMode::FirstPerson,
+            1.0 / 60.0,
+            Some(wide_camera),
+            None,
+            None,
+        );
+        let one_frame = state.sight_target().expect("FPP filtered target");
+        assert!(
+            one_frame.dot(camera_forward) < 0.999_999,
+            "FPP sight must retain finite weapon/view lag instead of teleporting to camera"
+        );
+        for _ in 0..30 {
+            state.update(
+                true,
+                WeaponAimPresentationMode::FirstPerson,
+                1.0 / 60.0,
+                Some(wide_camera),
+                None,
+                None,
+            );
+        }
+        let settled = state.sight_target().expect("FPP settled target");
+        assert!(settled.dot(camera_forward) > 0.999_9);
+        let (yaw, _) = WeaponAimControllerState::direction_to_yaw_pitch(settled)
+            .expect("FPP settled yaw/pitch");
+        assert!(
+            yaw.abs() > WeaponAimControllerState::THIRD_PERSON_YAW_LIMIT_RADIANS + 0.1,
+            "FPP camera-primary aim must not inherit the TPP body-relative free-aim clamp"
+        );
+
+        let step = 45.0_f32.to_radians();
+        let (turn, hysteresis) =
+            weapon_aim_body_turn_request(85.0_f32.to_radians(), Some(step), true);
+        assert!(turn.abs() <= 1.0e-6);
+        assert!(hysteresis.abs() <= 1.0e-6);
+    }
+
+    #[test]
+    fn center_screen_convergence_direction_overrides_parallel_camera_forward_for_visual_aim() {
+        let mut state = WeaponAimControllerState::default();
+        let view = Quat::IDENTITY;
+        let camera_forward = -Vec3::Z;
+        let visible_sight = camera_forward;
+        // Simulate an off-axis weapon whose rear sight must toe in toward a finite point on the
+        // center-screen ray. The resulting direction intentionally differs from camera-forward.
+        let finite_center_screen_direction = Vec3::new(-0.065, 0.028, -1.0).normalize_or_zero();
+
+        state.update(
+            true,
+            WeaponAimPresentationMode::FirstPerson,
+            0.0,
+            Some(view),
+            Some(finite_center_screen_direction),
+            Some(visible_sight),
+        );
+        assert!(
+            state
+                .sight_target()
+                .expect("entry sight")
+                .dot(visible_sight)
+                > 0.999_999,
+            "finite-point convergence must retain no-snap ADS entry"
+        );
+
+        for _ in 0..30 {
+            state.update(
+                true,
+                WeaponAimPresentationMode::FirstPerson,
+                1.0 / 60.0,
+                Some(view),
+                Some(finite_center_screen_direction),
+                None,
+            );
+        }
+        let settled = state.sight_target().expect("settled finite-point sight");
+        assert!(settled.dot(finite_center_screen_direction) > 0.999_9);
+        assert!(
+            settled.dot(camera_forward) < 0.999,
+            "visual weapon must converge toward the finite center-screen point, not remain parallel to camera"
+        );
     }
 
     #[test]
@@ -588,7 +756,7 @@ mod transition_tests {
         assert!(equipment_allows_authored_head_look(
             EquipmentPresentationStance::Ready
         ));
-        assert!(!equipment_allows_authored_head_look(
+        assert!(equipment_allows_authored_head_look(
             EquipmentPresentationStance::Aim
         ));
         assert!(!equipment_allows_authored_head_look(
@@ -909,6 +1077,7 @@ mod transition_tests {
             true,
             false,
             false,
+            None,
             true,
             true,
             None,
@@ -1033,6 +1202,7 @@ mod transition_tests {
             true,
             false,
             false,
+            None,
             true,
             true,
             None,
@@ -1103,6 +1273,7 @@ mod transition_tests {
             true,
             true,
             true,
+            None,
             true,
             true,
             None,
@@ -1204,6 +1375,7 @@ mod transition_tests {
             true,
             true,
             true,
+            None,
             true,
             false,
             None,
@@ -1248,8 +1420,15 @@ mod transition_tests {
         // exactly where it is; subsequent mouse/view delta moves the complete weapon contract from
         // that entry pose. Absolute camera-forward is intentionally different here to prove no snap.
         let entry_view = Quat::from_euler(newengine_math::EulerRot::YXZ, 0.43, -0.12, 0.0);
-        let mut relative_ads = ThirdPersonWeaponAimState::default();
-        relative_ads.update(true, 0.0, Some(entry_view), Some(tpp_sight_before));
+        let mut relative_ads = WeaponAimControllerState::default();
+        relative_ads.update(
+            true,
+            WeaponAimPresentationMode::ThirdPerson,
+            0.0,
+            Some(entry_view),
+            None,
+            Some(tpp_sight_before),
+        );
         let mut relative_entry_pose = tpp_authored_pose_for_relative_ads.clone();
         let mut relative_entry_frames = Vec::new();
         let relative_entry = apply_equipped_weapon_support_ik(
@@ -1271,6 +1450,7 @@ mod transition_tests {
             true,
             true,
             true,
+            None,
             true,
             false,
             Some(&mut relative_ads),
@@ -1289,9 +1469,18 @@ mod transition_tests {
         let mouse_delta = Quat::from_rotation_y(0.045) * Quat::from_rotation_x(-0.025);
         let moved_view = (mouse_delta * entry_view).normalize_or_identity();
         for _ in 0..24 {
-            relative_ads.update(true, 1.0 / 60.0, Some(moved_view), None);
+            relative_ads.update(
+                true,
+                WeaponAimPresentationMode::ThirdPerson,
+                1.0 / 60.0,
+                Some(moved_view),
+                None,
+                None,
+            );
         }
-        let expected_relative_sight = relative_ads.sight_target().expect("game-style moved sight target");
+        let expected_relative_sight = relative_ads
+            .sight_target()
+            .expect("game-style moved sight target");
         let mut relative_moved_pose = tpp_authored_pose_for_relative_ads.clone();
         let mut relative_moved_frames = Vec::new();
         let relative_moved = apply_equipped_weapon_support_ik(
@@ -1313,6 +1502,7 @@ mod transition_tests {
             true,
             true,
             true,
+            None,
             true,
             false,
             Some(&mut relative_ads),
@@ -1374,6 +1564,7 @@ mod transition_tests {
             true,
             true,
             true,
+            None,
             true,
             true,
             None,
@@ -1414,6 +1605,95 @@ mod transition_tests {
         assert!(fpp_socket_result.socket_position_error_m <= 1.0e-6);
         assert!(fpp_socket_result.socket_angular_error_deg <= 0.001);
 
+        // Production native FPP uses the same filtered aim core as TPP, but camera is primary and
+        // no body handoff is involved. The controller must therefore move the authored clavicle /
+        // prop-socket chain itself instead of freezing the native firing arm at the pre-ADS pose.
+        let mut native_fpp_controller = WeaponAimControllerState::default();
+        let native_fpp_visible_sight = crate::weapon_grip::weapon_sight_forward(
+            &socket_presentation,
+            expected_fpp_socket_root,
+        );
+        let native_fpp_entry_view =
+            Quat::from_rotation_arc(-Vec3::Z, native_fpp_visible_sight).normalize_or_identity();
+        native_fpp_controller.update(
+            true,
+            WeaponAimPresentationMode::FirstPerson,
+            0.0,
+            Some(native_fpp_entry_view),
+            None,
+            Some(native_fpp_visible_sight),
+        );
+        let native_fpp_requested_sight =
+            (Quat::from_rotation_y(0.08) * Quat::from_rotation_x(-0.04) * native_fpp_visible_sight)
+                .normalize_or_zero();
+        let native_fpp_requested_view =
+            Quat::from_rotation_arc(-Vec3::Z, native_fpp_requested_sight).normalize_or_identity();
+        for _ in 0..24 {
+            native_fpp_controller.update(
+                true,
+                WeaponAimPresentationMode::FirstPerson,
+                1.0 / 60.0,
+                Some(native_fpp_requested_view),
+                None,
+                None,
+            );
+        }
+        let native_fpp_filtered_sight = native_fpp_controller
+            .sight_target()
+            .expect("native FPP filtered sight");
+        let mut native_fpp_pose = authored_pose.clone();
+        let native_fpp_pose_before = native_fpp_pose.clone();
+        let mut native_fpp_frames = Vec::new();
+        let native_fpp_result = apply_equipped_weapon_support_ik(
+            &socket_presentation,
+            Some(&socket_rig),
+            &skeleton,
+            &animation_runtime,
+            &mut native_fpp_pose,
+            &mut native_fpp_frames,
+            Some(native_fpp_requested_sight),
+            Some(native_fpp_requested_view),
+            Some(Vec3::new(0.0, 1.62, 0.0)),
+            true,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            Vec3::ZERO,
+            true,
+            true,
+            true,
+            None,
+            true,
+            true,
+            Some(&mut native_fpp_controller),
+        )
+        .expect("native FPP shared aim solve")
+        .expect("native FPP shared aim root");
+        let native_fpp_actual_sight = crate::weapon_grip::weapon_sight_forward(
+            &socket_presentation,
+            native_fpp_result.base_root,
+        );
+        assert!(
+            native_fpp_actual_sight.dot(native_fpp_filtered_sight) > 0.999_9,
+            "native FPP weapon sight must follow the shared filtered camera target"
+        );
+        assert!(
+            native_fpp_result
+                .base_root
+                .position
+                .distance(expected_fpp_socket_root.position)
+                > 0.001,
+            "native FPP camera aim must move the firing socket/weapon instead of freezing prop ownership"
+        );
+        assert!(
+            [socket_rig.right_clavicle, socket_rig.left_clavicle]
+                .into_iter()
+                .flatten()
+                .any(|joint| native_fpp_pose[joint] != native_fpp_pose_before[joint]),
+            "native FPP aim must be carried by the authored upper-body arm roots"
+        );
+
         // Full-body first person keeps the authored right-palm handle as the kinematic weapon
         // owner, but ADS is allowed to rotate the real arm chains so both palms follow the final
         // sight-aligned weapon contacts. Limb translations/segment lengths remain anatomical.
@@ -1439,6 +1719,7 @@ mod transition_tests {
             &presentation,
             fpp_frames[rig.right_palm],
             view,
+            None,
             1.0,
             0.0,
             0.0,
@@ -1467,6 +1748,7 @@ mod transition_tests {
             true,
             false,
             false,
+            None,
             true,
             true,
             None,
@@ -1508,6 +1790,312 @@ mod transition_tests {
         let sight_forward =
             crate::weapon_grip::weapon_sight_forward(&presentation, fpp_result.base_root);
         assert!(sight_forward.dot((view * -Vec3::Z).normalize_or_zero()) > 0.9999);
+    }
+
+    #[test]
+    fn native_rifle_procedural_aim_preserves_bilateral_prop_authority() {
+        use newengine_model_skeleton_api::{ModelSkeletonAnchors, ModelSkeletonJointMetadata};
+
+        let names = [
+            "root",
+            "chest",
+            "r_shoulder",
+            "r_elbow",
+            "r_wrist",
+            "r_palm",
+            "r_hand_prop_attachment",
+            "l_shoulder",
+            "l_elbow",
+            "l_wrist",
+            "l_palm",
+            "l_hand_prop_attachment",
+        ];
+        let joint = |index: u32, parent_index: Option<u32>, position_ls: [f32; 3]| {
+            ModelSkeletonJointMetadata {
+                index,
+                tag: index,
+                name: names[index as usize].to_owned(),
+                parent: parent_index.map(|parent| names[parent as usize].to_owned()),
+                parent_index,
+                position_ls,
+                rotation_ls: [0.0, 0.0, 0.0, 1.0],
+                scale_ls: [1.0, 1.0, 1.0],
+                flags: Vec::new(),
+            }
+        };
+        let skeleton = ModelSkeletonMetadata {
+            source: "bilateral-rifle-test".to_owned(),
+            source_format: "test".to_owned(),
+            container_magic: "TEST".to_owned(),
+            byte_len: 0,
+            content_hash: String::new(),
+            decode_status: "ok".to_owned(),
+            joints: vec![
+                joint(0, None, [0.0, 0.0, 0.0]),
+                joint(1, Some(0), [0.0, 1.20, 0.0]),
+                joint(2, Some(1), [-0.18, 0.15, 0.0]),
+                joint(3, Some(2), [0.08, -0.20, 0.0]),
+                joint(4, Some(3), [-0.08, -0.18, 0.0]),
+                joint(5, Some(4), [0.0, -0.04, 0.0]),
+                joint(6, Some(4), [0.18, 0.0, -0.20]),
+                joint(7, Some(1), [0.18, 0.15, 0.0]),
+                joint(8, Some(7), [-0.08, -0.20, 0.0]),
+                joint(9, Some(8), [0.08, -0.18, 0.0]),
+                joint(10, Some(9), [0.0, -0.04, 0.0]),
+                joint(11, Some(9), [-0.18, 0.0, -0.20]),
+            ],
+            anchors: ModelSkeletonAnchors {
+                root: "root".to_owned(),
+                hips: "root".to_owned(),
+                head: "chest".to_owned(),
+                left_hand: "l_palm".to_owned(),
+                right_hand: "r_palm".to_owned(),
+                left_foot: "root".to_owned(),
+                right_foot: "root".to_owned(),
+                eye: "chest".to_owned(),
+                eye_height: 0.0,
+            },
+        };
+        let animation_runtime =
+            AnimationSkeletonRuntime::compile(&skeleton, Mat4::IDENTITY.to_cols_array())
+                .expect("compile bilateral rifle skeleton");
+        let mut pose = skeleton
+            .joints
+            .iter()
+            .map(|joint| JointLocalPose {
+                translation: joint.position_ls,
+                rotation: joint.rotation_ls,
+                scale: Some(joint.scale_ls),
+            })
+            .collect::<Vec<_>>();
+        let rig = WeaponArmIkRig {
+            chest: 1,
+            right_clavicle: Some(1),
+            right_shoulder: 2,
+            right_elbow: 3,
+            right_wrist: 4,
+            right_palm: 5,
+            right_prop_helper: None,
+            right_prop_attachment: Some(6),
+            left_clavicle: Some(1),
+            left_shoulder: 7,
+            left_elbow: 8,
+            left_wrist: 9,
+            left_palm: 10,
+            left_prop_helper: None,
+            left_prop_attachment: Some(11),
+        };
+        let mut presentation =
+            newengine_engine_runtime::gameplay::WeaponPresentationDefinition::default();
+        presentation.enabled = true;
+        presentation.handle_from_root = [0.0, 0.0, 0.0];
+        presentation.handle_rotation_from_root = [0.0, 0.0, 0.0, 1.0];
+        presentation.authored_socket_to_weapon_handle_basis = [0.0, 0.0, 0.0, 1.0];
+        presentation.stock_contact_from_handle = [0.0, 0.0, 0.25];
+        presentation.ads_rear_sight_from_handle = [0.0, 0.0, 0.0];
+        presentation.ads_front_sight_from_handle = [0.0, 0.0, -0.25];
+        let presentation = presentation.sanitized();
+
+        let mut frames = Vec::new();
+        rebuild_model_joint_frames(&animation_runtime, &pose, &mut frames)
+            .expect("initial bilateral frames");
+        let before = crate::weapon_grip::weapon_root_from_bilateral_authored_prop_frames(
+            &presentation,
+            frames[6],
+            frames[11],
+        )
+        .expect("initial bilateral root");
+        assert!(before.position_residual_m <= 1.0e-6);
+        assert!(before.angular_residual_deg <= 0.001);
+
+        // A normal local-pose READY->AIM blend can place the two prop branches centimetres apart even
+        // though both authored endpoints describe one weapon frame. Strict authored fusion must still
+        // reject that split pose, but the separately validated transition frame must project both arms
+        // back onto one common socket instead of freezing the rendered weapon at the previous frame.
+        let mut split_pose = pose.clone();
+        let split_rotation = Quat::from_rotation_y(0.42);
+        split_pose[rig.left_shoulder].rotation = [
+            split_rotation.x,
+            split_rotation.y,
+            split_rotation.z,
+            split_rotation.w,
+        ];
+        let mut split_frames = Vec::new();
+        rebuild_model_joint_frames(&animation_runtime, &split_pose, &mut split_frames)
+            .expect("split transition frames");
+        assert!(
+            crate::weapon_grip::weapon_root_from_bilateral_authored_prop_frames(
+                &presentation,
+                split_frames[6],
+                split_frames[11],
+            )
+            .is_none(),
+            "synthetic transition fixture must start outside the authored bilateral tolerance"
+        );
+        assert!(
+            apply_equipped_weapon_support_ik(
+                &presentation,
+                Some(&rig),
+                &skeleton,
+                &animation_runtime,
+                &mut split_pose,
+                &mut split_frames,
+                None,
+                None,
+                None,
+                false,
+                0.35,
+                0.0,
+                0.0,
+                0.0,
+                Vec3::ZERO,
+                true,
+                true,
+                true,
+                Some(before.root),
+                true,
+                true,
+                None,
+            )
+            .expect("synthetic TLOU transition constraint")
+            .is_some(),
+            "coherent transition weapon frame must repair a split intermediate pose"
+        );
+        let repaired = crate::weapon_grip::weapon_root_from_bilateral_authored_prop_frames(
+            &presentation,
+            split_frames[6],
+            split_frames[11],
+        )
+        .expect("repaired bilateral transition frame");
+        assert!(repaired.position_residual_m <= 1.0e-5);
+        assert!(repaired.angular_residual_deg <= 0.01);
+
+        let target =
+            (Quat::from_rotation_y(0.06) * Quat::from_rotation_x(-0.03) * -Vec3::Z)
+                .normalize_or_zero();
+
+        assert!(apply_native_rifle_bilateral_weapon_constraint(
+            &presentation,
+            &skeleton,
+            &animation_runtime,
+            &mut pose,
+            &mut frames,
+            &rig,
+            before.root,
+            Some(target),
+        )
+        .expect("bilateral procedural aim"));
+
+        let after = crate::weapon_grip::weapon_root_from_bilateral_authored_prop_frames(
+            &presentation,
+            frames[6],
+            frames[11],
+        )
+        .expect("final bilateral root");
+        let sight = crate::weapon_grip::weapon_sight_forward(&presentation, after.root);
+        assert!(sight.dot(target) > 0.999_9);
+        assert!(after.position_residual_m <= 1.0e-5);
+        assert!(after.angular_residual_deg <= 0.01);
+        assert!(
+            after.root.position.distance(before.root.position) > 0.005,
+            "procedural aim must move the common weapon frame with both hands"
+        );
+        for socket in [6, 11] {
+            let error = crate::weapon_grip::weapon_handle_frame_error_from_authored_socket(
+                &presentation,
+                after.root,
+                frames[socket],
+            )
+            .expect("bilateral socket residual");
+            assert!(error.position_m <= 1.0e-5);
+            assert!(error.angular_degrees <= 0.01);
+        }
+
+        // First-person no-scope uses CP2077-style camera-primary ironsight placement while preserving
+        // the same TLOU bilateral prop contract. The camera stays fixed; the complete arm/grip
+        // presentation is rigidly relocated so the real rear/front sights form the screen-center line.
+        let mut fpp_pose = skeleton
+            .joints
+            .iter()
+            .map(|joint| JointLocalPose {
+                translation: joint.position_ls,
+                rotation: joint.rotation_ls,
+                scale: Some(joint.scale_ls),
+            })
+            .collect::<Vec<_>>();
+        let mut fpp_frames = Vec::new();
+        rebuild_model_joint_frames(&animation_runtime, &fpp_pose, &mut fpp_frames)
+            .expect("initial bilateral FPP frames");
+        let fpp_before = crate::weapon_grip::weapon_root_from_bilateral_authored_prop_frames(
+            &presentation,
+            fpp_frames[6],
+            fpp_frames[11],
+        )
+        .expect("initial bilateral FPP root");
+        let fpp_view = Quat::IDENTITY;
+        let fpp_eye_relief = Vec3::new(0.0, 0.0, -0.075);
+        let fpp_authored_rear =
+            crate::weapon_grip::weapon_rear_sight_position(&presentation, fpp_before.root);
+        let fpp_camera = fpp_authored_rear - fpp_view * fpp_eye_relief + Vec3::Y * 0.04;
+        let mut fpp_controller = WeaponAimControllerState::default();
+        fpp_controller.update(
+            true,
+            WeaponAimPresentationMode::FirstPerson,
+            1.0 / 60.0,
+            Some(fpp_view),
+            None,
+            Some(crate::weapon_grip::weapon_sight_forward(
+                &presentation,
+                fpp_before.root,
+            )),
+        );
+        let fpp_result = apply_equipped_weapon_support_ik(
+            &presentation,
+            Some(&rig),
+            &skeleton,
+            &animation_runtime,
+            &mut fpp_pose,
+            &mut fpp_frames,
+            Some(-Vec3::Z),
+            Some(fpp_view),
+            Some(fpp_camera),
+            true,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            Vec3::ZERO,
+            true,
+            true,
+            true,
+            None,
+            true,
+            true,
+            Some(&mut fpp_controller),
+        )
+        .expect("bilateral FPP production solve")
+        .expect("bilateral FPP root");
+        let fpp_rear =
+            crate::weapon_grip::weapon_rear_sight_position(&presentation, fpp_result.base_root);
+        let expected_fpp_rear = fpp_camera + fpp_view * fpp_eye_relief;
+        assert!(
+            fpp_rear.distance(expected_fpp_rear) <= 1.0e-4,
+            "FPP full ADS rear sight must sit at authored eye relief rear={fpp_rear:?} expected={expected_fpp_rear:?}"
+        );
+        let fpp_sight =
+            crate::weapon_grip::weapon_sight_forward(&presentation, fpp_result.base_root);
+        assert!(
+            fpp_sight.dot(-Vec3::Z) > 0.999_9,
+            "FPP rear->front sight must point through screen center"
+        );
+        let fpp_pair = crate::weapon_grip::weapon_root_from_bilateral_authored_prop_frames(
+            &presentation,
+            fpp_frames[6],
+            fpp_frames[11],
+        )
+        .expect("FPP bilateral sockets remain coherent");
+        assert!(fpp_pair.position_residual_m <= 1.0e-5);
+        assert!(fpp_pair.angular_residual_deg <= 0.01);
     }
 
     #[test]
@@ -1912,6 +2500,7 @@ mod transition_tests {
         .expect("resolve native grip composition test weights");
         let mut scratch_a = Vec::new();
         let mut scratch_b = Vec::new();
+        let mut composed = target.clone();
         assert!(apply_layered_equipment_aim_pose(
             &pose_set,
             EquipmentPoseBodyStance::Stand,
@@ -1922,6 +2511,7 @@ mod transition_tests {
             &animation_runtime,
             &mut scratch_a,
             &mut scratch_b,
+            &mut composed,
             &mut target,
             Some(0),
             &weights,

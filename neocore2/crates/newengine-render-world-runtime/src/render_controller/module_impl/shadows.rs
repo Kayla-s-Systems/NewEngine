@@ -429,7 +429,6 @@ pub fn try_build_directional_shadow_plan(
 
     let splits = csm_split_distances(0.5, max_distance, cascade_count);
     let mut cascades = [ShadowCascadeFrame::disabled(); MAX_DIRECTIONAL_SHADOW_CASCADES];
-    let mut union_cull = None;
     for i in 0..cascade_count as usize {
         let split_near = if i == 0 { 0.5 } else { splits[i - 1] };
         let split_far = splits[i].max(split_near + 0.1);
@@ -472,7 +471,6 @@ pub fn try_build_directional_shadow_plan(
         let proj =
             Mat4::orthographic_rh(-fit.half_x, fit.half_x, -fit.half_y, fit.half_y, near, far);
         let cull = ShadowCasterCull::directional(view, fit.half_x.max(fit.half_y), near, far);
-        union_cull = Some(cull);
         let (viewport, scissor) =
             csm_tile_viewport_scissor(i as u32, cascade_count, shadow_resolution);
         cascades[i] = ShadowCascadeFrame {
@@ -497,7 +495,7 @@ pub fn try_build_directional_shadow_plan(
             cascades,
             params,
             extra,
-            union_cull,
+            None,
         )
         .with_pcss(pcss0, pcss1),
     ))

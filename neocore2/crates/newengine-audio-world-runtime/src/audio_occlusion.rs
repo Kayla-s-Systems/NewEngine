@@ -88,7 +88,7 @@ impl AudioOcclusionPhysicsQueryProvider {
             if !emitter.enabled
                 || !emitter.spatial
                 || !settings.enabled
-                || emitter.cue.trim().is_empty()
+                || emitter.source.trim().is_empty()
             {
                 continue;
             }

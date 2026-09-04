@@ -1,3 +1,17 @@
+const PLAYER_PALETTE_RUNTIME_VALIDATION_INTERVAL_FRAMES: u64 = 30;
+
+#[inline]
+fn should_run_player_palette_runtime_validation(
+    player_stable_id: u64,
+    frame_index: u64,
+    transitioned: bool,
+) -> bool {
+    transitioned
+        || frame_index
+            .wrapping_add(player_stable_id)
+            .is_multiple_of(PLAYER_PALETTE_RUNTIME_VALIDATION_INTERVAL_FRAMES)
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 struct PlayerAnimationFinalizeTiming {
     pose_copy_ms: f32,
@@ -24,6 +38,7 @@ fn finalize_player_pose_and_palette(
     unarmed_attack_sequence: u64,
     equipment_stance: EquipmentPresentationStance,
     transitioned: bool,
+    frame_index: u64,
 ) -> Option<(
     Vec<Mat4>,
     Option<newengine_model_contact_api::ModelFootPoseState>,
@@ -103,32 +118,58 @@ fn finalize_player_pose_and_palette(
     synchronize_helper_pose(&binding.helper_pose_copies, &mut binding.current_locals);
     timing.continuity_eye_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
 
+    // Terminal contacts must consume FK from this exact authored/blended frame. Reusing a frame table
+    // left by endpoint composition or a previous render frame makes a mathematically valid socket solve
+    // operate on the wrong pose and is sufficient to leave the rendered rifle frozen below raised arms.
+    if let Err(error) = rebuild_model_joint_frames(
+        &binding.animation_runtime,
+        &binding.current_locals,
+        &mut binding.joint_frames_scratch,
+    ) {
+        newengine_ulog_api::ulog::warn!(
+            "fps-character: current-frame FK before equipment constraint failed player={} clip='{}': {}",
+            player.stable_u64(),
+            clip_ref,
+            error,
+        );
+        return None;
+    }
+
     let phase_started = std::time::Instant::now();
     let selected_equipment_pose_set = select_equipment_pose_set(
         &binding.equipment_default_pose_set,
         &binding.equipment_pose_sets,
         frame.equipment_pose_family.as_deref(),
     );
+    let strict_rifle_family = frame.equipment_pose_family.as_deref() == Some("rifle");
     let equipment_hand_contact_pose_available =
         selected_equipment_pose_set.is_some_and(|set| match equipment_stance {
             EquipmentPresentationStance::Ready => set.ready.is_some(),
             EquipmentPresentationStance::Aim => set.has_aim(),
             EquipmentPresentationStance::Reload | EquipmentPresentationStance::None => false,
         });
-    let right_prop_attachment = binding
-        .equipment_ik
-        .as_ref()
-        .and_then(|rig| rig.right_prop_attachment);
-    let clip_owns_right_prop = |clip: Option<&PlayerAnimationRuntimeClip>| {
-        right_prop_attachment
-            .is_some_and(|index| clip.is_some_and(|clip| clip.binding.owns_skeleton_joint(index)))
+    let prop_attachments = binding.equipment_ik.as_ref().map(|rig| {
+        (rig.right_prop_attachment, rig.left_prop_attachment)
+    });
+    let clip_owns_prop_pair = |clip: Option<&PlayerAnimationRuntimeClip>| {
+        prop_attachments.is_some_and(|(right, left)| {
+            right.is_some_and(|index| {
+                clip.is_some_and(|clip| clip.binding.owns_skeleton_joint(index))
+            }) && left.is_some_and(|index| {
+                clip.is_some_and(|clip| clip.binding.owns_skeleton_joint(index))
+            })
+        })
     };
     let equipment_prop_socket_authority_present = equipment_presentation_active
         && selected_equipment_pose_set.is_some_and(|set| {
             if let Some(transition) = binding.equipment_transition {
                 // Authored ready<->aim transitions may carry the prop socket themselves. If they do,
                 // that sampled frame remains authoritative and terminal palm IK must stay disabled.
-                return clip_owns_right_prop(equipment_transition_clip(set, transition.kind));
+                return equipment_transition_clip(set, transition.kind)
+                    .zip(binding.equipment_ik.as_ref())
+                    .is_some_and(|(clip, rig)| {
+                        equipment_clip_owns_current_weapon_arm_contract(clip, rig)
+                    });
             }
             match equipment_stance {
                 EquipmentPresentationStance::Ready => set
@@ -144,18 +185,25 @@ fn finalize_player_pose_and_palette(
                     }
                     let body_stance = equipment_pose_body_stance(active_state, look_context);
                     let space = set.pose_space(body_stance);
-                    equipment_aim_base_owns_current_weapon_arm_contract(
-                        set,
-                        body_stance,
-                        frame.aim_velocity_local,
-                        binding.equipment_ik.as_ref(),
-                    ) || (space.grip.has_prop_socket_contract()
-                        && clip_owns_right_prop(space.grip.hands.as_ref()))
+                    let terminal_grip_authority = space.grip.has_prop_socket_contract()
+                        && clip_owns_prop_pair(space.grip.hands.as_ref());
+                    if strict_rifle_family {
+                        // TLOU MM rifle bases also write joints 18..31, but they are not the terminal
+                        // weapon frame. Only the final stand HANDS / crouch PART prop layer qualifies.
+                        terminal_grip_authority
+                    } else {
+                        equipment_aim_base_owns_current_weapon_arm_contract(
+                            set,
+                            body_stance,
+                            frame.aim_velocity_local,
+                            binding.equipment_ik.as_ref(),
+                        ) || terminal_grip_authority
+                    }
                 }
                 EquipmentPresentationStance::Reload | EquipmentPresentationStance::None => false,
             }
         });
-    let strict_rifle_contact_contract = frame.equipment_pose_family.as_deref() == Some("rifle")
+    let strict_rifle_contact_contract = strict_rifle_family
         && matches!(
             equipment_stance,
             EquipmentPresentationStance::Ready | EquipmentPresentationStance::Aim
@@ -196,6 +244,7 @@ fn finalize_player_pose_and_palette(
                 equipment_hand_contact_pose_present,
                 equipment_prop_socket_authority_present,
                 strict_rifle_contact_contract,
+                binding.equipment_transition_weapon_root,
                 rifle_reload_progress
                     .map(|progress| progress <= 0.08 || progress >= 0.92)
                     .unwrap_or(true),
@@ -227,8 +276,35 @@ fn finalize_player_pose_and_palette(
                             EQUIPMENT_SUPPORT_IK_RESIDUAL_DIAG_INTERVAL_SECONDS;
                     }
                 }
-                Ok(None) => {}
+                Ok(None) => {
+                    // Never leave the rendered weapon on a stale READY transform while the current
+                    // authored rifle pose has already moved the firing-side prop socket. Bilateral
+                    // solving is the preferred terminal contract, but a transient/reach failure must
+                    // still publish this frame's native firing socket so weapon and arms stay attached.
+                    if strict_rifle_contact_contract {
+                        binding.equipment_resolved_weapon_root = rig
+                            .right_prop_attachment
+                            .and_then(|index| binding.joint_frames_scratch.get(index).copied())
+                            .and_then(|frame| {
+                                crate::weapon_grip::weapon_root_from_authored_prop_frame(
+                                    presentation,
+                                    frame,
+                                )
+                            });
+                    }
+                }
                 Err(error) => {
+                    if strict_rifle_contact_contract {
+                        binding.equipment_resolved_weapon_root = rig
+                            .right_prop_attachment
+                            .and_then(|index| binding.joint_frames_scratch.get(index).copied())
+                            .and_then(|frame| {
+                                crate::weapon_grip::weapon_root_from_authored_prop_frame(
+                                    presentation,
+                                    frame,
+                                )
+                            });
+                    }
                     if binding.equipment_ik_residual_diag_cooldown <= 0.0 {
                         newengine_ulog_api::ulog::warn!(
                             "fps-character: authored equipment support IK failed player={}: {}",
@@ -389,20 +465,26 @@ fn finalize_player_pose_and_palette(
     timing.braid_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
 
     let phase_started = std::time::Instant::now();
-    let expected_palette_joints = binding.skeleton.joints.len();
-    if let Err(error) = super::validation::validate_player_palette(
-        &binding.palette_scratch,
-        expected_palette_joints,
-        clip_ref,
-    ) {
-        newengine_ulog_api::ulog::warn!(
-            "fps-character: unstable player skin palette rejected player={} state='{}' clip='{}': {}",
-            player.stable_u64(),
-            active_state.clip_hint(),
+    // AnimationSkeletonRuntime already validates every generated matrix for finiteness on every
+    // frame. The heavier affine/max-magnitude contract is a secondary runtime acceptance guard;
+    // sampling it avoids a second full palette walk in the visual hot path while transitions still
+    // validate immediately before a newly authored pose is presented.
+    if should_run_player_palette_runtime_validation(player.stable_u64(), frame_index, transitioned) {
+        let expected_palette_joints = binding.skeleton.joints.len();
+        if let Err(error) = super::validation::validate_player_palette(
+            &binding.palette_scratch,
+            expected_palette_joints,
             clip_ref,
-            error
-        );
-        return None;
+        ) {
+            newengine_ulog_api::ulog::warn!(
+                "fps-character: unstable player skin palette rejected player={} state='{}' clip='{}': {}",
+                player.stable_u64(),
+                active_state.clip_hint(),
+                clip_ref,
+                error
+            );
+            return None;
+        }
     }
 
     timing.validation_ms = phase_started.elapsed().as_secs_f32() * 1000.0;

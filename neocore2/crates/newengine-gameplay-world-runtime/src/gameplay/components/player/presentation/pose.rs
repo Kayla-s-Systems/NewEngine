@@ -81,10 +81,9 @@ impl Default for PlayerModelBinding {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PlayerFirstPersonCameraAnchor {
     pub eye_center_ws: Vec3,
-    /// Optional provider-resolved ADS camera anchor. The weapon provider derives the raw anchor from
-    /// the rendered rear sight and applies its authored per-axis translation weights against the stable
-    /// anatomical eye center before publishing it. Camera runtime only performs temporal blending;
-    /// orientation remains gameplay-input-owned.
+    /// Optional exceptional ADS camera anchor (for authored optics/cinematics). Ordinary no-scope
+    /// ironsight keeps this `None`: the stable camera is authoritative and weapon/arms move to its
+    /// sight frame. Camera runtime only performs temporal blending; orientation remains input-owned.
     pub ads_camera_position_ws: Option<Vec3>,
     /// Small body-forward clearance from the stable eye center. It is body-owned; view yaw/pitch
     /// are orientation-only and must never translate this offset around the head.

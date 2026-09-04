@@ -162,6 +162,51 @@ fn abby_rifle_final_composed_prop_frame_is_terminal_weapon_handle_frame() {
 }
 
 #[test]
+fn abby_rifle_bilateral_prop_pair_fuses_one_common_weapon_frame() {
+    let mut p = fixture();
+    p.handle_from_root = [0.0, 0.014_173_783, -0.029_675_78];
+    p.handle_rotation_from_root = [0.0, 0.0, 0.0, 1.0];
+    p.authored_socket_to_weapon_handle_basis = [0.0, 0.0, 0.0, 1.0];
+    let right_rotation = Quat::from_xyzw(
+        -0.024_008_995,
+        0.999_710_5,
+        -0.000_556_152_4,
+        -0.001_487_134,
+    )
+    .normalize_or_identity();
+    let left_rotation = (Quat::from_rotation_y(0.000_15) * right_rotation).normalize_or_identity();
+    let right_position = Vec3::new(0.146_948_82, 1.322_840_8, -0.305_767_25);
+    let left_position = Vec3::new(0.146_812_03, 1.322_966_5, -0.305_863_72);
+    let right = Mat4::from_scale_rotation_translation(Vec3::ONE, right_rotation, right_position);
+    let left = Mat4::from_scale_rotation_translation(Vec3::ONE, left_rotation, left_position);
+
+    let pair = weapon_root_from_bilateral_authored_prop_frames(&p, right, left)
+        .expect("Abby bilateral prop pair");
+    assert!(pair.position_residual_m < 0.000_3);
+    assert!(pair.angular_residual_deg < 0.05);
+    let expected_handle = (right_position + left_position) * 0.5;
+    assert!(weapon_handle_position(&p, pair.root).distance(expected_handle) <= 1.0e-6);
+
+    let fused_socket =
+        authored_prop_frame_from_weapon_root(&p, pair.root).expect("fused authored socket frame");
+    let fused_root =
+        weapon_root_from_authored_prop_frame(&p, fused_socket).expect("round-tripped fused root");
+    assert!(fused_root.position.distance(pair.root.position) <= 1.0e-6);
+    assert!(fused_root.rotation.dot(pair.root.rotation).abs() > 0.999_999);
+}
+
+#[test]
+fn bilateral_prop_authority_rejects_split_hand_frames() {
+    let p = fixture();
+    let rotation = Quat::from_rotation_y(0.2);
+    let right =
+        Mat4::from_scale_rotation_translation(Vec3::ONE, rotation, Vec3::new(0.0, 1.3, 0.0));
+    let left =
+        Mat4::from_scale_rotation_translation(Vec3::ONE, rotation, Vec3::new(0.05, 1.3, 0.0));
+    assert!(weapon_root_from_bilateral_authored_prop_frames(&p, right, left).is_none());
+}
+
+#[test]
 fn hand_owned_right_palm_contract_round_trips_native_weapon_basis() {
     let mut p = fixture();
     p.right_palm_to_native_rig = [-0.721_937_2, -0.656_295_36, -0.133_45, 0.173_994_88];
@@ -319,7 +364,7 @@ fn full_body_fpp_hand_anchored_ads_preserves_grip_and_aligns_real_sights() {
     let palm_position = Vec3::new(-0.19, 1.36, -0.08);
     let palm = Mat4::from_scale_rotation_translation(Vec3::ONE, palm_rotation, palm_position);
     let view = Quat::from_euler(newengine_math::EulerRot::YXZ, 0.37, -0.18, 0.0);
-    let root = weapon_first_person_hand_anchored_root(&p, palm, view, 1.0, 0.0, 0.0)
+    let root = weapon_first_person_hand_anchored_root(&p, palm, view, None, 1.0, 0.0, 0.0)
         .expect("hand-anchored ADS root");
     let expected_handle = weapon_handle_anchor_from_right_palm(&p, palm).expect("handle");
     let actual_handle = weapon_handle_position(&p, root);
@@ -350,9 +395,16 @@ fn full_body_fpp_hip_keeps_exact_authored_palm_weapon_transform() {
     let palm_position = Vec3::new(-0.19, 1.36, -0.08);
     let palm = Mat4::from_scale_rotation_translation(Vec3::ONE, palm_rotation, palm_position);
     let authored = weapon_root_from_right_palm(&p, palm).expect("authored palm root");
-    let resolved =
-        weapon_first_person_hand_anchored_root(&p, palm, Quat::from_rotation_y(0.8), 0.0, 0.0, 0.0)
-            .expect("hip root");
+    let resolved = weapon_first_person_hand_anchored_root(
+        &p,
+        palm,
+        Quat::from_rotation_y(0.8),
+        None,
+        0.0,
+        0.0,
+        0.0,
+    )
+    .expect("hip root");
     assert!(authored.position.distance(resolved.position) <= 1.0e-6);
     assert!(authored.rotation.dot(resolved.rotation).abs() > 0.999_999);
 }

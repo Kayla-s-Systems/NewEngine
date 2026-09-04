@@ -393,7 +393,7 @@ pub fn init_network_service(replication: ReplicationDescriptorRegistry) -> UdpNe
     runtime
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(miri)))]
 mod tests {
     use super::*;
     use newengine_replication_api::ReplicatedMessageDescriptor;

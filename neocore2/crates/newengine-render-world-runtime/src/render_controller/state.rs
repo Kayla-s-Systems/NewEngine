@@ -593,6 +593,10 @@ pub(super) struct RenderFrameRuntimeState {
     /// CSM skinned caster admission captured once and reused by every directional cascade.
     pub(super) skinned_shadow_scene_snapshot:
         Option<Arc<super::module_impl::frame_snapshots::SkinnedShadowSceneSnapshot>>,
+    /// Frame-local GPU/material resolution for skinned casters. Cascades consume immutable handles
+    /// and perform only cascade-specific culling, UBO update and draw recording.
+    pub(super) prepared_skinned_shadow_plan:
+        Option<Arc<super::module_impl::frame_snapshots::PreparedSkinnedShadowFramePlan>>,
     pub(super) sim_schedule: newengine_sim::SimSchedule,
     pub(super) gameplay_systems:
         newengine_gameplay_world_runtime::gameplay::GameplaySystemProviderRegistry,
@@ -617,6 +621,7 @@ impl RenderFrameRuntimeState {
             last_camera_snapshot: None,
             primitive_scene_snapshot: None,
             skinned_shadow_scene_snapshot: None,
+            prepared_skinned_shadow_plan: None,
             sim_schedule: newengine_gameplay_world_runtime::gameplay::default_sim_schedule(),
             gameplay_systems: newengine_gameplay_world_runtime::gameplay::GameplaySystemProviderRegistry::new(),
             gameplay_content: newengine_gameplay_world_runtime::gameplay::GameplayContentProviderRegistry::new(),

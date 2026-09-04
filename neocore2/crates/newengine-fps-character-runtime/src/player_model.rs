@@ -16,9 +16,8 @@ mod validation;
 pub(crate) use animation::{
     player_has_authored_equipment_pose, player_left_hand_weapon_frame,
     player_resolved_weapon_ready_root, player_rifle_ready_body_frames,
-    player_rifle_view_forward_model, player_rifle_view_rotation_world,
-    player_right_hand_prop_frame, publish_player_first_person_camera_anchors,
-    tick_player_skin_animation,
+    player_rifle_view_forward_model, player_right_hand_prop_frame,
+    publish_player_first_person_camera_anchors, tick_player_skin_animation,
 };
 pub(crate) use binding::tick_player_model_grounding;
 pub use binding::{spawn_authored_player_model, tick_player_model_assignments};

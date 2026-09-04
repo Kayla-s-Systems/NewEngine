@@ -70,6 +70,256 @@ fn apply_native_rifle_clavicle_aim_delta(
     Ok(true)
 }
 
+
+/// Apply procedural sight alignment to a native TLOU-style bilateral grip without ever splitting the
+/// two authored prop branches. Both hand-prop attachments are solved toward one desired socket frame;
+/// the rendered weapon root is then reconstructed from the fused pair. The anatomical palms remain
+/// driven by their authored palm->socket relationship, so no arbitrary foregrip target participates.
+#[allow(clippy::too_many_arguments)]
+/// FPP camera-space presentation layer. Unlike terminal two-bone IK, this moves the two authored
+/// clavicle-owned arm subtrees by one identical rigid transform, preserving the complete TLOU grip
+/// internally while relocating that grip to the CP2077-style ironsight frame. This is local-player
+/// presentation only; TPP keeps clavicles attached to the world/full-body pose and uses the stock pivot.
+fn apply_first_person_bilateral_rigid_projection(
+    presentation: &newengine_engine_runtime::gameplay::WeaponPresentationDefinition,
+    skeleton: &ModelSkeletonMetadata,
+    animation_runtime: &AnimationSkeletonRuntime,
+    pose: &mut [JointLocalPose],
+    frames: &mut Vec<Mat4>,
+    rig: &WeaponArmIkRig,
+    desired_root: crate::weapon_grip::WeaponRootTransform,
+) -> Result<bool, String> {
+    let (Some(right_socket), Some(left_socket), Some(right_clavicle), Some(left_clavicle)) = (
+        rig.right_prop_attachment,
+        rig.left_prop_attachment,
+        rig.right_clavicle,
+        rig.left_clavicle,
+    ) else {
+        return Ok(false);
+    };
+    let Some(current_pair) = crate::weapon_grip::weapon_root_from_bilateral_authored_prop_frames(
+        presentation,
+        *frames.get(right_socket).ok_or("FPP right prop frame missing")?,
+        *frames.get(left_socket).ok_or("FPP left prop frame missing")?,
+    ) else {
+        return Ok(false);
+    };
+    let Some(current_socket) =
+        crate::weapon_grip::authored_prop_frame_from_weapon_root(presentation, current_pair.root)
+    else {
+        return Ok(false);
+    };
+    let Some(desired_socket) =
+        crate::weapon_grip::authored_prop_frame_from_weapon_root(presentation, desired_root)
+    else {
+        return Ok(false);
+    };
+    let delta = desired_socket * current_socket.inverse();
+    let (delta_scale, delta_rotation, delta_translation) = delta.to_scale_rotation_translation();
+    if !delta_scale.is_finite()
+        || !delta_rotation.is_finite()
+        || !delta_translation.is_finite()
+        || delta_translation.length() > 0.55
+    {
+        return Ok(false);
+    }
+    let mut delta_rotation = delta_rotation.normalize_or_identity();
+    if delta_rotation.w < 0.0 {
+        delta_rotation = Quat::from_xyzw(
+            -delta_rotation.x,
+            -delta_rotation.y,
+            -delta_rotation.z,
+            -delta_rotation.w,
+        );
+    }
+    let delta_angle = 2.0 * delta_rotation.w.clamp(-1.0, 1.0).acos();
+    if !delta_angle.is_finite() || delta_angle > 100.0_f32.to_radians() {
+        return Ok(false);
+    }
+
+    let arm_roots = if right_clavicle == left_clavicle {
+        [Some(right_clavicle), None]
+    } else {
+        [Some(right_clavicle), Some(left_clavicle)]
+    };
+    for clavicle in arm_roots.into_iter().flatten() {
+        let current = *frames
+            .get(clavicle)
+            .ok_or("FPP bilateral clavicle frame missing")?;
+        set_pose_joint_global_transform(skeleton, pose, frames, clavicle, delta * current)?;
+        refresh_model_joint_frames_subtree(animation_runtime, pose, frames, clavicle)?;
+    }
+
+    let Some(projected) = crate::weapon_grip::weapon_root_from_bilateral_authored_prop_frames(
+        presentation,
+        frames[right_socket],
+        frames[left_socket],
+    ) else {
+        return Ok(false);
+    };
+    let position_error = projected.root.position.distance(desired_root.position);
+    let angular_dot = projected
+        .root
+        .rotation
+        .dot(desired_root.rotation)
+        .abs()
+        .clamp(0.0, 1.0);
+    let angular_error_deg = (2.0 * angular_dot.acos()).to_degrees();
+    Ok(position_error <= 0.001 && angular_error_deg <= 0.10)
+}
+
+fn apply_native_rifle_bilateral_root_constraint(
+    presentation: &newengine_engine_runtime::gameplay::WeaponPresentationDefinition,
+    skeleton: &ModelSkeletonMetadata,
+    animation_runtime: &AnimationSkeletonRuntime,
+    pose: &mut [JointLocalPose],
+    frames: &mut Vec<Mat4>,
+    rig: &WeaponArmIkRig,
+    desired_root: crate::weapon_grip::WeaponRootTransform,
+) -> Result<bool, String> {
+    let (Some(right_socket), Some(left_socket)) =
+        (rig.right_prop_attachment, rig.left_prop_attachment)
+    else {
+        return Ok(false);
+    };
+    let Some(desired_socket_frame) =
+        crate::weapon_grip::authored_prop_frame_from_weapon_root(presentation, desired_root)
+    else {
+        return Ok(false);
+    };
+
+    let palm_target_from_socket = |palm: usize, socket: usize| -> Option<(Vec3, Quat)> {
+        let palm_frame = frames.get(palm).copied()?;
+        let socket_frame = frames.get(socket).copied()?;
+        let palm_to_socket = palm_frame.inverse() * socket_frame;
+        let desired_palm_frame = desired_socket_frame * palm_to_socket.inverse();
+        let (scale, rotation, position) = desired_palm_frame.to_scale_rotation_translation();
+        (scale.is_finite()
+            && scale.x > 0.0
+            && scale.y > 0.0
+            && scale.z > 0.0
+            && rotation.is_finite()
+            && position.is_finite())
+        .then_some((position, rotation.normalize_or_identity()))
+    };
+    let Some((right_target, right_rotation)) =
+        palm_target_from_socket(rig.right_palm, right_socket)
+    else {
+        return Ok(false);
+    };
+    let Some((left_target, left_rotation)) = palm_target_from_socket(rig.left_palm, left_socket)
+    else {
+        return Ok(false);
+    };
+
+    // Transactional bilateral solve. FPP camera-space placement and TPP stock-pivot placement both
+    // land here, so neither mode may ever accept a one-handed result or split the common prop frame.
+    let saved = [
+        (rig.right_shoulder, pose[rig.right_shoulder]),
+        (rig.right_elbow, pose[rig.right_elbow]),
+        (rig.right_wrist, pose[rig.right_wrist]),
+        (rig.left_shoulder, pose[rig.left_shoulder]),
+        (rig.left_elbow, pose[rig.left_elbow]),
+        (rig.left_wrist, pose[rig.left_wrist]),
+    ];
+    let restore = |pose: &mut [JointLocalPose]| {
+        for (index, local) in &saved {
+            pose[*index] = *local;
+        }
+    };
+
+    let right_pole = frames[rig.right_elbow].transform_point3(Vec3::ZERO);
+    let left_pole = frames[rig.left_elbow].transform_point3(Vec3::ZERO);
+    let right_solved = solve_arm_to_palm_contact(
+        skeleton,
+        animation_runtime,
+        pose,
+        frames,
+        rig.right_shoulder,
+        rig.right_elbow,
+        rig.right_wrist,
+        rig.right_palm,
+        right_target,
+        right_pole,
+        right_rotation,
+        "right-bilateral",
+    )?;
+    if !right_solved {
+        restore(pose);
+        rebuild_model_joint_frames(animation_runtime, pose, frames)?;
+        return Ok(false);
+    }
+    let left_solved = solve_arm_to_palm_contact(
+        skeleton,
+        animation_runtime,
+        pose,
+        frames,
+        rig.left_shoulder,
+        rig.left_elbow,
+        rig.left_wrist,
+        rig.left_palm,
+        left_target,
+        left_pole,
+        left_rotation,
+        "left-bilateral",
+    )?;
+    if !left_solved {
+        restore(pose);
+        rebuild_model_joint_frames(animation_runtime, pose, frames)?;
+        return Ok(false);
+    }
+
+    let coherent = crate::weapon_grip::weapon_root_from_bilateral_authored_prop_frames(
+        presentation,
+        frames[right_socket],
+        frames[left_socket],
+    )
+    .is_some();
+    if !coherent {
+        restore(pose);
+        rebuild_model_joint_frames(animation_runtime, pose, frames)?;
+        return Ok(false);
+    }
+    Ok(true)
+}
+
+fn apply_native_rifle_bilateral_weapon_constraint(
+    presentation: &newengine_engine_runtime::gameplay::WeaponPresentationDefinition,
+    skeleton: &ModelSkeletonMetadata,
+    animation_runtime: &AnimationSkeletonRuntime,
+    pose: &mut [JointLocalPose],
+    frames: &mut Vec<Mat4>,
+    rig: &WeaponArmIkRig,
+    authored_root: crate::weapon_grip::WeaponRootTransform,
+    target_sight_forward: Option<Vec3>,
+) -> Result<bool, String> {
+    let desired_root = if let Some(target) = target_sight_forward {
+        let target = target.normalize_or_zero();
+        if !target.is_finite() || target.length_squared() <= 1.0e-8 {
+            return Ok(false);
+        }
+        let Some(root) = crate::weapon_grip::weapon_sight_aligned_root_around_stock_contact(
+            presentation,
+            authored_root,
+            target,
+        ) else {
+            return Ok(false);
+        };
+        root
+    } else {
+        authored_root
+    };
+    apply_native_rifle_bilateral_root_constraint(
+        presentation,
+        skeleton,
+        animation_runtime,
+        pose,
+        frames,
+        rig,
+        desired_root,
+    )
+}
+
 /// Authored equipment animation owns the third-person weapon pose whenever it supplies a firing-hand
 /// contact. A qualified prop socket is the strongest authority; otherwise the animated firing palm owns
 /// the complete weapon root transform (translation + orientation). The anatomical ReadyHold contract is
@@ -95,10 +345,11 @@ fn apply_equipped_weapon_support_ik(
     secondary_rotation_offset_local: Vec3,
     authored_hand_contacts: bool,
     authored_prop_socket_authority: bool,
-    stabilize_native_support_hand: bool,
+    strict_native_rifle_contact_contract: bool,
+    authored_transition_weapon_root: Option<crate::weapon_grip::WeaponRootTransform>,
     support_right_hand: bool,
     support_left_hand: bool,
-    aim_controller: Option<&mut ThirdPersonWeaponAimState>,
+    aim_controller: Option<&mut WeaponAimControllerState>,
 ) -> Result<Option<WeaponIkSolveResult>, String> {
     let Some(rig) = rig else {
         return Ok(None);
@@ -120,16 +371,54 @@ fn apply_equipped_weapon_support_ik(
     // qualifies that socket, the socket owns the weapon root in both TPP and full-body FPP.
     // Camera/palm-driven solving is only a compatibility path for content without that contract.
 
-    // Prop-socket authority is stricter than generic authored hand contact. The same skeleton
-    // attachment joint can be present in unrelated full-body/aim clips; applying a basis recovered
-    // from a different reference-composition domain to those channels is a cross-domain transform
-    // bug. Only the matching complete grip bundle may opt the prop socket into root ownership.
-    let authored_prop_root = (authored_hand_contacts && authored_prop_socket_authority)
-        .then_some(rig.right_prop_attachment)
+    // Prop-socket authority is stricter than generic authored hand contact. TLOU long guns author
+    // *both* hand-prop attachments as one common weapon frame. Endpoints must still satisfy the tiny
+    // authored pair tolerance. During a synthetic READY->AIM fallback, however, ordinary local-pose
+    // blending can temporarily split the two branches by centimetres; a separately validated common
+    // transition frame owns that interval and both arms are projected back onto it transactionally.
+    let prop_authority_enabled = authored_hand_contacts && authored_prop_socket_authority;
+    let bilateral_prop_indices = prop_authority_enabled
+        .then(|| rig.right_prop_attachment.zip(rig.left_prop_attachment))
+        .flatten();
+    let authored_prop_pair = bilateral_prop_indices.and_then(|(right, left)| {
+        crate::weapon_grip::weapon_root_from_bilateral_authored_prop_frames(
+            presentation,
+            *frames.get(right)?,
+            *frames.get(left)?,
+        )
+    });
+    let transition_prop_root = strict_native_rifle_contact_contract
+        .then_some(authored_transition_weapon_root)
         .flatten()
-        .and_then(|index| frames.get(index).copied())
-        .and_then(|frame| {
-            crate::weapon_grip::weapon_root_from_authored_prop_frame(presentation, frame)
+        .filter(|root| root.position.is_finite() && root.rotation.is_finite());
+    if strict_native_rifle_contact_contract
+        && prop_authority_enabled
+        && bilateral_prop_indices.is_some()
+        && authored_prop_pair.is_none()
+        && transition_prop_root.is_none()
+    {
+        return Err(
+            "native rifle bilateral prop frames diverged beyond the authored weapon-frame contract"
+                .to_owned(),
+        );
+    }
+    let native_bilateral_prop_owned = authored_prop_pair.is_some() || transition_prop_root.is_some();
+    let authored_pair_position_residual_m = authored_prop_pair
+        .map(|pair| pair.position_residual_m)
+        .unwrap_or(0.0);
+    let authored_pair_angular_residual_deg = authored_prop_pair
+        .map(|pair| pair.angular_residual_deg)
+        .unwrap_or(0.0);
+    let mut authored_prop_root = transition_prop_root
+        .or_else(|| authored_prop_pair.map(|pair| pair.root))
+        .or_else(|| {
+            prop_authority_enabled
+                .then_some(rig.right_prop_attachment)
+                .flatten()
+                .and_then(|index| frames.get(index).copied())
+                .and_then(|frame| {
+                    crate::weapon_grip::weapon_root_from_authored_prop_frame(presentation, frame)
+                })
         });
 
     // Third-person Ready/Aim is character-authored. If there is no qualified prop socket, preserve
@@ -151,6 +440,9 @@ fn apply_equipped_weapon_support_ik(
         .and_then(|frame| {
             crate::weapon_grip::weapon_left_grip_anchor_from_left_palm(presentation, frame)
         });
+    let filtered_aim_target = aim_controller
+        .as_deref()
+        .and_then(WeaponAimControllerState::sight_target);
     let first_person_hand_root = (authored_prop_root.is_none()
         && first_person_active
         && authored_hand_contacts
@@ -162,52 +454,159 @@ fn apply_equipped_weapon_support_ik(
                 presentation,
                 right_palm,
                 view_rotation,
+                filtered_aim_target,
                 aim_alpha,
                 recoil_alpha,
                 recoil_yaw_radians,
             )
         });
-    let native_relative_target = authored_prop_root
-        .filter(|_| !first_person_active)
-        .and_then(|_| aim_controller.as_deref().and_then(ThirdPersonWeaponAimState::sight_target));
 
-    // Native TPP rifle aim is arm-owned. Move both clavicle/arm chains first; the weapon root is then
-    // re-read from the moved right prop socket. This cannot be cancelled by a right-arm reach failure
-    // because the firing hand/socket itself is the motion authority.
-    let native_arm_aim_applied = if let (Some(root), Some(target)) =
-        (authored_prop_root, native_relative_target)
+    // The synthetic transition constraint is applied *before* procedural camera aiming. If the
+    // subsequent sight solve cannot reach safely, its transactional rollback returns to this already
+    // coherent transition pose rather than to the split local-pose blend.
+    let mut native_transition_constraint_applied = false;
+    if native_bilateral_prop_owned {
+        if let Some(transition_root) = transition_prop_root {
+            native_transition_constraint_applied = apply_native_rifle_bilateral_weapon_constraint(
+                presentation,
+                skeleton,
+                animation_runtime,
+                pose,
+                frames,
+                rig,
+                transition_root,
+                None,
+            )?;
+            if native_transition_constraint_applied {
+                authored_prop_root = bilateral_prop_indices
+                    .and_then(|(right, left)| {
+                        crate::weapon_grip::weapon_root_from_bilateral_authored_prop_frames(
+                            presentation,
+                            frames[right],
+                            frames[left],
+                        )
+                        .map(|pair| pair.root)
+                    })
+                    .or(Some(transition_root));
+            }
+        }
+    }
+
+    let native_aim_target = authored_prop_root.and(filtered_aim_target);
+    // FPP ironsight is camera-primary, matching REDengine's ProceduralIronsightData ownership.
+    // Build a full-ADS root whose rear sight sits at the authored eye-relief point on the camera
+    // center line, then blend the current authored root toward it. Both hands are subsequently solved
+    // to that root as one bilateral prop constraint. TPP keeps the stock/shoulder pivot path below.
+    let first_person_bilateral_ads_root = if first_person_active
+        && native_bilateral_prop_owned
+        && aim_controller.is_some()
+        && aim_alpha > 1.0e-4
     {
-        let authored_sight = crate::weapon_grip::weapon_sight_forward(presentation, root);
-        apply_native_rifle_clavicle_aim_delta(
-            skeleton,
-            animation_runtime,
-            pose,
-            frames,
-            rig,
-            authored_sight,
-            target,
-        )?
+        authored_prop_root
+            .zip(first_person_eye_model)
+            .zip(view_rotation_model)
+            .and_then(|((authored, camera_position), view_rotation)| {
+                crate::weapon_grip::weapon_first_person_solve_contract_presented(
+                    presentation,
+                    camera_position,
+                    view_rotation,
+                    right_shoulder,
+                    left_shoulder,
+                    1.0,
+                    recoil_alpha * aim_alpha.clamp(0.0, 1.0),
+                    recoil_yaw_radians * aim_alpha.clamp(0.0, 1.0),
+                )
+                .map(|ads| {
+                    let weight = aim_alpha.clamp(0.0, 1.0);
+                    crate::weapon_grip::WeaponRootTransform {
+                        position: authored.position.lerp(ads.root.position, weight),
+                        rotation: authored
+                            .rotation
+                            .slerp(ads.root.rotation, weight)
+                            .normalize_or_identity(),
+                    }
+                })
+            })
+    } else {
+        None
+    };
+    let native_arm_aim_applied = if let Some(root) = authored_prop_root {
+        if native_bilateral_prop_owned {
+            if let Some(fpp_root) = first_person_bilateral_ads_root {
+                apply_first_person_bilateral_rigid_projection(
+                    presentation,
+                    skeleton,
+                    animation_runtime,
+                    pose,
+                    frames,
+                    rig,
+                    fpp_root,
+                )?
+            } else if let Some(target) = native_aim_target {
+                apply_native_rifle_bilateral_weapon_constraint(
+                    presentation,
+                    skeleton,
+                    animation_runtime,
+                    pose,
+                    frames,
+                    rig,
+                    root,
+                    Some(target),
+                )?
+            } else {
+                false
+            }
+        } else if let Some(target) = native_aim_target {
+            let authored_sight = crate::weapon_grip::weapon_sight_forward(presentation, root);
+            apply_native_rifle_clavicle_aim_delta(
+                skeleton,
+                animation_runtime,
+                pose,
+                frames,
+                rig,
+                authored_sight,
+                target,
+            )?
+        } else {
+            false
+        }
     } else {
         false
     };
-    let authored_prop_root = if native_arm_aim_applied {
-        rig.right_prop_attachment
-            .and_then(|index| frames.get(index).copied())
-            .and_then(|frame| {
-                crate::weapon_grip::weapon_root_from_authored_prop_frame(presentation, frame)
-            })
-            .or(authored_prop_root)
-    } else {
-        authored_prop_root
-    };
-    let native_sight_aim_root = if native_arm_aim_applied {
+    if native_arm_aim_applied {
+        authored_prop_root = if native_bilateral_prop_owned {
+            bilateral_prop_indices
+                .and_then(|(right, left)| {
+                    crate::weapon_grip::weapon_root_from_bilateral_authored_prop_frames(
+                        presentation,
+                        frames[right],
+                        frames[left],
+                    )
+                    .map(|pair| pair.root)
+                })
+                .or(authored_prop_root)
+        } else {
+            rig.right_prop_attachment
+                .and_then(|index| frames.get(index).copied())
+                .and_then(|frame| {
+                    crate::weapon_grip::weapon_root_from_authored_prop_frame(presentation, frame)
+                })
+                .or(authored_prop_root)
+        };
+    }
+    let native_sight_aim_root = if native_bilateral_prop_owned
+        || native_transition_constraint_applied
+        || native_arm_aim_applied
+    {
+        // Bilateral authority never falls back to a detached root-only rotation. The weapon is always
+        // reconstructed from the same frame that both authored prop branches are constrained to.
         authored_prop_root
     } else {
         authored_prop_root
             .filter(|_| !first_person_active)
             .and_then(|root| {
                 let target = match aim_controller.as_ref() {
-                    Some(_) => native_relative_target,
+                    Some(_) => native_aim_target,
                     None => (aim_alpha > 1.0e-4).then_some(view_forward_model).flatten(),
                 }?;
                 crate::weapon_grip::weapon_sight_aligned_root_around_stock_contact(
@@ -400,15 +799,17 @@ fn apply_equipped_weapon_support_ik(
         )
         .ok_or("weapon ReadyHold could not resolve secondary constraint")?
     };
-    // A native prop-owned rifle keeps the firing arm and weapon root authored. The support palm,
-    // however, is an anatomical sibling of `l_hand_prop`: a perfect prop-helper frame does not put
-    // the visible palm on the foregrip. Strict rifle Ready/Aim therefore stabilizes only the left
-    // support arm, while the right arm/root remain immutable.
+    // A qualified bilateral native rifle has already solved both authored palm->prop chains toward
+    // one common frame. Generic anatomical foregrip IK must not run afterward: that would demote the
+    // left side back to an arbitrary weapon-space point and destroy the bilateral authority we just
+    // established. Single-socket legacy content retains the bounded support-hand compatibility solve.
     let native_view_aim = native_prop_owned && native_sight_aim_root.is_some();
     let solve_right_hand = support_right_hand
-        && (!native_prop_owned || (native_view_aim && !native_arm_aim_applied));
-    let solve_left_hand =
-        support_left_hand && (!native_prop_owned || stabilize_native_support_hand);
+        && (!native_prop_owned
+            || (!native_bilateral_prop_owned && native_view_aim && !native_arm_aim_applied));
+    let solve_left_hand = support_left_hand
+        && (!native_prop_owned
+            || (!native_bilateral_prop_owned && strict_native_rifle_contact_contract));
     let hand_owned_root = first_person_hand_root.is_some() || authored_hand_root.is_some();
 
     // Native TLOU prop sockets are siblings of the anatomical palm. When ADS rotates the weapon
@@ -527,7 +928,7 @@ fn apply_equipped_weapon_support_ik(
         true
     };
 
-    let left_target = if native_prop_owned && stabilize_native_support_hand {
+    let left_target = if native_prop_owned && strict_native_rifle_contact_contract {
         // The character prop branch already defines the moving weapon frame. Target the visible
         // support palm directly at the weapon's authored foregrip; legacy palm offsets belong only
         // to the compatibility ReadyHold solver and may come from a different animation baseline.
@@ -535,7 +936,7 @@ fn apply_equipped_weapon_support_ik(
     } else {
         crate::weapon_grip::weapon_ready_left_palm_position(presentation, contract.root)
     };
-    let left_rotation = if native_prop_owned && stabilize_native_support_hand {
+    let left_rotation = if native_prop_owned && strict_native_rifle_contact_contract {
         native_left_palm_rotation
     } else {
         crate::weapon_grip::weapon_ready_left_palm_rotation(presentation, contract.root)
@@ -562,23 +963,31 @@ fn apply_equipped_weapon_support_ik(
 
     // Each arm solve incrementally refreshed its affected branch, so the shared frame table is
     // already coherent here; a final full-skeleton FK pass would duplicate work every render frame.
-    let socket_frame_error = native_prop_owned
-        .then_some(rig.right_prop_attachment)
+    let socket_indices = [
+        native_prop_owned.then_some(rig.right_prop_attachment).flatten(),
+        (native_prop_owned && native_bilateral_prop_owned)
+            .then_some(rig.left_prop_attachment)
+            .flatten(),
+    ];
+    let (socket_position_error, socket_angular_error) = socket_indices
+        .into_iter()
         .flatten()
-        .and_then(|index| frames.get(index).copied())
-        .and_then(|frame| {
+        .filter_map(|index| frames.get(index).copied())
+        .filter_map(|frame| {
             crate::weapon_grip::weapon_handle_frame_error_from_authored_socket(
                 presentation,
                 contract.root,
                 frame,
             )
+        })
+        .fold((0.0_f32, 0.0_f32), |(position, angular), error| {
+            (
+                position.max(error.position_m),
+                angular.max(error.angular_degrees),
+            )
         });
-    let socket_position_error = socket_frame_error
-        .map(|error| error.position_m)
-        .unwrap_or(0.0);
-    let socket_angular_error = socket_frame_error
-        .map(|error| error.angular_degrees)
-        .unwrap_or(0.0);
+    let socket_position_error = socket_position_error.max(authored_pair_position_residual_m);
+    let socket_angular_error = socket_angular_error.max(authored_pair_angular_residual_deg);
     let right_error = if solve_right_hand && native_view_aim_committed {
         (frames[rig.right_palm].transform_point3(Vec3::ZERO) - right_target).length()
     } else {

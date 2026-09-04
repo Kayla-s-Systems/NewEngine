@@ -14,12 +14,42 @@ use super::physics_queries::GameplayPhysicsQueryProviderRegistry;
 use newengine_core::physics::PhysicsApiRef;
 use newengine_core::{TaskLane, TaskPriority, TaskRequest, ThreadPoolHandle};
 use parking_lot::{Condvar, Mutex};
+use std::collections::BTreeMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{
     atomic::{AtomicU64, Ordering as AtomicOrdering},
     Arc,
 };
 use std::time::{Duration, Instant};
+
+#[derive(Default)]
+struct GameplayCapabilityDiagnosticState {
+    last_missing_warning_frame: BTreeMap<String, u64>,
+}
+
+impl GameplayCapabilityDiagnosticState {
+    const MISSING_WARNING_INTERVAL_FRAMES: u64 = 600;
+
+    fn should_warn_missing(&mut self, capability: &str, frame_index: u64) -> bool {
+        match self.last_missing_warning_frame.get_mut(capability) {
+            Some(last_frame)
+                if frame_index.saturating_sub(*last_frame)
+                    < Self::MISSING_WARNING_INTERVAL_FRAMES =>
+            {
+                false
+            }
+            Some(last_frame) => {
+                *last_frame = frame_index;
+                true
+            }
+            None => {
+                self.last_missing_warning_frame
+                    .insert(capability.to_owned(), frame_index);
+                true
+            }
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SimulationScheduleTiming {
@@ -492,10 +522,16 @@ pub fn run_schedule_with_physics_mode_and_telemetry_for_frame(
     timing.capability_missing = capability_report.missing.len();
     timing.capability_failed = capability_report.failed.len();
     for capability in capability_report.missing {
-        newengine_ulog_api::ulog::warn!(
-            "gameplay capability provider missing capability='{}'",
-            capability
-        );
+        let should_warn = world
+            .resource_mut_or_insert_default::<GameplayCapabilityDiagnosticState>()
+            .should_warn_missing(&capability, frame_index);
+        if should_warn {
+            newengine_ulog_api::ulog::warn!(
+                "gameplay capability provider missing capability='{}' action='rate_limited' interval_frames={}",
+                capability,
+                GameplayCapabilityDiagnosticState::MISSING_WARNING_INTERVAL_FRAMES
+            );
+        }
     }
     for failure in capability_report.failed {
         newengine_ulog_api::ulog::warn!("gameplay capability invocation failed {}", failure);
@@ -555,6 +591,16 @@ mod tests {
     }
 
     #[test]
+    fn missing_capability_diagnostics_are_rate_limited_per_capability() {
+        let mut state = GameplayCapabilityDiagnosticState::default();
+        assert!(state.should_warn_missing("engine.audio.cue.play.v1", 10));
+        assert!(!state.should_warn_missing("engine.audio.cue.play.v1", 11));
+        assert!(!state.should_warn_missing("engine.audio.cue.play.v1", 609));
+        assert!(state.should_warn_missing("engine.audio.cue.play.v1", 610));
+        assert!(state.should_warn_missing("project.other.v1", 611));
+    }
+
+    #[test]
     fn tiny_stock_controller_batches_stay_inline_but_custom_pairs_remain_parallel_eligible() {
         use newengine_sim::AccessMask;
 
@@ -590,6 +636,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "native worker overlap is validated outside Miri; Miri serializes/interprets scheduling and is used for UB semantics"
+    )]
     fn engine_threading_executor_runs_independent_simulation_jobs_concurrently() {
         use newengine_core::{ThreadPoolConfig, ThreadPoolManager};
         use newengine_sim::AccessMask;

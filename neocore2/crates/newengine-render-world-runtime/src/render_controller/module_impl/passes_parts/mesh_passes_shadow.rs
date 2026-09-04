@@ -67,6 +67,7 @@ pub use terrain::draw_procedural_terrain_shadow;
 pub struct PrimitiveShadowPassProfile {
     pub total_ms: f32,
     pub skinned_ms: f32,
+    pub skinned_draws: usize,
     pub models_ms: f32,
     pub static_ms: f32,
     pub static_body_ms: f32,
@@ -95,7 +96,7 @@ pub fn draw_primitives_shadow(
     let total_started = std::time::Instant::now();
 
     let started = std::time::Instant::now();
-    skinned::draw_skinned_player_primitives_shadow(
+    let skinned_draws = skinned::draw_skinned_player_primitives_shadow(
         this,
         r,
         scene,
@@ -144,11 +145,12 @@ pub fn draw_primitives_shadow(
 
     if stage_profile {
         newengine_ulog_api::ulog::info!(
-            "primitive.shadow.provider.profile: frame={} cascade={} total_ms={:.3} skinned_ms={:.3} models_ms={:.3} static_ms={:.3}",
+            "primitive.shadow.provider.profile: frame={} cascade={} total_ms={:.3} skinned_ms={:.3} skinned_draws={} models_ms={:.3} static_ms={:.3}",
             this.frame.frame_index,
             cascade_index,
             total_ms,
             skinned_ms,
+            skinned_draws,
             models_ms,
             static_ms,
         );
@@ -157,6 +159,7 @@ pub fn draw_primitives_shadow(
     Ok(PrimitiveShadowPassProfile {
         total_ms,
         skinned_ms,
+        skinned_draws,
         models_ms,
         static_ms,
         static_body_ms: static_profile.total_ms,
@@ -187,6 +190,18 @@ mod shadow_caster_lod_tests {
         assert!(shadow_caster_projected_radius_visible(3, 0.0, 0.01));
         assert!(shadow_caster_projected_radius_visible(3, f32::NAN, 0.01));
     }
+    #[test]
+    fn cascade_specific_culls_can_disagree_for_the_same_caster() {
+        use newengine_render_feature_api::ShadowCasterCull;
+        let near = ShadowCasterCull::directional(newengine_math::Mat4::IDENTITY, 2.0, 0.1, 10.0);
+        let far_view =
+            newengine_math::Mat4::from_translation(newengine_math::Vec3::new(-20.0, 0.0, 0.0));
+        let far = ShadowCasterCull::directional(far_view, 2.0, 0.1, 10.0);
+        let caster = newengine_math::Vec3::new(0.0, 0.0, -2.0);
+        assert!(near.contains_sphere(caster, 0.5));
+        assert!(!far.contains_sphere(caster, 0.5));
+    }
+
     #[test]
     fn shadow_ubo_view_keys_are_bounded_and_domain_separated() {
         let directional = (0..4)

@@ -350,13 +350,24 @@ pub struct AudioRouteGainAck {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AudioEmitter {
-    pub cue: String,
+    /// Canonical runtime audio source. First-party content should reference a native `.xvag` clip.
+    /// Old serialized `cue` fields remain readable only as migration compatibility.
+    #[serde(alias = "cue")]
+    pub source: String,
     pub enabled: bool,
     pub autoplay: bool,
     pub gain: f32,
-    /// Supplies the owning entity's world position to the cue. `non_spatial`
-    /// cues ignore it; `spatial` cues require a position.
+    /// Opaque project-owned mix route. Empty selects the project/default route.
+    #[serde(default)]
+    pub route: AudioRouteId,
+    /// Native clip loop policy. YSNCD compatibility cues retain their dictionary-authored loop policy.
+    #[serde(default)]
+    pub looping: bool,
+    /// Supplies the owning entity's world position to the source.
     pub spatial: bool,
+    /// Native clip distance attenuation. YSNCD compatibility cues retain dictionary-authored attenuation.
+    #[serde(default)]
+    pub attenuation: Option<AudioAttenuationSettings>,
     #[serde(default)]
     pub occlusion: AudioOcclusionSettings,
 }
@@ -364,11 +375,14 @@ pub struct AudioEmitter {
 impl Default for AudioEmitter {
     fn default() -> Self {
         Self {
-            cue: String::new(),
+            source: String::new(),
             enabled: true,
             autoplay: true,
             gain: 1.0,
+            route: AudioRouteId::default(),
+            looping: false,
             spatial: true,
+            attenuation: None,
             occlusion: AudioOcclusionSettings::default(),
         }
     }
@@ -376,9 +390,9 @@ impl Default for AudioEmitter {
 
 impl AudioEmitter {
     #[inline]
-    pub fn new(cue: impl Into<String>) -> Self {
+    pub fn new(source: impl Into<String>) -> Self {
         Self {
-            cue: cue.into(),
+            source: source.into(),
             ..Self::default()
         }
     }

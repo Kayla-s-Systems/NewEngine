@@ -7,6 +7,9 @@ struct PlayerAnimationFrameInput {
     rifle_secondary_rotation_offset_local: Vec3,
     rifle_view_rotation_model: Option<Quat>,
     rifle_view_forward_model: Option<Vec3>,
+    /// Finite center-screen convergence point in avatar/model space. ADS presentation and
+    /// muzzle ballistics target the same camera-ray point instead of maintaining parallel rays.
+    rifle_center_screen_target_model: Option<Vec3>,
     weapon_presentation: Option<newengine_engine_runtime::gameplay::WeaponPresentationDefinition>,
     /// Open-ended equipped-item presentation family (`pistol`, `rifle`, ...).
     equipment_pose_family: Option<String>,
@@ -197,16 +200,44 @@ fn prepare_player_animation_frame(
         && animation_state.locomotion
             == newengine_engine_runtime::gameplay::PlayerLocomotionAnimation::Idle;
     let model_to_world = root_transform.to_mat4() * model_root_local.to_mat4();
+    let rifle_center_screen_target_model = if rifle_aim_alpha > 0.001 {
+        let convergence_distance = active_weapon
+            .and_then(|equipped| equipped.weapon.firearm)
+            .map(|firearm| firearm.tuning.ads_center_screen_convergence_m())
+            .unwrap_or(80.0);
+        let active_camera = world
+            .resource::<newengine_scene::SceneState>()
+            .and_then(|state| state.active_camera.or(state.root));
+        active_camera
+            .and_then(|camera| world.get::<newengine_sim::CameraRigComp>(camera))
+            .map(|rig| rig.0)
+            .filter(|camera| camera.position.is_finite() && camera.rotation.is_finite())
+            .map(|camera| {
+                let forward =
+                    (camera.rotation.normalize_or_identity() * -Vec3::Z).normalize_or_zero();
+                camera.position + forward * convergence_distance
+            })
+            .filter(|target| target.is_finite())
+            .map(|target_ws| model_to_world.inverse().transform_point3(target_ws))
+            .filter(|target_model| target_model.is_finite())
+    } else {
+        None
+    };
     let first_person_eye_model = if first_person_active {
+        let clearance = world
+            .get::<newengine_engine_runtime::gameplay::PlayerCameraProfile>(player)
+            .copied()
+            .unwrap_or_default()
+            .sanitized()
+            .first_person_forward_clearance
+            .clamp(0.0, 0.08);
+        let body_forward_ws = (rendered_body_rotation * -Vec3::Z).normalize_or_zero();
         world
             .get::<newengine_engine_runtime::gameplay::PlayerFirstPersonCameraAnchor>(player)
             .copied()
             .filter(|anchor| anchor.eye_center_ws.is_finite())
-            .map(|anchor| {
-                model_to_world
-                    .inverse()
-                    .transform_point3(anchor.eye_center_ws)
-            })
+            .map(|anchor| anchor.eye_center_ws + body_forward_ws * clearance)
+            .map(|camera_ws| model_to_world.inverse().transform_point3(camera_ws))
             .filter(|position| position.is_finite())
     } else {
         None
@@ -234,6 +265,7 @@ fn prepare_player_animation_frame(
         rifle_secondary_rotation_offset_local,
         rifle_view_rotation_model,
         rifle_view_forward_model,
+        rifle_center_screen_target_model,
         weapon_presentation,
         equipment_pose_family,
         equipment_presentation_active,

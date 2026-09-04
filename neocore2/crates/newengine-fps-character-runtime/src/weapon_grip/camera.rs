@@ -88,6 +88,7 @@ pub(crate) fn weapon_sight_aligned_root_around_stock_contact(
 
 /// Camera origin required by the authored eye-relief vector for a rendered weapon root. This is
 /// intentionally derived from the actual rear sight after all weapon presentation transforms.
+#[cfg(test)]
 pub(crate) fn weapon_ads_camera_position(
     presentation: &WeaponPresentationDefinition,
     root: WeaponRootTransform,
@@ -110,6 +111,7 @@ pub(crate) fn weapon_ads_camera_position(
 /// The weapon owns per-axis translation weights; camera runtime receives only the final anchor and
 /// remains agnostic to weapon family/sight geometry. A zero weight preserves the anatomical eye
 /// component, while one consumes the complete rendered-weapon eye-relief component.
+#[cfg(test)]
 pub(crate) fn weapon_resolved_ads_camera_position(
     presentation: &WeaponPresentationDefinition,
     root: WeaponRootTransform,
@@ -136,6 +138,7 @@ pub(crate) fn weapon_first_person_hand_anchored_root(
     presentation: &WeaponPresentationDefinition,
     right_palm: Mat4,
     view_rotation_model: Quat,
+    filtered_sight_forward_model: Option<Vec3>,
     aim_alpha: f32,
     fire_recoil_alpha: f32,
     fire_recoil_yaw_radians: f32,
@@ -147,7 +150,12 @@ pub(crate) fn weapon_first_person_hand_anchored_root(
     let authored = weapon_root_from_right_palm(&presentation, right_palm)?;
     let handle_anchor = weapon_handle_anchor_from_right_palm(&presentation, right_palm)?;
     let view_rotation = view_rotation_model.normalize_or_identity();
-    let view_forward = (view_rotation * -Vec3::Z).normalize_or_zero();
+    let raw_view_forward = (view_rotation * -Vec3::Z).normalize_or_zero();
+    let view_forward = filtered_sight_forward_model
+        .filter(|forward| forward.is_finite())
+        .map(Vec3::normalize_or_zero)
+        .filter(|forward| forward.length_squared() > 1.0e-8)
+        .unwrap_or(raw_view_forward);
     let view_right = (view_rotation * Vec3::X).normalize_or_zero();
     let view_up = (view_rotation * Vec3::Y).normalize_or_zero();
     if view_forward.length_squared() <= 1.0e-8

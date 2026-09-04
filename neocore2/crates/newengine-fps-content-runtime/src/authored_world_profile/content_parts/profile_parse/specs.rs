@@ -272,8 +272,20 @@ pub(in super::super) struct RawAudioSpec {
 pub(in super::super) struct RawAudioEmitterSpec {
     #[serde(default)]
     pub(in super::super) id: String,
+    #[serde(default, alias = "cue")]
+    pub(in super::super) source: String,
     #[serde(default)]
-    pub(in super::super) cue: String,
+    pub(in super::super) route: String,
+    #[serde(default)]
+    pub(in super::super) looping: Option<bool>,
+    #[serde(default)]
+    pub(in super::super) attenuation_min_distance: Option<f32>,
+    #[serde(default)]
+    pub(in super::super) attenuation_max_distance: Option<f32>,
+    #[serde(default)]
+    pub(in super::super) attenuation_curve: Option<String>,
+    #[serde(default)]
+    pub(in super::super) attenuation_rolloff: Option<f32>,
     #[serde(default)]
     pub(in super::super) enabled: Option<bool>,
     #[serde(default)]

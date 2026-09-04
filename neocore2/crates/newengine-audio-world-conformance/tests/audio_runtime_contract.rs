@@ -51,7 +51,7 @@ fn non_finite_camera_frame_never_reaches_spatial_audio() {
 #[test]
 fn authored_audio_emitter_references_ysncd_cue_not_backend_clip() {
     let emitter = AudioEmitter::new("shared/audio/weapon/rifle/rifle.ysncd@fire");
-    assert_eq!(emitter.cue, "shared/audio/weapon/rifle/rifle.ysncd@fire");
+    assert_eq!(emitter.source, "shared/audio/weapon/rifle/rifle.ysncd@fire");
     assert!(emitter.enabled);
     assert!(emitter.autoplay);
     assert!(emitter.spatial);

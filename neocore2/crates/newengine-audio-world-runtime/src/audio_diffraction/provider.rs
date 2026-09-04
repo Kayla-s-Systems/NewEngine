@@ -69,7 +69,7 @@ impl AudioDiffractionPhysicsQueryProvider {
             };
             if !emitter.enabled
                 || !emitter.spatial
-                || emitter.cue.trim().is_empty()
+                || emitter.source.trim().is_empty()
                 || observation.occlusion <= 1.0e-4
             {
                 continue;

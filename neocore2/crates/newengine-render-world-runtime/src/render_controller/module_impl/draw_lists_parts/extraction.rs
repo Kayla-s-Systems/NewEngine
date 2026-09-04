@@ -107,6 +107,7 @@ pub(in crate::render_controller::module_impl) struct PrimitiveProviderStageProfi
     pub(in crate::render_controller::module_impl) directional_body_ms: f32,
     pub(in crate::render_controller::module_impl) directional_boundary_ms: f32,
     pub(in crate::render_controller::module_impl) directional_cascade_ms: [f32; 4],
+    pub(in crate::render_controller::module_impl) directional_skinned_draws: [usize; 4],
     pub(in crate::render_controller::module_impl) shadow_skinned_ms: f32,
     pub(in crate::render_controller::module_impl) shadow_models_ms: f32,
     pub(in crate::render_controller::module_impl) shadow_static_ms: f32,
@@ -358,6 +359,13 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
                     {
                         *slot = sample.total_ms;
                     }
+                    if let Some(slot) = self
+                        .primitive_stage_profile
+                        .directional_skinned_draws
+                        .get_mut(cascade_index)
+                    {
+                        *slot = sample.skinned_draws;
+                    }
                     self.primitive_stage_profile.shadow_skinned_ms += sample.skinned_ms;
                     self.primitive_stage_profile.shadow_models_ms += sample.models_ms;
                     self.primitive_stage_profile.shadow_static_ms += sample.static_ms;
@@ -387,6 +395,7 @@ impl<'a> newengine_render_feature_api::DrawListBuildCtx for DrawListBuildCtx<'a>
             if let Some(sample) = sample {
                 directional_body_ms = sample.total_ms;
                 self.primitive_stage_profile.directional_cascade_ms[0] = sample.total_ms;
+                self.primitive_stage_profile.directional_skinned_draws[0] = sample.skinned_draws;
                 self.primitive_stage_profile.shadow_skinned_ms = sample.skinned_ms;
                 self.primitive_stage_profile.shadow_models_ms = sample.models_ms;
                 self.primitive_stage_profile.shadow_static_ms = sample.static_ms;

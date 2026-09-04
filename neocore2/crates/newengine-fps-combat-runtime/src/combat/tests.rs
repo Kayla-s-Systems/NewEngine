@@ -1342,7 +1342,7 @@ fn hitscan_direction_tracks_mouse_look_pitch() {
     let camera_forward = (Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0) * -Vec3::Z)
         .normalize_or_zero();
     let view_origin = Vec3::Y * 1.62;
-    let aim_point = view_origin + camera_forward * tuning.range.clamp(12.0, 80.0);
+    let aim_point = view_origin + camera_forward * tuning.ads_center_screen_convergence_m();
     let expected = (aim_point - origin).normalize_or_zero();
     assert!(direction.dot(expected) > 0.999_999);
     assert!(
@@ -1356,7 +1356,7 @@ fn hitscan_direction_tracks_mouse_look_pitch() {
 }
 
 #[test]
-fn ads_hitscan_uses_rendered_weapon_sight_axis_instead_of_rebuilding_camera_convergence() {
+fn ads_hitscan_uses_center_screen_target_even_when_rendered_sight_is_lagging() {
     let mut world = World::new();
     let player = world.spawn();
     let _ = world.insert(player, Transform::default());
@@ -1370,6 +1370,9 @@ fn ads_hitscan_uses_rendered_weapon_sight_axis_instead_of_rebuilding_camera_conv
     let muzzle = EquippedWeaponMuzzle::new(Vec3::new(0.28, 1.24, -0.61), Vec3::new(0.0, 0.0, -1.0))
         .expect("physical muzzle");
     let _ = world.insert(player, muzzle);
+
+    // Deliberately publish a stale/lagging visual sight. Gameplay aim must remain center-screen
+    // authoritative; animation/sway/recoil presentation cannot redirect the bullet independently.
     let rendered_sight_forward = Vec3::new(-0.22, 0.17, -0.96).normalize_or_zero();
     let sight = EquippedWeaponSight::new(Vec3::new(0.21, 1.34, -0.42), rendered_sight_forward)
         .expect("rendered sight");
@@ -1380,18 +1383,22 @@ fn ads_hitscan_uses_rendered_weapon_sight_axis_instead_of_rebuilding_camera_conv
         ..Default::default()
     };
 
-    let (origin, direction) =
-        shot_origin_and_direction(&world, player, tuning, true, 77).expect("ADS sight hitscan");
-    assert!((origin - (muzzle.position + muzzle.forward * 0.008)).length() < 1.0e-6);
-    assert!(
-        direction.dot(rendered_sight_forward) > 0.999_999,
-        "ADS ballistic direction must be the exact rendered rear->front sight axis"
-    );
+    let (origin, direction) = shot_origin_and_direction(&world, player, tuning, true, 77)
+        .expect("center-screen ADS hitscan");
+    assert!((origin - muzzle.position).length() < 1.0e-6);
+
     let camera_forward = (Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0) * -Vec3::Z)
         .normalize_or_zero();
+    let view_origin = Vec3::Y * 0.72;
+    let aim_point = view_origin + camera_forward * tuning.ads_center_screen_convergence_m();
+    let expected = (aim_point - origin).normalize_or_zero();
     assert!(
-        (direction - camera_forward).length() > 1.0e-3,
-        "test must prove ADS consumes the published sight rather than silently rebuilding camera forward"
+        direction.dot(expected) > 0.999_999,
+        "ADS bullet must originate at the physical muzzle and converge on center-screen target"
+    );
+    assert!(
+        direction.dot(rendered_sight_forward) < 0.999,
+        "lagging rendered sight must not become an independent ballistic authority"
     );
 }
 
@@ -1432,10 +1439,10 @@ fn hitscan_origin_is_physical_muzzle_while_direction_converges_to_view_axis() {
 
     let (origin, direction) =
         shot_origin_and_direction(&world, player, tuning, true, 9).expect("muzzle hitscan");
-    assert!((origin - (muzzle.position + muzzle.forward * 0.008)).length() < 1.0e-6);
+    assert!((origin - muzzle.position).length() < 1.0e-6);
     let view_origin = Vec3::Y * 0.72;
     let camera_forward = -Vec3::Z;
-    let target = view_origin + camera_forward * tuning.range.clamp(12.0, 80.0);
+    let target = view_origin + camera_forward * tuning.ads_center_screen_convergence_m();
     let expected = (target - origin).normalize_or_zero();
     assert!(direction.dot(expected) > 0.999_999);
     assert!(
@@ -1445,7 +1452,7 @@ fn hitscan_origin_is_physical_muzzle_while_direction_converges_to_view_axis() {
 }
 
 #[test]
-fn blocked_hitscan_uses_safe_muzzle_on_player_side_of_obstacle() {
+fn blocked_hitscan_keeps_exact_rendered_muzzle_origin() {
     let mut world = World::new();
     let player = world.spawn();
     let _ = world.insert(player, Transform::default());
@@ -1473,10 +1480,10 @@ fn blocked_hitscan_uses_safe_muzzle_on_player_side_of_obstacle() {
     };
     let (origin, _) =
         shot_origin_and_direction(&world, player, tuning, true, 10).expect("blocked hitscan");
-    assert!((origin - safe).length() < 1.0e-6);
+    assert!((origin - muzzle.position).length() < 1.0e-6);
     assert!(
-        origin.z > -0.34,
-        "shot must originate on player side of wall"
+        (origin - safe).length() > 1.0e-3,
+        "obstruction state must not relocate the physical shot origin away from the rendered muzzle"
     );
 }
 

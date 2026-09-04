@@ -227,6 +227,10 @@ impl HostPlatformRuntime {
                 }
 
                 self.bootstrap_stage = RuntimeBootstrapStage::Running;
+                if std::env::var_os("NEWENGINE_PERF_SUMMARY").is_some() {
+                    self.perf_running_started_at = Some(std::time::Instant::now());
+                    self.perf_running_start_frame = self.ui_frame_index;
+                }
                 newengine_ulog_api::ulog::info!(
                     "platform runtime bootstrap: playable-world handoff released; scene launch gate is inactive"
                 );

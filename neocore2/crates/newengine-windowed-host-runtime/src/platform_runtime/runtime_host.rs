@@ -17,6 +17,7 @@ use newengine_ui_api::UiLayerDomain;
 use std::{
     path::Path,
     sync::mpsc::{self, Receiver},
+    time::Instant,
 };
 
 use crate::platform_runtime::bootstrap_overlay::{
@@ -65,6 +66,8 @@ pub struct HostPlatformRuntime {
     bootstrap_spinner_phase: u32,
     ready_overlay_frames_left: u32,
     ui_frame_index: u64,
+    perf_running_started_at: Option<Instant>,
+    perf_running_start_frame: u64,
     loaded_engine_plugins: Option<usize>,
     fatal_bootstrap_error: Option<String>,
     runtime_soft_degraded_error: Option<String>,
@@ -124,6 +127,8 @@ impl HostPlatformRuntime {
             bootstrap_spinner_phase: 0,
             ready_overlay_frames_left: 45,
             ui_frame_index: 0,
+            perf_running_started_at: None,
+            perf_running_start_frame: 0,
             loaded_engine_plugins: None,
             fatal_bootstrap_error: None,
             runtime_soft_degraded_error: None,
@@ -280,6 +285,24 @@ impl HostPlatformRuntime {
             Ok(()) => crate::platform_early_log!("host.ffi.call.returned ok"),
             Err(e) => crate::platform_early_log!("host.ffi.call.returned err='{}'", e),
         }
+        if std::env::var_os("NEWENGINE_PERF_SUMMARY").is_some() {
+            if let Some(started_at) = self.perf_running_started_at {
+                let elapsed_ms = started_at.elapsed().as_secs_f64() * 1000.0;
+                let frames = self
+                    .ui_frame_index
+                    .saturating_sub(self.perf_running_start_frame);
+                let fps = if elapsed_ms > 0.0 {
+                    frames as f64 * 1000.0 / elapsed_ms
+                } else {
+                    0.0
+                };
+                eprintln!(
+                    "NSPERF frames={} elapsed_ms={:.3} fps={:.3} total_ui_frames={}",
+                    frames, elapsed_ms, fps, self.ui_frame_index
+                );
+            }
+        }
+
         newengine_ulog_api::ulog::info!(
             "platform runtime: native runtime returned status={} close_requested={} engine_shutdown_requested={} started={} window_ready_emitted={} bootstrap_stage={:?} ui_frames={} surface={}x{} minimized={} degraded={} fatal_bootstrap={} reason='platform-runtime-return'",
             if result.is_ok() { "ok" } else { "err" },

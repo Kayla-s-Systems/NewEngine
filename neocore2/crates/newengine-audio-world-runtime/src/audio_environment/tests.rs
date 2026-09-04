@@ -26,6 +26,20 @@ fn zone(
 }
 
 #[test]
+fn world_without_authored_audio_zones_keeps_a_dry_unity_direct_path() {
+    let world = World::new();
+    let frame = AudioEnvironmentFrame::snapshot_at(&world, Vec3::ZERO);
+    let resolved = frame.resolve([12.0, 1.0, -4.0]);
+
+    assert!(resolved.emitter_zone.is_empty());
+    assert!(resolved.listener_zone.is_empty());
+    assert_eq!(resolved.portal_gain, 1.0);
+    assert_eq!(resolved.state.portal_gain, 1.0);
+    assert_eq!(resolved.state.direct_path.gain, 1.0);
+    assert!(!resolved.state.is_wet());
+}
+
+#[test]
 fn overlapping_zone_selection_prefers_priority_then_center_distance() {
     let zones = vec![
         zone(1, "room.low", Vec3::ZERO, Vec3::new(10.0, 10.0, 10.0), 0),

@@ -146,9 +146,12 @@ pub fn diagnostics_policy() -> &'static DiagnosticsPolicy {
         DiagnosticsPolicy {
             render_trace_ms: env::var_f32("NEWENGINE_RENDER_TRACE_MS", 16.67, 1.0, 1000.0),
             render_warn_ms: env::var_f32("NEWENGINE_RENDER_WARN_MS", 16.67, 1.0, 2000.0),
+            // Outlier capture must not make a healthy 60 Hz render frame a synchronous
+            // profiler event. Sample budget misses immediately; steady frames use the sparse
+            // interval below. This keeps observability off the critical path by default.
             render_profiler_outlier_ms: env::var_f32(
                 "NEWENGINE_RENDER_PROFILER_OUTLIER_MS",
-                8.0,
+                16.67,
                 1.0,
                 2000.0,
             ),

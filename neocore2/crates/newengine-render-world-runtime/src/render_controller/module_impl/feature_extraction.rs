@@ -61,6 +61,7 @@ impl FeatureExtractionFrame {
             Ok(lists)
         })?;
         {
+            let frame_index = controller.frame.frame_index;
             let mut build_ctx = DrawListBuildCtx::new(controller, render, &draw_lists);
             profile.time("pass_state", || {
                 draw_lists.record_pass_state(extraction, &mut build_ctx)
@@ -72,6 +73,31 @@ impl FeatureExtractionFrame {
                 })?;
                 let primitive = build_ctx.take_primitive_stage_profile();
                 if primitive.sampled {
+                    if extraction.runtime
+                        && frame_index.is_multiple_of(30)
+                        && newengine_runtime_policy::render_runtime_policy().primitive_stage_log
+                    {
+                        let payload = serde_json::json!({
+                            "schema": "newengine.diagnostics.profiler.sample.v1",
+                            "category": "render.shadow.cascade-admission",
+                            "source": "newengine-render-world-runtime",
+                            "name": "skinned directional cascade admission",
+                            "lane": "render-prep",
+                            "priority": "diagnostic",
+                            "frame_id": frame_index,
+                            "elapsed_ms": primitive.shadow_skinned_ms,
+                            "cascade0_draws": primitive.directional_skinned_draws[0],
+                            "cascade1_draws": primitive.directional_skinned_draws[1],
+                            "cascade2_draws": primitive.directional_skinned_draws[2],
+                            "cascade3_draws": primitive.directional_skinned_draws[3],
+                        });
+                        if let Ok(bytes) = serde_json::to_vec(&payload) {
+                            let _ = newengine_plugin_host::emit_plugin_event(
+                                "newengine.diagnostics.profiler.sample.v1",
+                                &bytes,
+                            );
+                        }
+                    }
                     profile.push_measurement(
                         "primitive.directional_shadow",
                         primitive.directional_shadow_ms,

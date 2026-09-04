@@ -49,6 +49,9 @@ pub const GAME_READY_CORE_ENV_POLICY: &[(&str, &str)] = &[
     // engine phase; stale DLLs can otherwise terminate the process with SEH
     // STATUS_ACCESS_VIOLATION before Rust can report an error.
     ("NEWENGINE_BOOTSTRAP_PLUGIN_PRELOAD", "deferred"),
+    // Filesystem hot reload is an editor/authoring facility. A standalone GameReady launch must
+    // never spend background CPU recursively stat'ing project content once per second.
+    ("NEWENGINE_DISABLE_ASSET_HOT_RELOAD", "1"),
     // Profile-owned render startup policy: keep the viewport alive while the
     // real authored GLSL is being compiled asynchronously by engine.threading.
     // Users can override this env value before launch; it is still reported in
@@ -75,6 +78,7 @@ pub const GAME_READY_FPS_ENV_POLICY: &[(&str, &str)] = &[
     // available through telemetry/logging and are never mounted as a game HUD layer.
     ("NEWENGINE_PLUGIN_TARGET", "runtime"),
     ("NEWENGINE_BOOTSTRAP_PLUGIN_PRELOAD", "deferred"),
+    ("NEWENGINE_DISABLE_ASSET_HOT_RELOAD", "1"),
     ("NEWENGINE_SHADER_ASYNC_PREBAKED_UNTIL_READY", "1"),
     ("NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_READY", "0"),
     ("NEWENGINE_SCENE_TEXTURE_LAUNCH_MIN_RATIO", "1.00"),
@@ -257,6 +261,17 @@ mod tests {
             Some(GAME_READY_UI_PROFILE_GAME)
         );
         assert_eq!(value(GAME_READY_UI_PUBLISH_EDITOR_SHELL_ENV), None);
+    }
+
+    #[test]
+    fn shipping_fps_disables_authoring_hot_reload_by_default() {
+        let value = GAME_READY_FPS_ENV_POLICY
+            .iter()
+            .find_map(|(key, value)| (*key == "NEWENGINE_DISABLE_ASSET_HOT_RELOAD").then_some(*value));
+        assert_eq!(value, Some("1"));
+        assert!(GAME_READY_CORE_ENV_POLICY.iter().any(|(key, value)| {
+            *key == "NEWENGINE_DISABLE_ASSET_HOT_RELOAD" && *value == "1"
+        }));
     }
 
     #[test]

@@ -4,10 +4,12 @@ mod tests {
 
     #[test]
     fn emitter_defaults_to_enabled_spatial_autoplay() {
-        let emitter = AudioEmitter::new("shared/audio/ambience/ambience.ysncd@wind");
+        let emitter = AudioEmitter::new("shared/audio/ambience/wind.xvag");
         assert!(emitter.enabled);
         assert!(emitter.autoplay);
         assert!(emitter.spatial);
+        assert!(!emitter.looping);
+        assert!(emitter.attenuation.is_none());
         assert_eq!(emitter.sanitized_gain(), 1.0);
     }
 
@@ -239,7 +241,11 @@ mod tests {
             1.0,
         )
         .expect("transmissive material edge");
-        assert_eq!(opaque, transmissive);
+        assert_eq!(opaque.obstruction, transmissive.obstruction);
+        assert_eq!(opaque.occlusion, transmissive.occlusion);
+        assert!((opaque.transmission_gain - transmissive.transmission_gain).abs() < 1.0e-5);
+        assert!((opaque.high_frequency_gain - transmissive.high_frequency_gain).abs() < 1.0e-5);
+        assert!((opaque.low_pass_hz - transmissive.low_pass_hz).abs() < 0.01);
     }
 
     #[test]

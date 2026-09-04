@@ -142,7 +142,13 @@ fn publish_weapon_project_event(world: &mut World, event: &WeaponEvent) {
         },
         "point": vec3_payload(event.point),
         "normal": vec3_payload(event.normal),
-        "muzzle_position": muzzle.map(|muzzle| vec3_payload(muzzle.position)),
+        // For firearm fire/hit events the pending ray captured the exact rendered muzzle at trigger
+        // time. Reuse that snapshot for VFX so flash/tracer/ballistics cannot diverge if animation
+        // advances before consumers process the event.
+        "muzzle_position": pending
+            .filter(|pending| pending.attack_kind == WeaponAttackKind::Firearm)
+            .map(|pending| vec3_payload(pending.origin))
+            .or_else(|| muzzle.map(|muzzle| vec3_payload(muzzle.position))),
         "muzzle_forward": muzzle.map(|muzzle| vec3_payload(muzzle.forward)),
         "shot_origin": pending.map(|pending| vec3_payload(pending.origin)),
         "shot_direction": pending.map(|pending| vec3_payload(pending.direction)),

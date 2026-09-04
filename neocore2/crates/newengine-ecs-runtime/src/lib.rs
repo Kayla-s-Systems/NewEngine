@@ -495,7 +495,7 @@ mod semantic_component_tests {
         let emitter = world
             .get::<newengine_audio_api::AudioEmitter>(entity)
             .expect("audio emitter component");
-        assert_eq!(emitter.cue, "shared/audio/weapon/rifle/rifle.ysncd@fire");
+        assert_eq!(emitter.source, "shared/audio/weapon/rifle/rifle.ysncd@fire");
         assert_eq!(emitter.gain, 0.8);
 
         let (ok, message) = EngineEcsGatewayService::remove_semantic_component(

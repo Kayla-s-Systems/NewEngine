@@ -329,6 +329,41 @@ fn solve_arm_to_palm_contact(
     Ok(true)
 }
 
+fn set_pose_joint_global_transform(
+    skeleton: &ModelSkeletonMetadata,
+    pose: &mut [JointLocalPose],
+    frames: &[Mat4],
+    joint_index: usize,
+    desired_global: Mat4,
+) -> Result<(), String> {
+    let parent_global = skeleton.joints[joint_index]
+        .parent_index
+        .and_then(|parent| frames.get(parent as usize).copied())
+        .unwrap_or(Mat4::IDENTITY);
+    let desired_local = parent_global.inverse() * desired_global;
+    let (scale, rotation, translation) = desired_local.to_scale_rotation_translation();
+    if !scale.is_finite()
+        || scale.x <= 0.0
+        || scale.y <= 0.0
+        || scale.z <= 0.0
+        || !rotation.is_finite()
+        || !translation.is_finite()
+    {
+        return Err(format!(
+            "rifle global transform projection produced invalid local frame index={joint_index}"
+        ));
+    }
+    let local = pose
+        .get_mut(joint_index)
+        .ok_or_else(|| format!("rifle projected local pose missing index={joint_index}"))?;
+    local.translation = [translation.x, translation.y, translation.z];
+    let rotation = rotation.normalize_or_identity();
+    local.rotation = [rotation.x, rotation.y, rotation.z, rotation.w];
+    // A camera-space presentation delta is rigid. Preserve the authored local scale verbatim rather
+    // than feeding decomposition noise back into the deformation rig.
+    Ok(())
+}
+
 fn set_pose_joint_global_rotation(
     skeleton: &ModelSkeletonMetadata,
     pose: &mut [JointLocalPose],

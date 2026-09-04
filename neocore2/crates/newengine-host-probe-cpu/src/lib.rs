@@ -48,7 +48,7 @@ fn discover_features() -> CpuFeatureSet {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(miri)))]
 mod tests {
     use super::*;
 

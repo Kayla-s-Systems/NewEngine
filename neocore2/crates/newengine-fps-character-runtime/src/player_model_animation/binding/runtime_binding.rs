@@ -1,19 +1,29 @@
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WeaponAimPresentationMode {
+    ThirdPerson,
+    FirstPerson,
+}
+
 #[derive(Clone, Copy, Debug, Default)]
-struct ThirdPersonWeaponAimState {
+struct WeaponAimControllerState {
     active: bool,
+    mode: Option<WeaponAimPresentationMode>,
     sight_yaw_radians: f32,
     sight_pitch_radians: f32,
     target_yaw_radians: f32,
     target_pitch_radians: f32,
 }
 
-impl ThirdPersonWeaponAimState {
-    // Reference envelope: TLOU authored aim-space + GTA-style free aim, with Cyberpunk-like
-    // rubber-band/body handoff. The weapon owns this sector; body turn consumes overflow.
-    const YAW_LIMIT_RADIANS: f32 = 52.0_f32.to_radians();
-    const PITCH_UP_LIMIT_RADIANS: f32 = 45.0_f32.to_radians();
-    const PITCH_DOWN_LIMIT_RADIANS: f32 = 38.0_f32.to_radians();
-    const RESPONSE_PER_SECOND: f32 = 18.0;
+impl WeaponAimControllerState {
+    // TPP reference envelope: TLOU authored aim-space + GTA-style free aim, with
+    // Cyberpunk-like rubber-band/body handoff. The weapon owns this sector; body turn consumes
+    // overflow. FPP deliberately does not clamp to this body-relative envelope: camera is primary
+    // there and the weapon only follows it through a faster filtered sight target.
+    const THIRD_PERSON_YAW_LIMIT_RADIANS: f32 = 52.0_f32.to_radians();
+    const THIRD_PERSON_PITCH_UP_LIMIT_RADIANS: f32 = 45.0_f32.to_radians();
+    const THIRD_PERSON_PITCH_DOWN_LIMIT_RADIANS: f32 = 38.0_f32.to_radians();
+    const THIRD_PERSON_RESPONSE_PER_SECOND: f32 = 18.0;
+    const FIRST_PERSON_RESPONSE_PER_SECOND: f32 = 30.0;
 
     #[inline]
     fn direction_to_yaw_pitch(forward: Vec3) -> Option<(f32, f32)> {
@@ -31,55 +41,84 @@ impl ThirdPersonWeaponAimState {
 
     #[inline]
     fn yaw_pitch_to_direction(yaw: f32, pitch: f32) -> Vec3 {
-        ((Quat::from_rotation_y(yaw) * Quat::from_rotation_x(pitch)) * -Vec3::Z)
-            .normalize_or_zero()
+        ((Quat::from_rotation_y(yaw) * Quat::from_rotation_x(pitch)) * -Vec3::Z).normalize_or_zero()
+    }
+
+    #[inline]
+    fn shortest_angle_delta(from: f32, to: f32) -> f32 {
+        (to - from + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI
     }
 
     #[inline]
     fn update(
         &mut self,
         active: bool,
+        mode: WeaponAimPresentationMode,
         dt: f32,
         view_rotation_model: Option<Quat>,
+        desired_sight_forward_model: Option<Vec3>,
         visible_sight_forward_model: Option<Vec3>,
     ) {
         if !active {
             *self = Self::default();
             return;
         }
-        let view_forward = view_rotation_model
-            .filter(|rotation| rotation.is_finite())
-            .map(|rotation| (rotation.normalize_or_identity() * -Vec3::Z).normalize_or_zero())
+        let desired_forward = desired_sight_forward_model
+            .filter(|forward| forward.is_finite() && forward.length_squared() > 1.0e-8)
+            .map(Vec3::normalize_or_zero)
+            .or_else(|| {
+                view_rotation_model
+                    .filter(|rotation| rotation.is_finite())
+                    .map(|rotation| {
+                        (rotation.normalize_or_identity() * -Vec3::Z).normalize_or_zero()
+                    })
+            })
             .and_then(Self::direction_to_yaw_pitch);
-        let Some((target_yaw, target_pitch)) = view_forward else {
+        let Some((raw_target_yaw, raw_target_pitch)) = desired_forward else {
             return;
         };
-        self.target_yaw_radians = target_yaw.clamp(
-            -Self::YAW_LIMIT_RADIANS,
-            Self::YAW_LIMIT_RADIANS,
-        );
-        self.target_pitch_radians = target_pitch.clamp(
-            -Self::PITCH_DOWN_LIMIT_RADIANS,
-            Self::PITCH_UP_LIMIT_RADIANS,
-        );
+        let (target_yaw, target_pitch) = match mode {
+            WeaponAimPresentationMode::ThirdPerson => (
+                raw_target_yaw.clamp(
+                    -Self::THIRD_PERSON_YAW_LIMIT_RADIANS,
+                    Self::THIRD_PERSON_YAW_LIMIT_RADIANS,
+                ),
+                raw_target_pitch.clamp(
+                    -Self::THIRD_PERSON_PITCH_DOWN_LIMIT_RADIANS,
+                    Self::THIRD_PERSON_PITCH_UP_LIMIT_RADIANS,
+                ),
+            ),
+            WeaponAimPresentationMode::FirstPerson => (raw_target_yaw, raw_target_pitch),
+        };
+        self.target_yaw_radians = target_yaw;
+        self.target_pitch_radians = target_pitch;
 
-        if !self.active {
+        if !self.active || self.mode != Some(mode) {
             self.active = true;
+            self.mode = Some(mode);
             let (entry_yaw, entry_pitch) = visible_sight_forward_model
                 .and_then(Self::direction_to_yaw_pitch)
                 .unwrap_or((self.target_yaw_radians, self.target_pitch_radians));
-            // Preserve the actually visible pre-ADS sight exactly on entry. Limits constrain the
-            // requested camera target, not the current pose; the spring pulls an out-of-envelope
-            // carry pose back into the authored aim sector without a one-frame snap.
+            // Entry always starts from the weapon sight that was actually visible. TPP then returns
+            // into its authored free-aim sector; FPP converges toward the camera at the faster
+            // viewmodel response. Neither mode is allowed a one-frame ADS snap.
             self.sight_yaw_radians = entry_yaw;
             self.sight_pitch_radians = entry_pitch;
             return;
         }
 
-        let dt = if dt.is_finite() { dt.clamp(0.0, 0.1) } else { 0.0 };
-        let response = 1.0 - (-Self::RESPONSE_PER_SECOND * dt).exp();
+        let dt = if dt.is_finite() {
+            dt.clamp(0.0, 0.1)
+        } else {
+            0.0
+        };
+        let response_per_second = match mode {
+            WeaponAimPresentationMode::ThirdPerson => Self::THIRD_PERSON_RESPONSE_PER_SECOND,
+            WeaponAimPresentationMode::FirstPerson => Self::FIRST_PERSON_RESPONSE_PER_SECOND,
+        };
+        let response = 1.0 - (-response_per_second * dt).exp();
         self.sight_yaw_radians +=
-            (self.target_yaw_radians - self.sight_yaw_radians) * response;
+            Self::shortest_angle_delta(self.sight_yaw_radians, self.target_yaw_radians) * response;
         self.sight_pitch_radians +=
             (self.target_pitch_radians - self.sight_pitch_radians) * response;
     }
@@ -89,14 +128,10 @@ impl ThirdPersonWeaponAimState {
         if !self.active {
             return None;
         }
-        let target = Self::yaw_pitch_to_direction(
-            self.sight_yaw_radians,
-            self.sight_pitch_radians,
-        );
+        let target = Self::yaw_pitch_to_direction(self.sight_yaw_radians, self.sight_pitch_radians);
         (target.is_finite() && target.length_squared() > 1.0e-8).then_some(target)
     }
 }
-
 
 pub(super) struct PlayerAnimationRuntimeBinding {
     clips: [Option<PlayerAnimationRuntimeClip>; 8],
@@ -187,13 +222,19 @@ pub(super) struct PlayerAnimationRuntimeBinding {
     equipment_reload_rotation_weights: Vec<ResolvedJointBlendRule>,
     equipment_overlay_locals: Vec<JointLocalPose>,
     equipment_overlay_locals_b: Vec<JointLocalPose>,
+    /// Reusable authored equipment composition target. TLOU-style layered AIM is composed here at
+    /// full authored weight, then blended once against the current READY/source pose.
+    equipment_composed_locals: Vec<JointLocalPose>,
     equipment_ik: Option<WeaponArmIkRig>,
     /// Cooldown for significant support-IK residual diagnostics. The solve still runs every frame,
     /// but a persistent authored-contact problem must not flood the runtime log.
     equipment_ik_residual_diag_cooldown: f32,
-    /// Relative RMB/ADS anchor. Entry view+sight are captured once so the complete rifle chain follows
-    /// mouse/view deltas from its current pose instead of snapping to absolute camera-forward.
-    equipment_aim_controller: ThirdPersonWeaponAimState,
+    /// Shared TPP/FPP weapon-aim dynamics. Presentation policy changes free-aim/body handoff, but both
+    /// modes consume the same filtered sight intent and preserve the visible entry pose without snap.
+    equipment_aim_controller: WeaponAimControllerState,
+    /// Coherent common weapon frame for a synthetic READY->AIM fallback when the source-authored
+    /// transition belongs to a foreign skeleton domain. Both arms are projected back onto this frame.
+    equipment_transition_weapon_root: Option<crate::weapon_grip::WeaponRootTransform>,
     /// Torso-owned, reach-fitted weapon root before secondary dynamics. Render consumes this exact root.
     equipment_resolved_weapon_root: Option<crate::weapon_grip::WeaponRootTransform>,
 }

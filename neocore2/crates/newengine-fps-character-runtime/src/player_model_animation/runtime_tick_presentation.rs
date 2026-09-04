@@ -9,6 +9,7 @@ fn evaluate_player_animation_presentation(
     binding: &mut PlayerAnimationRuntimeBinding,
     dt: f32,
     frame: &PlayerAnimationFrameInput,
+    frame_index: u64,
 ) -> Option<PlayerAnimationFrameOutput> {
     let presentation_started = std::time::Instant::now();
     let semantic = frame.semantic;
@@ -41,19 +42,36 @@ fn evaluate_player_animation_presentation(
     }
     binding.equipment_ik_residual_diag_cooldown =
         (binding.equipment_ik_residual_diag_cooldown - dt).max(0.0);
-    let relative_rifle_ads_active = equipment_pose_family == Some("rifle")
-        && equipment_stance == EquipmentPresentationStance::Aim
-        && !frame.first_person_active;
-    let visible_sight = binding
+    let rifle_aim_active = equipment_pose_family == Some("rifle")
+        && equipment_stance == EquipmentPresentationStance::Aim;
+    let aim_presentation_mode = if frame.first_person_active {
+        WeaponAimPresentationMode::FirstPerson
+    } else {
+        WeaponAimPresentationMode::ThirdPerson
+    };
+    let visible_weapon = binding
         .equipment_resolved_weapon_root
-        .zip(frame.weapon_presentation.as_ref())
+        .zip(frame.weapon_presentation.as_ref());
+    let visible_sight = visible_weapon
         .map(|(root, presentation)| crate::weapon_grip::weapon_sight_forward(presentation, root));
+    let center_screen_sight_target = frame
+        .rifle_center_screen_target_model
+        .zip(visible_weapon)
+        .map(|(target, (root, presentation))| {
+            let rear = crate::weapon_grip::weapon_rear_sight_position(presentation, root);
+            (target - rear).normalize_or_zero()
+        })
+        .filter(|forward| forward.is_finite() && forward.length_squared() > 1.0e-8)
+        .or(frame.rifle_view_forward_model);
     binding.equipment_aim_controller.update(
-        relative_rifle_ads_active,
+        rifle_aim_active,
+        aim_presentation_mode,
         dt,
         frame.rifle_view_rotation_model,
+        center_screen_sight_target,
         visible_sight,
     );
+    binding.equipment_transition_weapon_root = None;
     binding.equipment_resolved_weapon_root = None;
     if unarmed_active {
         if binding.unarmed_attack_sequence != unarmed_attack_sequence {
@@ -134,6 +152,7 @@ fn evaluate_player_animation_presentation(
         unarmed_attack_sequence,
         equipment_stance,
         transitioned,
+        frame_index,
     )?;
     let finalize_ms = finalize_started.elapsed().as_secs_f32() * 1000.0;
     Some(PlayerAnimationFrameOutput {

@@ -121,6 +121,30 @@ fn evaluate_locomotion_presentation_layer(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline]
+fn weapon_aim_body_turn_request(
+    view_body_yaw_delta: f32,
+    minimum_turn_step: Option<f32>,
+    first_person_active: bool,
+) -> (f32, f32) {
+    if first_person_active {
+        return (0.0, 0.0);
+    }
+    const BODY_FOLLOW_HYSTERESIS: f32 = 5.0_f32.to_radians();
+    let beyond_sector = view_body_yaw_delta.is_finite()
+        && view_body_yaw_delta.abs()
+            > WeaponAimControllerState::THIRD_PERSON_YAW_LIMIT_RADIANS + BODY_FOLLOW_HYSTERESIS;
+    let residual = if beyond_sector {
+        minimum_turn_step
+            .filter(|step| step.is_finite() && *step > 1.0e-5)
+            .map(|step| step.copysign(view_body_yaw_delta))
+            .unwrap_or(0.0)
+    } else {
+        0.0
+    };
+    (residual, BODY_FOLLOW_HYSTERESIS)
+}
+
 fn evaluate_native_turn_presentation_layer(
     player: newengine_ecs::EntityId,
     binding: &mut PlayerAnimationRuntimeBinding,
@@ -155,23 +179,14 @@ fn evaluate_native_turn_presentation_layer(
     // Weapon aim owns a real free-aim cone around the torso. TLOU/GTA-style body follow only
     // begins after the camera leaves that sector; the body then consumes one authored turn step
     // instead of continuously stealing mouse yaw from the arms. Cyberpunk-style rubber-band damping
-    // remains inside ThirdPersonWeaponAimState.
-    const WEAPON_AIM_FREE_YAW_LIMIT: f32 = 52.0_f32.to_radians();
-    const WEAPON_AIM_BODY_FOLLOW_HYSTERESIS: f32 = 5.0_f32.to_radians();
+    // remains inside WeaponAimControllerState; FPP bypasses this body handoff entirely.
     let minimum_turn_step = binding.minimum_turn_step_radians();
-    let aim_turn_hysteresis = WEAPON_AIM_BODY_FOLLOW_HYSTERESIS;
-    let (live_turn_yaw_delta, live_turn_hysteresis) = if native_turn_allowed && weapon_aim_authority
-    {
-        let beyond_sector = view_body_yaw_delta.abs()
-            > WEAPON_AIM_FREE_YAW_LIMIT + WEAPON_AIM_BODY_FOLLOW_HYSTERESIS;
-        let residual = if beyond_sector {
-            minimum_turn_step
-                .map(|step| step.copysign(view_body_yaw_delta))
-                .unwrap_or(0.0)
-        } else {
-            0.0
-        };
-        (residual, aim_turn_hysteresis)
+    let (live_turn_yaw_delta, live_turn_hysteresis) = if native_turn_allowed && weapon_aim_authority {
+        weapon_aim_body_turn_request(
+            view_body_yaw_delta,
+            minimum_turn_step,
+            frame.first_person_active,
+        )
     } else if native_turn_allowed && look_allowed {
         if let Some(projection) =
             binding
@@ -600,7 +615,33 @@ fn apply_equipment_presentation_layer(
                         &binding.equipment_pose_sets,
                         equipment_pose_family,
                     ) {
-                        apply_layered_equipment_aim_pose(
+                        (|| -> Result<bool, String> {
+                        // Abby's source READY<->AIM transition belongs to the foreign 1074-node reference
+                        // domain, so it cannot be sampled on the current 1033-node character. Preserve its
+                        // essential invariant instead: interpolate one coherent weapon frame between the
+                        // two valid authored endpoint poses, then let terminal bilateral constraint solve
+                        // project both arms back onto that frame after the body pose blend.
+                        let source_weapon_root = if equipment_pose_family == Some("rifle") {
+                            frame
+                                .weapon_presentation
+                                .as_ref()
+                                .filter(|presentation| presentation.enabled)
+                                .zip(binding.equipment_ik.as_ref())
+                                .map(|(presentation, rig)| {
+                                    equipment_bilateral_weapon_root_for_pose(
+                                        presentation,
+                                        rig,
+                                        &binding.animation_runtime,
+                                        &binding.sampled_target_locals,
+                                        &mut binding.joint_frames_scratch,
+                                    )
+                                })
+                                .transpose()?
+                                .flatten()
+                        } else {
+                            None
+                        };
+                        let result = apply_layered_equipment_aim_pose(
                             pose_set,
                             body_stance,
                             frame.aim_velocity_local,
@@ -610,10 +651,36 @@ fn apply_equipment_presentation_layer(
                             &binding.animation_runtime,
                             &mut binding.equipment_overlay_locals,
                             &mut binding.equipment_overlay_locals_b,
+                            &mut binding.equipment_composed_locals,
                             &mut binding.sampled_target_locals,
                             binding.turn_root_joint,
                             binding.equipment_aim_rotation_weights.as_slice(),
-                        )
+                        )?;
+                        if result && equipment_pose_family == Some("rifle") {
+                            let target_weapon_root = frame
+                                .weapon_presentation
+                                .as_ref()
+                                .filter(|presentation| presentation.enabled)
+                                .zip(binding.equipment_ik.as_ref())
+                                .map(|(presentation, rig)| {
+                                    equipment_bilateral_weapon_root_for_pose(
+                                        presentation,
+                                        rig,
+                                        &binding.animation_runtime,
+                                        &binding.equipment_composed_locals,
+                                        &mut binding.joint_frames_scratch,
+                                    )
+                                })
+                                .transpose()?
+                                .flatten();
+                            binding.equipment_transition_weapon_root = source_weapon_root
+                                .zip(target_weapon_root)
+                                .and_then(|(source, target)| {
+                                    interpolate_equipment_weapon_root(source, target, rifle_aim_alpha)
+                                });
+                        }
+                        Ok(result)
+                        })()
                     } else {
                         Ok(false)
                     };

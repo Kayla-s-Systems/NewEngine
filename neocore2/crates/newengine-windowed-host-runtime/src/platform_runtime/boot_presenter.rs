@@ -71,7 +71,7 @@ pub(crate) fn boot_frame_to_platform_overlay(
         active: true,
         progress_01: frame.progress.progress_01,
         spinner_phase: frame.progress.spinner_phase,
-        title: RString::from("NORTH STAR ENGINE // BOOTSTRAP"),
+        title: RString::from(overlay.title.as_str()),
         status: RString::from(frame.progress.status.as_str()),
         detail: RString::from(frame.progress.detail.as_str()),
         view_json: RString::from(view_json.as_str()),
@@ -123,5 +123,21 @@ mod tests {
             Some("INIT")
         );
         assert!(value.get("frame").is_some());
+    }
+
+    #[test]
+    fn platform_overlay_preserves_the_semantic_title() {
+        let overlay = ScreenOverlayStatus::new(
+            ScreenOverlayStatusKind::Loading,
+            ScreenOverlayReason::JobSystem,
+            "GAME FPS // LOADING",
+            "Preparing...",
+            "Loading authored content.",
+            Some(ScreenOverlayProgress::percent(0.2)),
+            false,
+        );
+
+        let result = overlay_to_boot_step_result(&overlay, 1, PlatformSurfaceMetricsV1::default());
+        assert_eq!(result.loading_overlay.title.as_str(), "GAME FPS // LOADING");
     }
 }

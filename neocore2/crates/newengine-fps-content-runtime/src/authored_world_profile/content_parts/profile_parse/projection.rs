@@ -1,20 +1,29 @@
 use super::*;
 
 fn sanitize_audio_emitter_spec(raw: RawAudioEmitterSpec) -> Option<GameReadyAudioEmitterSpec> {
-    let cue = raw.cue.trim().replace('\\', "/");
-    let cue_lower = cue.to_ascii_lowercase();
-    if cue.is_empty()
-        || !cue_lower.contains(".ysncd@")
-        || cue.starts_with('/')
-        || cue.contains(":/")
-        || cue.split('/').any(|part| part == "..")
+    let source = raw.source.trim().replace('\\', "/");
+    let source_lower = source.to_ascii_lowercase();
+    let native_xvag = source_lower.ends_with(".xvag");
+    let legacy_ysncd = source_lower.contains(".ysncd@");
+    if source.is_empty()
+        || (!native_xvag && !legacy_ysncd)
+        || source.starts_with('/')
+        || source.contains(":/")
+        || source.split('/').any(|part| part == "..")
     {
         newengine_ulog_api::ulog::warn!(
-            "authored-world audio emitter rejected id='{}' cue='{}' reason='expected project-relative .ysncd@cue reference'",
+            "authored-world audio emitter rejected id='{}' source='{}' reason='expected project-relative native .xvag source; .ysncd@entry is migration compatibility only'",
             raw.id,
-            raw.cue
+            raw.source
         );
         return None;
+    }
+    if legacy_ysncd {
+        newengine_ulog_api::ulog::warn!(
+            "authored-world audio emitter uses legacy YSNCD compatibility id='{}' source='{}'; migrate to native XVAG",
+            raw.id,
+            source
+        );
     }
 
     let mut occlusion = newengine_audio_api::AudioOcclusionSettings::default();
@@ -45,7 +54,8 @@ fn sanitize_audio_emitter_spec(raw: RawAudioEmitterSpec) -> Option<GameReadyAudi
     let id = {
         let authored = raw.id.trim();
         if authored.is_empty() {
-            cue.rsplit_once('@')
+            source
+                .rsplit_once('@')
                 .map(|(_, entry)| entry.trim())
                 .filter(|entry| !entry.is_empty())
                 .unwrap_or("audio_emitter")
@@ -62,8 +72,34 @@ fn sanitize_audio_emitter_spec(raw: RawAudioEmitterSpec) -> Option<GameReadyAudi
         );
         return None;
     }
+    let attenuation_authored = raw.attenuation_min_distance.is_some()
+        || raw.attenuation_max_distance.is_some()
+        || raw.attenuation_curve.is_some()
+        || raw.attenuation_rolloff.is_some();
+    let attenuation = attenuation_authored.then(|| {
+        let mut settings = newengine_audio_api::AudioAttenuationSettings::default();
+        if let Some(value) = raw.attenuation_min_distance {
+            settings.min_distance = value;
+        }
+        if let Some(value) = raw.attenuation_max_distance {
+            settings.max_distance = value;
+        }
+        if let Some(value) = raw.attenuation_rolloff {
+            settings.rolloff = value;
+        }
+        if let Some(curve) = raw.attenuation_curve.as_deref() {
+            settings.curve = match curve.trim().to_ascii_lowercase().as_str() {
+                "linear" => newengine_audio_api::AudioAttenuationCurve::Linear,
+                "smoothstep" => newengine_audio_api::AudioAttenuationCurve::Smoothstep,
+                "exponential" => newengine_audio_api::AudioAttenuationCurve::Exponential,
+                "custom" => newengine_audio_api::AudioAttenuationCurve::Custom,
+                _ => newengine_audio_api::AudioAttenuationCurve::Inverse,
+            };
+        }
+        settings.sanitized()
+    });
     let emitter = newengine_audio_api::AudioEmitter {
-        cue,
+        source,
         enabled: raw.enabled.unwrap_or(true),
         autoplay: raw.autoplay.unwrap_or(true),
         gain: raw
@@ -71,7 +107,10 @@ fn sanitize_audio_emitter_spec(raw: RawAudioEmitterSpec) -> Option<GameReadyAudi
             .filter(|value| value.is_finite())
             .unwrap_or(1.0)
             .clamp(0.0, 4.0),
+        route: newengine_audio_api::AudioRouteId(raw.route.trim().to_owned()),
+        looping: raw.looping.unwrap_or(false),
         spatial: raw.spatial.unwrap_or(true),
+        attenuation,
         occlusion,
     };
     Some(GameReadyAudioEmitterSpec {
