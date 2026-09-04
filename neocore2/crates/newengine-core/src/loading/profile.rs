@@ -92,7 +92,7 @@ impl LoadingVisualRefs {
             .map(String::as_str)
         {
             let candidate = candidate.trim();
-            if candidate.is_empty() || resolved.iter().any(|existing| *existing == candidate) {
+            if candidate.is_empty() || resolved.contains(&candidate) {
                 continue;
             }
             resolved.push(candidate);
@@ -142,7 +142,7 @@ impl LoadingVisualRefs {
 
     pub fn from_last_startup_config_for_phase_or_default(phase: LoadingPhase) -> Self {
         crate::startup::last_startup_config()
-            .map(|startup| Self::from_startup_config_for_phase(&startup, phase))
+            .map(|startup| Self::from_startup_config_for_phase(startup, phase))
             .unwrap_or_else(Self::engine_default)
     }
 
