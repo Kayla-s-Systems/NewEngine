@@ -1356,7 +1356,7 @@ fn hitscan_direction_tracks_mouse_look_pitch() {
 }
 
 #[test]
-fn ads_hitscan_uses_center_screen_target_even_when_rendered_sight_is_lagging() {
+fn ads_hitscan_follows_rendered_ironsight_line_from_physical_muzzle() {
     let mut world = World::new();
     let player = world.spawn();
     let _ = world.insert(player, Transform::default());
@@ -1371,8 +1371,8 @@ fn ads_hitscan_uses_center_screen_target_even_when_rendered_sight_is_lagging() {
         .expect("physical muzzle");
     let _ = world.insert(player, muzzle);
 
-    // Deliberately publish a stale/lagging visual sight. Gameplay aim must remain center-screen
-    // authoritative; animation/sway/recoil presentation cannot redirect the bullet independently.
+    // Deliberately publish an off-axis visual sight. ADS ballistics must follow what the player
+    // actually sees through the weapon rather than silently using a different camera-only ray.
     let rendered_sight_forward = Vec3::new(-0.22, 0.17, -0.96).normalize_or_zero();
     let sight = EquippedWeaponSight::new(Vec3::new(0.21, 1.34, -0.42), rendered_sight_forward)
         .expect("rendered sight");
@@ -1387,18 +1387,12 @@ fn ads_hitscan_uses_center_screen_target_even_when_rendered_sight_is_lagging() {
         .expect("center-screen ADS hitscan");
     assert!((origin - muzzle.position).length() < 1.0e-6);
 
-    let camera_forward = (Quat::from_euler(EulerRot::YXZ, motor.yaw, motor.pitch, 0.0) * -Vec3::Z)
-        .normalize_or_zero();
-    let view_origin = Vec3::Y * 0.72;
-    let aim_point = view_origin + camera_forward * tuning.ads_center_screen_convergence_m();
+    let aim_point =
+        sight.position + rendered_sight_forward * tuning.ads_center_screen_convergence_m();
     let expected = (aim_point - origin).normalize_or_zero();
     assert!(
         direction.dot(expected) > 0.999_999,
-        "ADS bullet must originate at the physical muzzle and converge on center-screen target"
-    );
-    assert!(
-        direction.dot(rendered_sight_forward) < 0.999,
-        "lagging rendered sight must not become an independent ballistic authority"
+        "ADS bullet must originate at the physical muzzle and converge on the visible iron-sight line"
     );
 }
 

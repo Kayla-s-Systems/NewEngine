@@ -21,7 +21,7 @@ impl Default for StartupDisplaySettings {
             monitor_index: -1,
             window_mode: StartupWindowMode::Windowed,
             resolution: [0, 0],
-            vsync: true,
+            vsync: false,
             refresh_rate_millihz: 0,
             render_scale: 1.0,
             hdr: StartupHdrMode::Auto,

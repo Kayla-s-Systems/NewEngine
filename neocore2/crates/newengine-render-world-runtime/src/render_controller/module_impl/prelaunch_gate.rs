@@ -14,8 +14,8 @@ impl RuntimeRenderController {
         backend_work_budget: Option<RenderWorkBudget>,
         material_upload_jobs: u32,
         trace_frame: bool,
-        _window_w: u32,
-        _window_h: u32,
+        window_w: u32,
+        window_h: u32,
     ) -> EngineResult<Option<SceneLaunchStatus>> {
         let next_frame = self.frame.frame_index.saturating_add(1).max(1);
         let mut prelaunch_gate = None;
@@ -120,7 +120,7 @@ impl RuntimeRenderController {
                     }
                 }
 
-                if let Err(e) = self.prewarm_scene_pipeline(r) {
+                if let Err(e) = self.prewarm_scene_pipeline(r, window_w, window_h) {
                     if next_frame <= 4 || next_frame.is_multiple_of(120) {
                         newengine_ulog_api::ulog::warn!(
                             "render prewarm: primary scene pipeline not ready frame={} err='{}'",

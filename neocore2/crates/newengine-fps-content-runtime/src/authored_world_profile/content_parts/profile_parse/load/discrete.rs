@@ -69,9 +69,21 @@ fn load_discrete_map_profile_from_index(
         metadata_i32(&index, "streaming.spawn_cell_x", fallback_spawn_cell.x),
         metadata_i32(&index, "streaming.spawn_cell_z", fallback_spawn_cell.z),
     );
+    const MAX_RENDER_RADIUS_CELLS: i32 = 48;
+    const MAX_RENDER_UNLOAD_RADIUS_CELLS: i32 = 64;
+
     let legacy_resident_radius = metadata_i32(&index, "streaming.resident_radius", 1).clamp(0, 4);
-    let render_radius =
-        metadata_i32(&index, "streaming.render_radius", legacy_resident_radius).clamp(0, 6);
+    let authored_render_radius =
+        metadata_i32(&index, "streaming.render_radius", legacy_resident_radius)
+            .clamp(0, MAX_RENDER_RADIUS_CELLS);
+    let configured_view_distance_meters = newengine_plugin_host::current_host_context()
+        .environment_var(newengine_core::startup_window::ENV_VIEW_DISTANCE_METERS)
+        .and_then(|raw| raw.trim().parse::<f32>().ok())
+        .filter(|value| value.is_finite() && *value > 0.0);
+    let configured_render_radius = configured_view_distance_meters.map(|meters| {
+        ((meters / index.cell_size.max(1.0)).ceil() as i32).clamp(1, MAX_RENDER_RADIUS_CELLS)
+    });
+    let render_radius = configured_render_radius.unwrap_or(authored_render_radius);
     // Preserve old maps by default while allowing larger render windows to keep physics tight.
     let simulation_default = legacy_resident_radius.min(1).min(render_radius);
     let simulation_radius = metadata_i32(&index, "streaming.simulation_radius", simulation_default)
@@ -81,7 +93,7 @@ fn load_discrete_map_profile_from_index(
         "streaming.render_unload_radius",
         metadata_i32(&index, "streaming.unload_radius", render_radius + 1),
     )
-    .clamp(render_radius + 1, 10);
+    .clamp(render_radius + 1, MAX_RENDER_UNLOAD_RADIUS_CELLS);
     let simulation_unload_radius = metadata_i32(
         &index,
         "streaming.simulation_unload_radius",
@@ -199,7 +211,7 @@ fn load_discrete_map_profile_from_index(
     });
 
     newengine_ulog_api::ulog::info!(
-        "authored-world: loaded discrete YMAP v2 map='{}' cells_total={} cells_initial={} prefabs_initial={} resolved_definitions={} spawn_cell={},{} launch_render_radius={} launch_simulation_radius={} render_radius={} simulation_radius={} render_unload_radius={} simulation_unload_radius={} policy='launch ring resident before public Play; steady-state dual-domain cells stream after activation by player position'",
+        "authored-world: loaded discrete YMAP v2 map='{}' cells_total={} cells_initial={} prefabs_initial={} resolved_definitions={} spawn_cell={},{} launch_render_radius={} launch_simulation_radius={} view_distance_meters={:?} render_radius={} simulation_radius={} render_unload_radius={} simulation_unload_radius={} policy='launch ring resident before public Play; steady-state dual-domain cells stream after activation by player position'",
         map_ref,
         index.cells.len(),
         initial_cells.len(),
@@ -209,6 +221,7 @@ fn load_discrete_map_profile_from_index(
         spawn_cell.z,
         launch_render_radius,
         launch_simulation_radius,
+        configured_view_distance_meters,
         render_radius,
         simulation_radius,
         render_unload_radius,

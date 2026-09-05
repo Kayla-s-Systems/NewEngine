@@ -6,12 +6,13 @@ impl RuntimeRenderController {
         max_start_jobs: u32,
         max_decode_jobs: u32,
     ) {
-        let max_start_jobs = max_start_jobs.max(1);
+        // A zero start budget means "harvest/upload only". Playable-frame policy uses this
+        // while fixed-step debt is being recovered so background decode cannot deepen a hitch.
         let adaptive_ceiling = super::super::render_quality::material_texture_async_decode_ceiling(
             self.runtime_profile.hardware_tier(),
         ) as u32;
         let max_decode_jobs = max_decode_jobs.max(1).min(adaptive_ceiling.max(1));
-        let max_jobs_this_pump = max_start_jobs.min(max_decode_jobs).max(1);
+        let max_jobs_this_pump = max_start_jobs.min(max_decode_jobs);
         let pump_started = Instant::now();
         let decode_budget_ms =
             super::super::render_quality::MATERIAL_TEXTURE_DECODE_PUMP_BUDGET_MS.max(0.25);

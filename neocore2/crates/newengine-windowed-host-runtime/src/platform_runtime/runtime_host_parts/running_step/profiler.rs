@@ -2,6 +2,15 @@ use newengine_core::{engine::EngineFrameTimingTelemetry, render::RenderModuleTim
 use newengine_ui_api::UiLayerDomain;
 
 const PROFILER_SAMPLE_TOPIC: &str = "newengine.diagnostics.profiler.sample.v1";
+const FRAME_PROFILE_BASELINE_INTERVAL_FRAMES: u64 = 30;
+const FRAME_PROFILE_HITCH_MS: f64 = 33.34;
+
+#[inline]
+fn should_publish_frame_profile(frame_index: u64, active_cpu_ms: f64, wall_ms: f64) -> bool {
+    active_cpu_ms >= FRAME_PROFILE_HITCH_MS
+        || wall_ms >= FRAME_PROFILE_HITCH_MS
+        || frame_index.is_multiple_of(FRAME_PROFILE_BASELINE_INTERVAL_FRAMES)
+}
 
 pub(super) struct HostFrameProfileInput {
     pub(super) ui_frame_index: u64,
@@ -60,7 +69,7 @@ pub(super) fn publish_running_frame_samples(
     if let Some(timing) = engine_timing {
         let active_cpu_ms = (timing.total_ms - pacing_wait_ms).max(0.0);
         let missed_frame = timing.total_ms >= 20.0;
-        if active_cpu_ms >= 12.0 || missed_frame || timing.frame_index.is_multiple_of(120) {
+        if should_publish_frame_profile(timing.frame_index, active_cpu_ms, timing.total_ms) {
             let mut payload = serde_json::json!({
                 "schema": "newengine.diagnostics.profiler.sample.v1",
                 "category": "engine.frame",
@@ -112,7 +121,7 @@ pub(super) fn publish_running_frame_samples(
 
     let host_active_cpu_ms = (host.host_total_ms - pacing_wait_ms).max(0.0);
     let host_wall_slow = host.host_total_ms >= 20.0;
-    if host_active_cpu_ms >= 12.0 || host_wall_slow || host.ui_frame_index.is_multiple_of(120) {
+    if should_publish_frame_profile(host.ui_frame_index, host_active_cpu_ms, host.host_total_ms) {
         let payload = serde_json::json!({
             "schema": "newengine.diagnostics.profiler.sample.v1",
             "category": "host.frame",

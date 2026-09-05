@@ -86,11 +86,23 @@ impl RuntimeRenderController {
             return Ok(());
         }
 
+        let fixed_step_count_for_streaming =
+            ctx.frame().map(|frame| frame.fixed_step_count).unwrap_or(1);
+        let playable_decode_ceiling =
+            crate::render_controller::render_quality::material_texture_playable_async_decode_ceiling(
+                self.runtime_profile.hardware_tier(),
+            ) as u32;
+        let decode_start_jobs =
+            crate::render_controller::render_quality::material_texture_playable_start_budget(
+                self.runtime_profile.hardware_tier(),
+                material_upload_jobs,
+                fixed_step_count_for_streaming,
+            );
         self.pump_material_texture_requests(
             &mut **r,
             thread_pool.as_ref(),
-            material_upload_jobs,
-            material_upload_jobs,
+            decode_start_jobs,
+            playable_decode_ceiling,
         );
 
         self.resize_if_needed(&mut **r, w, h)?;

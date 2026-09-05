@@ -146,11 +146,16 @@ impl SecondaryMotionColliderBindings {
         Ok(Self { capsules, boxes })
     }
 
-    fn resolve_from_joint_frames(
+    fn resolve_from_joint_frames_into(
         &self,
         joint_frames: &[Mat4],
-    ) -> Result<SecondaryMotionColliderSet, String> {
-        let mut capsules = Vec::with_capacity(self.capsules.len());
+        out: &mut SecondaryMotionColliderSet,
+    ) -> Result<(), String> {
+        out.capsules.clear();
+        if out.capsules.capacity() < self.capsules.len() {
+            out.capsules
+                .reserve(self.capsules.len() - out.capsules.capacity());
+        }
         for (index, binding) in self.capsules.iter().copied().enumerate() {
             let frame = joint_frames.get(binding.joint).copied().ok_or_else(|| {
                 format!(
@@ -159,7 +164,7 @@ impl SecondaryMotionColliderBindings {
                     joint_frames.len()
                 )
             })?;
-            capsules.push(SecondaryMotionCapsule {
+            out.capsules.push(SecondaryMotionCapsule {
                 mode: binding.mode,
                 a: frame.transform_point3(binding.local_a),
                 b: frame.transform_point3(binding.local_b),
@@ -167,7 +172,10 @@ impl SecondaryMotionColliderBindings {
             });
         }
 
-        let mut boxes = Vec::with_capacity(self.boxes.len());
+        out.boxes.clear();
+        if out.boxes.capacity() < self.boxes.len() {
+            out.boxes.reserve(self.boxes.len() - out.boxes.capacity());
+        }
         for (index, binding) in self.boxes.iter().copied().enumerate() {
             let frame = joint_frames.get(binding.joint).copied().ok_or_else(|| {
                 format!(
@@ -187,14 +195,14 @@ impl SecondaryMotionColliderBindings {
                 }
                 axes[axis_index] = axis;
             }
-            boxes.push(SecondaryMotionOrientedBox {
+            out.boxes.push(SecondaryMotionOrientedBox {
                 mode: binding.mode,
                 center: frame.transform_point3(binding.local_center),
                 axes,
                 half_extents: binding.half_extents,
             });
         }
-        Ok(SecondaryMotionColliderSet { capsules, boxes })
+        Ok(())
     }
 }
 

@@ -15,6 +15,68 @@ pub(crate) const SHADOW_SOFTNESS_MAX: f32 = 1.25;
 pub(crate) const SHADOW_RESOLUTION_MIN: u32 = 256;
 pub(crate) const SHADOW_RESOLUTION_MAX: u32 = 16284;
 
+/// Inputs that decide which primary lit pipeline variant a composition needs.
+///
+/// The loading-frame prewarm path and the live submit path MUST resolve the same
+/// variant. Warming a pipeline the frame path will not bind spends the entire
+/// warmup budget on a dead cache entry and defers the real shader compile into
+/// live rendering, which shows up as a second warmup wave once the world is
+/// playable.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ScenePipelineVariantInputs {
+    /// `RuntimeProfile::hdr_scene_enabled` as requested by the profile.
+    pub hdr_scene_requested: bool,
+    /// `RuntimeProfile::postfx_enabled` as requested by the profile.
+    pub postfx_requested: bool,
+    /// `RuntimeProfile::deferred_enabled` as requested by the profile.
+    pub deferred_requested: bool,
+    /// An external preview target owns the presented image.
+    pub external_preview_target: bool,
+    /// The editor viewport is driving this composition.
+    pub editor_active: bool,
+    /// The editor viewport requests a non-lit debug shading mode.
+    pub editor_debug_shading: bool,
+    /// The frame renders straight into the window surface instead of an offscreen RT.
+    pub direct_surface_viewport: bool,
+}
+
+/// Primary lit pipeline variant resolved from [`ScenePipelineVariantInputs`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ScenePipelineVariant {
+    /// Render-pass color format the pipeline must be baked against.
+    pub scene_color_format: TextureFormat,
+    /// Effective deferred-path state after preview/editor policy is applied.
+    pub deferred_enabled: bool,
+}
+
+/// Single authority for primary lit pipeline variant selection.
+pub(crate) fn resolve_scene_pipeline_variant(
+    inputs: ScenePipelineVariantInputs,
+) -> ScenePipelineVariant {
+    let hdr_scene_enabled =
+        inputs.hdr_scene_requested && !inputs.external_preview_target && !inputs.editor_active;
+    let postfx_enabled =
+        inputs.postfx_requested && !inputs.external_preview_target && !inputs.editor_debug_shading;
+    let deferred_enabled = inputs.deferred_requested
+        && !inputs.external_preview_target
+        && !inputs.editor_debug_shading;
+    let scene_offscreen = hdr_scene_enabled || postfx_enabled;
+    let scene_color_format = if hdr_scene_enabled {
+        SCENE_HDR_COLOR_FORMAT
+    } else if inputs.direct_surface_viewport && !scene_offscreen {
+        // The Vulkan WSI contract is BGRA8_SRGB. A direct-to-surface LDR material
+        // pipeline must be baked against that exact render-pass format; offscreen
+        // LDR targets stay UNORM so they remain sampleable linear intermediates.
+        TextureFormat::Bgra8Srgb
+    } else {
+        TextureFormat::Bgra8Unorm
+    };
+    ScenePipelineVariant {
+        scene_color_format,
+        deferred_enabled,
+    }
+}
+
 /// Loading-screen budget for starting material texture decode jobs.
 ///
 /// `assets.textures.entry_runtime_v1` is now resolved through StarVault + the
@@ -44,6 +106,34 @@ pub(crate) fn material_texture_async_decode_ceiling(tier: RenderHardwareTier) ->
         RenderHardwareTier::Unknown => 2,
     };
     cpu_cap.min(tier_cap).max(1)
+}
+
+/// Playable-frame decode admission is intentionally stricter than loading-screen admission.
+/// Once the scene is interactive, long-running semantic texture decodes are background work and
+/// must leave CPU headroom for fixed simulation, animation and render preparation.
+///
+/// This is a concurrency ceiling, not a throughput cap: the queue keeps its priority ordering and
+/// immediately admits the next texture when the previous decode completes.
+pub(crate) fn material_texture_playable_async_decode_ceiling(tier: RenderHardwareTier) -> usize {
+    match tier {
+        RenderHardwareTier::Headless | RenderHardwareTier::LegacyGtx | RenderHardwareTier::Gtx => 1,
+        RenderHardwareTier::Rtx => 2,
+        RenderHardwareTier::Unknown => 1,
+    }
+}
+
+/// Number of new background texture decode jobs admitted from a playable frame.
+/// Completion harvest and GPU upload remain active even when catch-up suppresses new CPU work.
+#[inline]
+pub(crate) fn material_texture_playable_start_budget(
+    tier: RenderHardwareTier,
+    configured_jobs: u32,
+    fixed_step_count: u32,
+) -> u32 {
+    if fixed_step_count > 1 {
+        return 0;
+    }
+    configured_jobs.min(material_texture_playable_async_decode_ceiling(tier) as u32)
 }
 /// Hard safety boundary for a single service-to-renderer texture allocation.
 /// Assets above this threshold must be block-compressed or reduced during import;
@@ -89,6 +179,42 @@ mod texture_streaming_quality_tests {
         assert!(material_texture_async_decode_ceiling(RenderHardwareTier::Gtx) <= 2);
         assert!(material_texture_async_decode_ceiling(RenderHardwareTier::Rtx) <= 4);
         assert!(material_texture_async_decode_ceiling(RenderHardwareTier::Rtx) >= 1);
+    }
+
+    #[test]
+    fn playable_decode_ceiling_reserves_cpu_headroom() {
+        assert_eq!(
+            material_texture_playable_async_decode_ceiling(RenderHardwareTier::LegacyGtx),
+            1
+        );
+        assert_eq!(
+            material_texture_playable_async_decode_ceiling(RenderHardwareTier::Gtx),
+            1
+        );
+        assert!(
+            material_texture_playable_async_decode_ceiling(RenderHardwareTier::Rtx)
+                <= material_texture_async_decode_ceiling(RenderHardwareTier::Rtx)
+        );
+    }
+
+    #[test]
+    fn catch_up_frame_suppresses_new_background_decode_admission() {
+        assert_eq!(
+            material_texture_playable_start_budget(RenderHardwareTier::Gtx, 4, 2),
+            0
+        );
+        assert_eq!(
+            material_texture_playable_start_budget(RenderHardwareTier::Gtx, 4, 4),
+            0
+        );
+        assert_eq!(
+            material_texture_playable_start_budget(RenderHardwareTier::Gtx, 4, 1),
+            1
+        );
+        assert_eq!(
+            material_texture_playable_start_budget(RenderHardwareTier::Rtx, 4, 1),
+            2
+        );
     }
 
     #[test]

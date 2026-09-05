@@ -25,6 +25,84 @@ struct PlayerAnimationFinalizeTiming {
     overhead_ms: f32,
 }
 
+#[allow(clippy::too_many_arguments)]
+fn apply_strict_rifle_tpp_rigid_aim_fallback(
+    presentation: &newengine_engine_runtime::gameplay::WeaponPresentationDefinition,
+    skeleton: &ModelSkeletonMetadata,
+    animation_runtime: &AnimationSkeletonRuntime,
+    pose: &mut [JointLocalPose],
+    frames: &mut Vec<Mat4>,
+    rig: &WeaponArmIkRig,
+    aim_alpha: f32,
+    view_forward_model: Option<Vec3>,
+    aim_controller: &WeaponAimControllerState,
+) -> Result<Option<crate::weapon_grip::WeaponRootTransform>, String> {
+    // A strict bilateral contract may reject an individual frame when the two authored prop
+    // branches drift outside the tiny fusion tolerance. That must disable only independent arm IK,
+    // never RMB directional control. Use the firing-side prop as the canonical seed, rotate the
+    // whole chest subtree as one rigid system, then republish the weapon from the mutated socket.
+    let seed_root = current_bilateral_weapon_root(presentation, rig, frames)
+        .or_else(|| {
+            rig.right_prop_attachment
+                .and_then(|index| frames.get(index).copied())
+                .and_then(|frame| {
+                    crate::weapon_grip::weapon_root_from_authored_prop_frame(presentation, frame)
+                })
+        })
+        .or_else(|| {
+            frames.get(rig.right_palm).copied().and_then(|frame| {
+                crate::weapon_grip::weapon_root_from_right_palm(presentation, frame)
+            })
+        });
+    let Some(seed_root) = seed_root else {
+        return Ok(None);
+    };
+
+    let desired = aim_controller
+        .sight_target()
+        .or_else(|| (aim_alpha > 1.0e-4).then_some(view_forward_model).flatten());
+    let Some(target) = staged_weapon_sight_target(
+        crate::weapon_grip::weapon_sight_forward(presentation, seed_root),
+        desired,
+        aim_alpha,
+    ) else {
+        return Ok(Some(seed_root));
+    };
+
+    let authored_sight = crate::weapon_grip::weapon_sight_forward(presentation, seed_root);
+    let _ = apply_native_rifle_upper_body_aim_delta(
+        skeleton,
+        animation_runtime,
+        pose,
+        frames,
+        rig,
+        authored_sight,
+        target,
+    )?;
+
+    Ok(current_bilateral_weapon_root(presentation, rig, frames)
+        .or_else(|| {
+            rig.right_prop_attachment
+                .and_then(|index| frames.get(index).copied())
+                .and_then(|frame| {
+                    crate::weapon_grip::weapon_root_from_authored_prop_frame(presentation, frame)
+                })
+        })
+        .or_else(|| {
+            frames.get(rig.right_palm).copied().and_then(|frame| {
+                crate::weapon_grip::weapon_root_from_right_palm(presentation, frame)
+            })
+        })
+        .or_else(|| {
+            crate::weapon_grip::weapon_sight_aligned_root_around_stock_contact(
+                presentation,
+                seed_root,
+                target,
+            )
+        })
+        .or(Some(seed_root)))
+}
+
 /// Phase 3: compose the visible pose, solve authored IK, enforce continuity/eye invariants,
 /// build the skin palette, derive foot contacts and run secondary motion.
 #[allow(clippy::too_many_arguments)]
@@ -148,9 +226,10 @@ fn finalize_player_pose_and_palette(
             EquipmentPresentationStance::Aim => set.has_aim(),
             EquipmentPresentationStance::Reload | EquipmentPresentationStance::None => false,
         });
-    let prop_attachments = binding.equipment_ik.as_ref().map(|rig| {
-        (rig.right_prop_attachment, rig.left_prop_attachment)
-    });
+    let prop_attachments = binding
+        .equipment_ik
+        .as_ref()
+        .map(|rig| (rig.right_prop_attachment, rig.left_prop_attachment));
     let clip_owns_prop_pair = |clip: Option<&PlayerAnimationRuntimeClip>| {
         prop_attachments.is_some_and(|(right, left)| {
             right.is_some_and(|index| {
@@ -160,7 +239,7 @@ fn finalize_player_pose_and_palette(
             })
         })
     };
-    let equipment_prop_socket_authority_present = equipment_presentation_active
+    let authored_equipment_prop_socket_authority_present = equipment_presentation_active
         && selected_equipment_pose_set.is_some_and(|set| {
             if let Some(transition) = binding.equipment_transition {
                 // Authored ready<->aim transitions may carry the prop socket themselves. If they do,
@@ -203,6 +282,24 @@ fn finalize_player_pose_and_palette(
                 EquipmentPresentationStance::Reload | EquipmentPresentationStance::None => false,
             }
         });
+    let runtime_rifle_prop_socket_authority_present = equipment_presentation_active
+        && strict_rifle_family
+        && matches!(
+            equipment_stance,
+            EquipmentPresentationStance::Ready | EquipmentPresentationStance::Aim
+        )
+        && weapon_presentation
+            .zip(binding.equipment_ik.as_ref())
+            .is_some_and(|(presentation, rig)| {
+                current_bilateral_weapon_root(presentation, rig, &binding.joint_frames_scratch)
+                    .is_some()
+                    || binding
+                        .equipment_transition_weapon_root
+                        .is_some_and(|root| root.position.is_finite() && root.rotation.is_finite())
+            });
+    let equipment_prop_socket_authority_present = authored_equipment_prop_socket_authority_present
+        || runtime_rifle_prop_socket_authority_present;
+
     let strict_rifle_contact_contract = strict_rifle_family
         && matches!(
             equipment_stance,
@@ -218,49 +315,80 @@ fn finalize_player_pose_and_palette(
     };
     let strict_rifle_contract_missing =
         strict_rifle_contact_contract && !equipment_prop_socket_authority_present;
-    if equipment_presentation_active && !strict_rifle_contract_missing {
-        // Support IK is valid only when both sides of the authored binding resolved:
-        // a sanitized weapon presentation and a skeleton-resolved arm IK rig. Poses may
-        // still be authored without IK, but that must not manufacture a procedural target.
+    if equipment_presentation_active {
+        // Support IK is valid only when both sides of the authored binding resolved. A strict rifle
+        // frame that fails bilateral fusion still retains rigid RMB aim authority through the
+        // firing-side prop; only the independent two-arm repair path is suppressed.
         if let (Some(presentation), Some(rig)) =
             (weapon_presentation.as_ref(), binding.equipment_ik.as_ref())
         {
-            match apply_equipped_weapon_support_ik(
-                presentation,
-                Some(rig),
-                &binding.skeleton,
-                &binding.animation_runtime,
-                &mut binding.current_locals,
-                &mut binding.joint_frames_scratch,
-                rifle_view_forward_model,
-                rifle_view_rotation_model,
-                first_person_eye_model,
-                first_person_active,
-                rifle_aim_alpha,
-                rifle_recoil_alpha,
-                rifle_recoil_yaw_radians,
-                rifle_obstruction_alpha,
-                rifle_secondary_rotation_offset_local,
-                equipment_hand_contact_pose_present,
-                equipment_prop_socket_authority_present,
-                strict_rifle_contact_contract,
-                binding.equipment_transition_weapon_root,
-                rifle_reload_progress
-                    .map(|progress| progress <= 0.08 || progress >= 0.92)
-                    .unwrap_or(true),
-                rifle_reload_progress
-                    .map(|progress| progress <= 0.08 || progress >= 0.92)
-                    .unwrap_or(true),
-                Some(&mut binding.equipment_aim_controller),
-            ) {
-                Ok(Some(result)) => {
-                    binding.equipment_resolved_weapon_root = Some(result.base_root);
-                    if (result.error_m > EQUIPMENT_SUPPORT_IK_RESIDUAL_WARN_THRESHOLD_M
-                        || result.socket_angular_error_deg
-                            > EQUIPMENT_SOCKET_ANGULAR_WARN_THRESHOLD_DEG)
-                        && binding.equipment_ik_residual_diag_cooldown <= 0.0
-                    {
-                        newengine_ulog_api::ulog::warn!(
+            if strict_rifle_contract_missing
+                && equipment_stance == EquipmentPresentationStance::Aim
+                && !first_person_active
+                && rifle_aim_alpha > 1.0e-4
+            {
+                match apply_strict_rifle_tpp_rigid_aim_fallback(
+                    presentation,
+                    &binding.skeleton,
+                    &binding.animation_runtime,
+                    &mut binding.current_locals,
+                    &mut binding.joint_frames_scratch,
+                    rig,
+                    rifle_aim_alpha,
+                    rifle_view_forward_model,
+                    &binding.equipment_aim_controller,
+                ) {
+                    Ok(Some(root)) => binding.equipment_resolved_weapon_root = Some(root),
+                    Ok(None) => {}
+                    Err(error) => {
+                        if binding.equipment_ik_residual_diag_cooldown <= 0.0 {
+                            newengine_ulog_api::ulog::warn!(
+                                "fps-character: strict rifle rigid AIM fallback failed player={}: {}",
+                                player.stable_u64(),
+                                error,
+                            );
+                            binding.equipment_ik_residual_diag_cooldown =
+                                EQUIPMENT_SUPPORT_IK_RESIDUAL_DIAG_INTERVAL_SECONDS;
+                        }
+                    }
+                }
+            } else {
+                match apply_equipped_weapon_support_ik(
+                    presentation,
+                    Some(rig),
+                    &binding.skeleton,
+                    &binding.animation_runtime,
+                    &mut binding.current_locals,
+                    &mut binding.joint_frames_scratch,
+                    rifle_view_forward_model,
+                    rifle_view_rotation_model,
+                    first_person_eye_model,
+                    first_person_active,
+                    rifle_aim_alpha,
+                    rifle_recoil_alpha,
+                    rifle_recoil_yaw_radians,
+                    rifle_obstruction_alpha,
+                    rifle_secondary_rotation_offset_local,
+                    equipment_hand_contact_pose_present,
+                    equipment_prop_socket_authority_present,
+                    strict_rifle_contact_contract,
+                    binding.equipment_transition_weapon_root,
+                    rifle_reload_progress
+                        .map(|progress| progress <= 0.08 || progress >= 0.92)
+                        .unwrap_or(true),
+                    rifle_reload_progress
+                        .map(|progress| progress <= 0.08 || progress >= 0.92)
+                        .unwrap_or(true),
+                    Some(&mut binding.equipment_aim_controller),
+                ) {
+                    Ok(Some(result)) => {
+                        binding.equipment_resolved_weapon_root = Some(result.resolved_root);
+                        if (result.error_m > EQUIPMENT_SUPPORT_IK_RESIDUAL_WARN_THRESHOLD_M
+                            || result.socket_angular_error_deg
+                                > EQUIPMENT_SOCKET_ANGULAR_WARN_THRESHOLD_DEG)
+                            && binding.equipment_ik_residual_diag_cooldown <= 0.0
+                        {
+                            newengine_ulog_api::ulog::warn!(
                             "fps-character: authored equipment support IK residual player={} error_m={:.5} right_error_m={:.5} left_error_m={:.5} socket_position_error_m={:.5} socket_angular_error_deg={:.4} threshold_m={:.5} angular_threshold_deg={:.3} diagnostic_interval_s={:.1}",
                             player.stable_u64(),
                             result.error_m,
@@ -272,42 +400,86 @@ fn finalize_player_pose_and_palette(
                             EQUIPMENT_SOCKET_ANGULAR_WARN_THRESHOLD_DEG,
                             EQUIPMENT_SUPPORT_IK_RESIDUAL_DIAG_INTERVAL_SECONDS,
                         );
-                        binding.equipment_ik_residual_diag_cooldown =
-                            EQUIPMENT_SUPPORT_IK_RESIDUAL_DIAG_INTERVAL_SECONDS;
+                            binding.equipment_ik_residual_diag_cooldown =
+                                EQUIPMENT_SUPPORT_IK_RESIDUAL_DIAG_INTERVAL_SECONDS;
+                        }
+                    }
+                    Ok(None) => {
+                        // Never leave the rendered weapon on a stale READY transform while the current
+                        // authored rifle pose has already moved the firing-side prop socket. Bilateral
+                        // solving is the preferred terminal contract, but a transient/reach failure must
+                        // still publish this frame's native firing socket so weapon and arms stay attached.
+                        if strict_rifle_contact_contract {
+                            binding.equipment_resolved_weapon_root = rig
+                                .right_prop_attachment
+                                .and_then(|index| binding.joint_frames_scratch.get(index).copied())
+                                .and_then(|frame| {
+                                    crate::weapon_grip::weapon_root_from_authored_prop_frame(
+                                        presentation,
+                                        frame,
+                                    )
+                                });
+                        }
+                    }
+                    Err(error) => {
+                        if strict_rifle_contact_contract {
+                            binding.equipment_resolved_weapon_root = rig
+                                .right_prop_attachment
+                                .and_then(|index| binding.joint_frames_scratch.get(index).copied())
+                                .and_then(|frame| {
+                                    crate::weapon_grip::weapon_root_from_authored_prop_frame(
+                                        presentation,
+                                        frame,
+                                    )
+                                });
+                        }
+                        if binding.equipment_ik_residual_diag_cooldown <= 0.0 {
+                            newengine_ulog_api::ulog::warn!(
+                                "fps-character: authored equipment support IK failed player={}: {}",
+                                player.stable_u64(),
+                                error,
+                            );
+                            binding.equipment_ik_residual_diag_cooldown =
+                                EQUIPMENT_SUPPORT_IK_RESIDUAL_DIAG_INTERVAL_SECONDS;
+                        }
                     }
                 }
-                Ok(None) => {
-                    // Never leave the rendered weapon on a stale READY transform while the current
-                    // authored rifle pose has already moved the firing-side prop socket. Bilateral
-                    // solving is the preferred terminal contract, but a transient/reach failure must
-                    // still publish this frame's native firing socket so weapon and arms stay attached.
-                    if strict_rifle_contact_contract {
-                        binding.equipment_resolved_weapon_root = rig
-                            .right_prop_attachment
-                            .and_then(|index| binding.joint_frames_scratch.get(index).copied())
-                            .and_then(|frame| {
-                                crate::weapon_grip::weapon_root_from_authored_prop_frame(
-                                    presentation,
-                                    frame,
-                                )
-                            });
-                    }
-                }
+            }
+        }
+    }
+    // Stationary TPP AIM has a hard presentation invariant: the frame may not leave the weapon on
+    // the pre-AIM/READY direction while head-look already consumed live view yaw/pitch. Walking can
+    // rotate the actor root and accidentally hide a missing weapon writer, so enforce the idle path
+    // explicitly after all authored/support-IK work. If the normal solve already aligned the sight,
+    // the rigid delta is identity; otherwise chest, both arms, prop sockets and weapon turn together.
+    if equipment_presentation_active
+        && strict_rifle_family
+        && equipment_stance == EquipmentPresentationStance::Aim
+        && !first_person_active
+        && frame.native_turn_allowed
+        && !strict_rifle_contract_missing
+        && rifle_aim_alpha > 1.0e-4
+    {
+        if let (Some(presentation), Some(rig)) =
+            (weapon_presentation.as_ref(), binding.equipment_ik.as_ref())
+        {
+            match apply_strict_rifle_tpp_rigid_aim_fallback(
+                presentation,
+                &binding.skeleton,
+                &binding.animation_runtime,
+                &mut binding.current_locals,
+                &mut binding.joint_frames_scratch,
+                rig,
+                rifle_aim_alpha,
+                rifle_view_forward_model,
+                &binding.equipment_aim_controller,
+            ) {
+                Ok(Some(root)) => binding.equipment_resolved_weapon_root = Some(root),
+                Ok(None) => {}
                 Err(error) => {
-                    if strict_rifle_contact_contract {
-                        binding.equipment_resolved_weapon_root = rig
-                            .right_prop_attachment
-                            .and_then(|index| binding.joint_frames_scratch.get(index).copied())
-                            .and_then(|frame| {
-                                crate::weapon_grip::weapon_root_from_authored_prop_frame(
-                                    presentation,
-                                    frame,
-                                )
-                            });
-                    }
                     if binding.equipment_ik_residual_diag_cooldown <= 0.0 {
                         newengine_ulog_api::ulog::warn!(
-                            "fps-character: authored equipment support IK failed player={}: {}",
+                            "fps-character: stationary rifle AIM terminal enforcement failed player={}: {}",
                             player.stable_u64(),
                             error,
                         );
@@ -396,25 +568,38 @@ fn finalize_player_pose_and_palette(
     timing.palette_ms = phase_started.elapsed().as_secs_f32() * 1000.0;
 
     let phase_started = std::time::Instant::now();
+    let secondary_motion_needs_joint_frames = binding.skeletal_secondary_motion.is_some();
     binding.joint_frames_scratch.clear();
-    binding
-        .joint_frames_scratch
-        .reserve(binding.skeleton.joints.len());
-    for index in 0..binding.skeleton.joints.len() {
-        // Skin palette is a deformation matrix. Multiplying it by the authored bind
-        // frame reconstructs the absolute current-frame joint transform after all
-        // animation/head-follow corrections: P * (S*B) = S*A.
-        let frame = binding.palette_scratch[index] * binding.bind_joint_frames[index];
-        binding.joint_frames_scratch.push(frame);
+    if secondary_motion_needs_joint_frames {
+        binding
+            .joint_frames_scratch
+            .reserve(binding.skeleton.joints.len());
+        for index in 0..binding.skeleton.joints.len() {
+            // Secondary motion consumes arbitrary authored chain/collider joints, so it keeps the
+            // complete current-frame table. Characters without it do not pay this O(joints) pass.
+            let frame = binding.palette_scratch[index] * binding.bind_joint_frames[index];
+            binding.joint_frames_scratch.push(frame);
+        }
     }
     let foot_pose = if noclip_enabled {
         None
     } else {
         binding.foot_joints.and_then(|feet| {
-            let left = binding.joint_frames_scratch.get(feet.left)?;
-            let right = binding.joint_frames_scratch.get(feet.right)?;
-            let left_bind = binding.bind_joint_frames.get(feet.left)?;
-            let right_bind = binding.bind_joint_frames.get(feet.right)?;
+            let left_bind = *binding.bind_joint_frames.get(feet.left)?;
+            let right_bind = *binding.bind_joint_frames.get(feet.right)?;
+            let (left, right) = if secondary_motion_needs_joint_frames {
+                (
+                    *binding.joint_frames_scratch.get(feet.left)?,
+                    *binding.joint_frames_scratch.get(feet.right)?,
+                )
+            } else {
+                // Foot contact needs two absolute frames, not a reconstructed table for the whole
+                // skeleton. Rebuild those two directly from the deformation palette.
+                (
+                    *binding.palette_scratch.get(feet.left)? * left_bind,
+                    *binding.palette_scratch.get(feet.right)? * right_bind,
+                )
+            };
 
             // Skeleton foot anchors normally sit at the ankle/foot-bone origin rather than
             // on the shoe sole. Calibrate that static bind-height out before contact testing.
@@ -469,7 +654,8 @@ fn finalize_player_pose_and_palette(
     // frame. The heavier affine/max-magnitude contract is a secondary runtime acceptance guard;
     // sampling it avoids a second full palette walk in the visual hot path while transitions still
     // validate immediately before a newly authored pose is presented.
-    if should_run_player_palette_runtime_validation(player.stable_u64(), frame_index, transitioned) {
+    if should_run_player_palette_runtime_validation(player.stable_u64(), frame_index, transitioned)
+    {
         let expected_palette_joints = binding.skeleton.joints.len();
         if let Err(error) = super::validation::validate_player_palette(
             &binding.palette_scratch,

@@ -108,6 +108,27 @@ impl PreStartGraphicsApp {
 
                         setting_label(
                             ui,
+                            "View distance",
+                            "Controls how far authored-world cells remain resident for rendering",
+                        );
+                        let before = self.settings.graphics.view_distance_meters;
+                        ui.add(
+                            egui::Slider::new(
+                                &mut self.settings.graphics.view_distance_meters,
+                                100.0..=2500.0,
+                            )
+                            .step_by(50.0)
+                            .suffix(" m"),
+                        );
+                        if (self.settings.graphics.view_distance_meters - before).abs()
+                            > f32::EPSILON
+                        {
+                            self.settings.graphics.mark_custom();
+                        }
+                        ui.end_row();
+
+                        setting_label(
+                            ui,
                             "LOD distance",
                             "Scales runtime visibility and LOD distance thresholds; 1.0x preserves authored/default distances",
                         );

@@ -2,6 +2,20 @@ include!("runtime_tick_presentation_special.rs");
 
 include!("runtime_tick_presentation_layers.rs");
 
+#[inline]
+fn equipment_weapon_aim_controller_active(
+    equipment_presentation_active: bool,
+    equipment_stance: EquipmentPresentationStance,
+    weapon_presentation_present: bool,
+) -> bool {
+    // Aim authority belongs to any equipped weapon with a presentation contract, not to a specific
+    // pose-family string. The old rifle-only gate silently disabled camera/sight convergence for
+    // pistols even when they provided complete ironsight calibration.
+    equipment_presentation_active
+        && weapon_presentation_present
+        && equipment_stance == EquipmentPresentationStance::Aim
+}
+
 /// Phase 2: evaluate locomotion and authored presentation layers. This phase owns animation
 /// cursors/state machines, but delegates final look/IK/continuity/palette construction to phase 3.
 fn evaluate_player_animation_presentation(
@@ -42,8 +56,11 @@ fn evaluate_player_animation_presentation(
     }
     binding.equipment_ik_residual_diag_cooldown =
         (binding.equipment_ik_residual_diag_cooldown - dt).max(0.0);
-    let rifle_aim_active = equipment_pose_family == Some("rifle")
-        && equipment_stance == EquipmentPresentationStance::Aim;
+    let weapon_aim_active = equipment_weapon_aim_controller_active(
+        equipment_presentation_active,
+        equipment_stance,
+        frame.weapon_presentation.is_some(),
+    );
     let aim_presentation_mode = if frame.first_person_active {
         WeaponAimPresentationMode::FirstPerson
     } else {
@@ -64,7 +81,7 @@ fn evaluate_player_animation_presentation(
         .filter(|forward| forward.is_finite() && forward.length_squared() > 1.0e-8)
         .or(frame.rifle_view_forward_model);
     binding.equipment_aim_controller.update(
-        rifle_aim_active,
+        weapon_aim_active,
         aim_presentation_mode,
         dt,
         frame.rifle_view_rotation_model,

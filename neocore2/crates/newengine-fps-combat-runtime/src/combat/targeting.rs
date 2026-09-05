@@ -238,23 +238,41 @@ pub(super) fn shot_origin_and_direction_with_profiles(
         .filter(|presentation| presentation.enabled)
         .map(|presentation| presentation.first_person_hip_convergence_m)
         .unwrap_or(12.0);
-    // The center-screen camera ray owns gameplay intent in both TPP and FPP. Presentation may lag,
-    // sway or recoil visually, but a rendered sight line must never become a second ballistic authority.
-    // Resolve one target point on the camera/reticle axis, then fire from the real (or obstruction-safe)
-    // muzzle toward that point. This preserves physical muzzle parallax at close range while making the
-    // reticle the unique target-selection contract.
+    // Hip fire remains camera-targeted. ADS is different: the rendered rear->front iron-sight line
+    // is the player's visible aiming instrument, so it becomes the ballistic target-selection
+    // authority whenever presentation has published a valid sight socket. The bullet still originates
+    // at the physical muzzle and converges onto that sight line at the authored ADS distance.
     let convergence_distance = if aiming {
         tuning.ads_center_screen_convergence_m()
     } else {
         hip_convergence.clamp(4.0, tuning.range.max(4.0))
     };
-    let aim_point = view_origin + camera_forward * convergence_distance;
+    let rendered_sight = aiming
+        .then(|| world.get::<EquippedWeaponSight>(player).copied())
+        .flatten()
+        .filter(|sight| {
+            sight.position.is_finite()
+                && sight.forward.is_finite()
+                && sight.forward.length_squared() > 1.0e-8
+        });
+    let (aim_axis_origin, aim_axis_forward) = rendered_sight
+        .map(|sight| (sight.position, sight.forward.normalize_or_zero()))
+        .unwrap_or((view_origin, camera_forward));
+    let aim_point = aim_axis_origin + aim_axis_forward * convergence_distance;
     let ballistic_forward = (aim_point - muzzle_origin).normalize_or_zero();
     let forward = if ballistic_forward.length_squared() > 1.0e-8 {
         ballistic_forward
     } else {
         muzzle_forward
     };
+    let spread_basis_delta =
+        if camera_forward.length_squared() > 1.0e-8 && aim_axis_forward.length_squared() > 1.0e-8 {
+            Quat::from_rotation_arc(camera_forward, aim_axis_forward).normalize_or_identity()
+        } else {
+            Quat::IDENTITY
+        };
+    let right = (spread_basis_delta * right).normalize_or_zero();
+    let up = (spread_basis_delta * up).normalize_or_zero();
 
     let spread_state = if aiming {
         profiles.spread.ads

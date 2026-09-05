@@ -3,7 +3,7 @@ use std::time::Instant;
 use newengine_time_api::{TimeBeginFrameRequestV1, TimeSnapshotV1};
 
 const PROFILER_SAMPLE_TOPIC: &str = "newengine.diagnostics.profiler.sample.v1";
-const FRAME_CADENCE_BASELINE_INTERVAL: u64 = 600;
+const FRAME_CADENCE_BASELINE_INTERVAL: u64 = 30;
 
 use crate::{
     constants::{HARD_MAX_FIXED_TICKS_PER_FRAME, SECONDS_PER_DAY},
@@ -80,11 +80,12 @@ impl RuntimeHostedTimeState {
         let frame_budget_ns = self.fixed_delta_ns.max(1);
         let slow_frame_threshold_ns = frame_budget_ns.saturating_mul(5) / 4;
         let cadence_slow = raw_delta_ns > slow_frame_threshold_ns || debt_dropped;
+        let cadence_hitch = raw_delta_ns > frame_budget_ns.saturating_mul(2) || debt_dropped;
         let cadence_baseline = self.frame_index > 0
             && self
                 .frame_index
                 .is_multiple_of(FRAME_CADENCE_BASELINE_INTERVAL);
-        if self.frame_index > 0 && (cadence_slow || cadence_baseline) {
+        if self.frame_index > 0 && (cadence_hitch || cadence_baseline) {
             let raw_delta_ms = raw_delta_ns as f64 / 1_000_000.0;
             let frame_budget_ms = frame_budget_ns as f64 / 1_000_000.0;
             let clamped_ms = self.last_clamped_delta_ns as f64 / 1_000_000.0;

@@ -31,9 +31,13 @@ pub fn install_fps_character_presentation_runtime_adapter(
     world.insert_resource(FpsCharacterPresentationRuntimeBinding(adapter));
 }
 
+const PRESENTATION_PROFILE_BASELINE_INTERVAL_FRAMES: u64 = 30;
+const PRESENTATION_PROFILE_HITCH_MS: f32 = 12.0;
+
 #[inline]
 fn should_emit_presentation_profile(frame_index: u64, total_ms: f32) -> bool {
-    total_ms >= 4.0 || frame_index.is_multiple_of(120)
+    total_ms >= PRESENTATION_PROFILE_HITCH_MS
+        || frame_index.is_multiple_of(PRESENTATION_PROFILE_BASELINE_INTERVAL_FRAMES)
 }
 
 #[derive(Clone, Copy, Debug, Default)]

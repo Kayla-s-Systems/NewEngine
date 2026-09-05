@@ -111,23 +111,26 @@ impl RenderFrameOrchestrator {
         // Keep authoring viewport LDR so grid/bounds/gizmos never bind an HDR-incompatible pipeline.
         let hdr_scene_enabled =
             runtime_profile.hdr_scene_enabled() && !external_preview_target && !editor_active;
-        let deferred_enabled =
-            runtime_profile.deferred_enabled() && !external_preview_target && !editor_debug_shading;
         let postfx_enabled =
             runtime_profile.postfx_enabled() && !external_preview_target && !editor_debug_shading;
         let shadows_enabled =
             runtime_profile.shadows_enabled() && !external_preview_target && !editor_debug_shading;
-        let scene_offscreen = hdr_scene_enabled || postfx_enabled;
-        let scene_color_format = if hdr_scene_enabled {
-            crate::render_controller::render_quality::SCENE_HDR_COLOR_FORMAT
-        } else if scope.direct_surface_viewport && !scene_offscreen {
-            // The Vulkan WSI contract is BGRA8_SRGB. A direct-to-surface LDR material
-            // pipeline must be baked against that exact render-pass format; offscreen
-            // LDR targets stay UNORM so they remain sampleable linear intermediates.
-            TextureFormat::Bgra8Srgb
-        } else {
-            TextureFormat::Bgra8Unorm
-        };
+        // Variant selection is shared with the loading-frame prewarm path so the warmed
+        // pipeline is the one this frame actually binds.
+        let scene_pipeline_variant =
+            crate::render_controller::render_quality::resolve_scene_pipeline_variant(
+                crate::render_controller::render_quality::ScenePipelineVariantInputs {
+                    hdr_scene_requested: runtime_profile.hdr_scene_enabled(),
+                    postfx_requested: runtime_profile.postfx_enabled(),
+                    deferred_requested: runtime_profile.deferred_enabled(),
+                    external_preview_target,
+                    editor_active,
+                    editor_debug_shading,
+                    direct_surface_viewport: scope.direct_surface_viewport,
+                },
+            );
+        let deferred_enabled = scene_pipeline_variant.deferred_enabled;
+        let scene_color_format = scene_pipeline_variant.scene_color_format;
         let lit = match controller.gpu.require_primary_lit_pipeline_for(
             scene_color_format,
             deferred_enabled,

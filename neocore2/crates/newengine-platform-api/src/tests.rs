@@ -6,7 +6,7 @@ fn app_config_keeps_engine_defaults() {
     assert_eq!(config.title.as_str(), "NewEngine");
     assert_eq!((config.width, config.height), (1600, 900));
     assert_eq!(config.display.render_scale, 1.0);
-    assert!(config.display.vsync);
+    assert!(!config.display.vsync);
 }
 
 #[test]

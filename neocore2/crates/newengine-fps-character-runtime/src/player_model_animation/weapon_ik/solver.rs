@@ -397,7 +397,8 @@ struct WeaponIkSolveResult {
     left_error_m: f32,
     socket_position_error_m: f32,
     socket_angular_error_deg: f32,
-    base_root: crate::weapon_grip::WeaponRootTransform,
+    /// Exact final root consumed by terminal hand contacts and rendered weapon attachment.
+    resolved_root: crate::weapon_grip::WeaponRootTransform,
 }
 
 #[allow(clippy::too_many_arguments)]

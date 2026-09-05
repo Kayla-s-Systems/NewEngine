@@ -8,14 +8,31 @@ use newengine_model_runtime::ydd_runtime::decode_runtime_ydd_prefabs;
 use parking_lot::Mutex;
 use std::sync::Arc;
 
-fn static_world_decode_concurrency(thread_pool: &ThreadPoolHandle) -> usize {
-    let available_workers = thread_pool.worker_threads();
-    // AssetManager serializes portions of its dictionary cache, so unbounded
-    // concurrency only creates contention. Scale modestly with the worker pool
-    // while preserving the historical three-job baseline on larger machines.
-    let adaptive_default = available_workers.saturating_sub(1).clamp(1, 3) as u32;
-    newengine_runtime_env::var_u32("NEWENGINE_STATIC_WORLD_DECODE_JOBS", adaptive_default, 1, 6)
+fn static_world_decode_concurrency(_thread_pool: &ThreadPoolHandle) -> usize {
+    // A decoded YDD can be tens of MiB before ECS/GPU admission. Running several
+    // dictionary decodes in parallel makes peak commit scale with job count and can
+    // exhaust the system before the ready packets are consumed. Keep the production
+    // default conservative; explicit profiling runs may raise it through the env gate.
+    newengine_runtime_env::var_u32("NEWENGINE_STATIC_WORLD_DECODE_JOBS", 1, 1, 6) as usize
+}
+
+fn static_world_decode_ready_source_limit() -> usize {
+    // Backpressure is based on decoded source packets, not only active worker jobs.
+    // Without this bound decode can outrun bounded ECS admission and retain hundreds
+    // of fully expanded mesh packets at once on dense authored maps.
+    newengine_runtime_env::var_u32("NEWENGINE_STATIC_WORLD_DECODE_READY_SOURCES", 1, 1, 32)
         as usize
+}
+
+#[inline]
+fn static_world_decode_resident_sources(state: &AuthoredStaticWorldStreamingState) -> usize {
+    state.decoded_cache.len().saturating_add(
+        state
+            .decode_jobs
+            .values()
+            .map(|job| job.sources.len())
+            .sum::<usize>(),
+    )
 }
 
 fn unresolved_sources_for_dictionary(
@@ -69,7 +86,12 @@ pub(super) fn submit_static_world_decode_jobs(
     thread_pool: &ThreadPoolHandle,
 ) {
     let max_jobs = static_world_decode_concurrency(thread_pool);
-    let free_slots = max_jobs.saturating_sub(state.decode_jobs.len());
+    let ready_source_limit = static_world_decode_ready_source_limit();
+    let resident_sources = static_world_decode_resident_sources(state);
+    let ready_slots = ready_source_limit.saturating_sub(resident_sources);
+    let free_slots = max_jobs
+        .saturating_sub(state.decode_jobs.len())
+        .min(ready_slots);
     if free_slots == 0 {
         return;
     }
@@ -82,11 +104,18 @@ pub(super) fn submit_static_world_decode_jobs(
         dictionaries.push(dictionary);
     }
 
+    let mut source_slots = ready_slots;
     for dictionary in dictionaries {
-        let sources = unresolved_sources_for_dictionary(state, &dictionary);
+        let mut sources = unresolved_sources_for_dictionary(state, &dictionary);
         if sources.is_empty() {
             continue;
         }
+        // A physical dictionary can expose multiple selectors. Decode only the number
+        // of source packets that can become resident now; the dictionary is requeued
+        // after this job so the remaining selectors stream in a later admission wave.
+        sources.truncate(source_slots.max(1));
+        source_slots = source_slots.saturating_sub(sources.len());
+
         let worker_sources = sources.clone();
         let result = Arc::new(Mutex::new(None));
         let result_out = Arc::clone(&result);
@@ -115,6 +144,9 @@ pub(super) fn submit_static_world_decode_jobs(
                 sources,
             },
         );
+        if source_slots == 0 {
+            break;
+        }
     }
 }
 
@@ -187,13 +219,20 @@ pub(super) fn poll_static_world_decode_jobs(state: &mut AuthoredStaticWorldStrea
 pub(super) fn decode_one_static_world_dictionary_synchronously(
     state: &mut AuthoredStaticWorldStreamingState,
 ) {
+    if static_world_decode_resident_sources(state) >= static_world_decode_ready_source_limit() {
+        return;
+    }
     let Some(dictionary) = state.decode_queue.pop_front() else {
         return;
     };
-    let sources = unresolved_sources_for_dictionary(state, &dictionary);
+    let mut sources = unresolved_sources_for_dictionary(state, &dictionary);
     if sources.is_empty() {
         return;
     }
+    let source_slots = static_world_decode_ready_source_limit()
+        .saturating_sub(static_world_decode_resident_sources(state))
+        .max(1);
+    sources.truncate(source_slots);
     match decode_runtime_ydd_prefabs(&sources) {
         Ok(mut decoded_packet) => {
             for source in &sources {

@@ -231,7 +231,7 @@ mod tests {
     use newengine_platform_api::{PlatformHdrModeV1, PlatformWindowModeV1};
 
     #[test]
-    fn unrequested_launch_settings_do_not_change_historical_platform_defaults() {
+    fn unrequested_launch_settings_keep_uncapped_platform_defaults() {
         let mut startup = StartupConfig::default();
         startup.launch_settings.display.window_mode = newengine_core::StartupWindowMode::Borderless;
         startup.launch_settings.display.vsync = false;
@@ -241,7 +241,7 @@ mod tests {
         let config = platform_config_from_startup_defaults(&startup);
 
         assert_eq!(config.display.window_mode, PlatformWindowModeV1::Windowed);
-        assert!(config.display.vsync);
+        assert!(!config.display.vsync);
         assert_eq!(config.display.render_scale, 1.0);
     }
 

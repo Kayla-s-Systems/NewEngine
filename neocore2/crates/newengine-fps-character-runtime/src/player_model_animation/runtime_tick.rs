@@ -10,6 +10,14 @@ enum EquipmentPresentationStance {
 const EQUIPMENT_SUPPORT_IK_RESIDUAL_WARN_THRESHOLD_M: f32 = 0.025;
 const EQUIPMENT_SOCKET_ANGULAR_WARN_THRESHOLD_DEG: f32 = 1.0;
 const EQUIPMENT_SUPPORT_IK_RESIDUAL_DIAG_INTERVAL_SECONDS: f32 = 2.0;
+const SKIN_PROFILE_BASELINE_INTERVAL_FRAMES: u64 = 30;
+const SKIN_PROFILE_HITCH_MS: f32 = 8.0;
+
+#[inline]
+fn should_emit_skin_profile(frame_index: u64, total_ms: f32) -> bool {
+    total_ms >= SKIN_PROFILE_HITCH_MS
+        || frame_index.is_multiple_of(SKIN_PROFILE_BASELINE_INTERVAL_FRAMES)
+}
 
 #[inline]
 fn semantic_f32(state: &ResolvedAnimationSemanticState, key: &str, fallback: f32) -> f32 {
@@ -365,7 +373,10 @@ pub(crate) fn tick_player_skin_animation(
     }
 
     let total_ms = tick_started.elapsed().as_secs_f32() * 1000.0;
-    if total_ms >= 1.0 || frame_index.is_multiple_of(120) {
+    // Profiler delivery is synchronous (JSON encode -> event bus -> plugin decode/state lock).
+    // Sampling every already-slow frame creates observer feedback and steals CPU from the frame we
+    // are measuring. Keep a 30-frame baseline and preserve all >=8 ms animation hitches.
+    if should_emit_skin_profile(frame_index, total_ms) {
         let payload = serde_json::json!({
             "schema": "newengine.diagnostics.profiler.sample.v1",
             "category": "animation.skin",

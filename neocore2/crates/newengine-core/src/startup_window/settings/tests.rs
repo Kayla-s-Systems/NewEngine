@@ -48,10 +48,12 @@ mod tests {
         let mut settings = StartupLaunchSettings::default();
         assert_eq!(settings.graphics.shadow_cascade_count, 0);
         assert_eq!(settings.graphics.shadow_map_resolution, 0);
+        settings.graphics.view_distance_meters = 99_999.0;
         settings.graphics.lod_distance_scale = 9.0;
         settings.graphics.shadow_cascade_count = 99;
         settings.graphics.shadow_map_resolution = 3000;
         settings.normalize();
+        assert_eq!(settings.graphics.view_distance_meters, 2500.0);
         assert_eq!(settings.graphics.lod_distance_scale, 2.0);
         assert_eq!(settings.graphics.shadow_cascade_count, 4);
         assert_eq!(settings.graphics.shadow_map_resolution, 4096);
@@ -71,6 +73,7 @@ mod tests {
         graphics.normalize();
 
         assert_eq!(graphics.preset, GraphicsPreset::Custom);
+        assert_eq!(graphics.view_distance_meters, 1500.0);
         assert_eq!(graphics.msaa_samples, 8);
         assert!(!graphics.fxaa_enabled);
         assert!(graphics.ssao_enabled);

@@ -1,24 +1,40 @@
 /// Bridge the already-authoritative player animation palette into the provider-neutral
 /// render.hair pose registry. Hair never evaluates animation graphs itself.
 pub(crate) fn publish_player_hair_pose(world: &mut World, player: EntityId, model_to_world: Mat4) {
-    let Some(pose) = world
-        .get::<newengine_engine_runtime::gameplay::PlayerSkinPose>(player)
-        .cloned()
-    else {
-        return;
-    };
     let pose_id = player.stable_u64();
     if pose_id == 0 {
         return;
     }
+
+    // Most player models do not have a runtime hair instance. Do not clone/convert an entire
+    // skin palette unless the render hair scene actually consumes this player's pose.
+    let hair_pose_consumed = world
+        .resource::<HairSceneV1>()
+        .is_some_and(|scene| scene.instances.iter().any(|instance| instance.skin_pose_id == Some(pose_id)));
+    if !hair_pose_consumed {
+        return;
+    }
+
+    // Borrow only long enough to project the palette into the provider-neutral hair contract.
+    // The old `.cloned()` path duplicated Vec<Mat4> before immediately walking it again.
+    let Some((revision, joint_deforms)) = world
+        .get::<newengine_engine_runtime::gameplay::PlayerSkinPose>(player)
+        .map(|pose| {
+            (
+                pose.revision,
+                pose.palette
+                    .iter()
+                    .map(|matrix| matrix.to_cols_array())
+                    .collect(),
+            )
+        })
+    else {
+        return;
+    };
     let hair_pose = HairSkinPoseV1 {
         pose_id,
-        revision: pose.revision,
-        joint_deforms: pose
-            .palette
-            .iter()
-            .map(|matrix| matrix.to_cols_array())
-            .collect(),
+        revision,
+        joint_deforms,
     };
 
     if world.resource::<HairSkinPoseRegistryV1>().is_none() {

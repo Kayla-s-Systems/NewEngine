@@ -214,6 +214,77 @@ mod transition_tests {
     }
 
     #[test]
+    fn stationary_tpp_weapon_view_consumes_same_live_yaw_pitch_as_head_look() {
+        let visual_world = Quat::from_rotation_y(0.20);
+        let model_view = semantic_view_rotation_model(visual_world, 0.55, -0.18)
+            .expect("semantic TPP weapon view");
+        let resolved_world = (visual_world * model_view).normalize_or_identity();
+        let expected_world =
+            Quat::from_euler(EulerRot::YXZ, 0.55, -0.18, 0.0).normalize_or_identity();
+        let actual_forward = (resolved_world * -Vec3::Z).normalize_or_zero();
+        let expected_forward = (expected_world * -Vec3::Z).normalize_or_zero();
+        assert!(actual_forward.dot(expected_forward) > 0.999_999);
+    }
+
+    #[test]
+    fn weapon_aim_controller_activation_is_weapon_driven_not_rifle_family_driven() {
+        assert!(equipment_weapon_aim_controller_active(
+            true,
+            EquipmentPresentationStance::Aim,
+            true,
+        ));
+        assert!(
+            !equipment_weapon_aim_controller_active(true, EquipmentPresentationStance::Ready, true,),
+            "hip/ready hold must not acquire procedural sight authority"
+        );
+        assert!(
+            !equipment_weapon_aim_controller_active(true, EquipmentPresentationStance::Aim, false,),
+            "non-weapon equipment must not acquire a camera sight controller"
+        );
+        assert!(!equipment_weapon_aim_controller_active(
+            false,
+            EquipmentPresentationStance::Aim,
+            true,
+        ));
+    }
+
+    #[test]
+    fn procedural_ads_waits_for_authored_raise_then_converges_to_filtered_sight() {
+        assert_eq!(weapon_ads_alignment_alpha(0.0), 0.0);
+        assert!(weapon_ads_alignment_alpha(0.10) > 0.0);
+        assert!((weapon_ads_alignment_alpha(1.0) - 1.0).abs() <= 1.0e-6);
+
+        let authored = -Vec3::Z;
+        let filtered = Vec3::new(-0.35, 0.12, -1.0).normalize_or_zero();
+        let early = staged_weapon_sight_target(authored, Some(filtered), 0.20)
+            .expect("AIM must begin rotating the sight on the first non-zero aim interval");
+        assert!(early.dot(filtered) > authored.dot(filtered));
+        let mid = staged_weapon_sight_target(authored, Some(filtered), 0.65)
+            .expect("mid-transition procedural target");
+        assert!(mid.dot(authored) > filtered.dot(authored));
+        assert!(mid.dot(filtered) > authored.dot(filtered));
+        let full =
+            staged_weapon_sight_target(authored, Some(filtered), 1.0).expect("full ADS target");
+        assert!(full.dot(filtered) > 0.999_999);
+    }
+
+    #[test]
+    fn filtered_sight_rotation_points_forward_at_filtered_target() {
+        let camera = Quat::from_euler(
+            newengine_math::EulerRot::YXZ,
+            18.0_f32.to_radians(),
+            -7.0_f32.to_radians(),
+            0.0,
+        );
+        let filtered = Vec3::new(-0.42, 0.08, -1.0).normalize_or_zero();
+        let rotated =
+            weapon_view_rotation_for_sight_target(camera, filtered).expect("filtered aim rotation");
+        let forward = (rotated * -Vec3::Z).normalize_or_zero();
+        assert!(forward.dot(filtered) > 0.999_999);
+        assert!(rotated.is_finite());
+    }
+
+    #[test]
     fn fall_presentation_selects_authored_height_bands_deterministically() {
         let select = |distance| select_fall_presentation_band(distance, true, true, true, 2.0, 5.0);
         assert_eq!(select(0.0), Some(FallPresentationBand::Low));
@@ -1089,18 +1160,18 @@ mod transition_tests {
         let left_after = frames[rig.left_palm].transform_point3(Vec3::ZERO);
         let right_target = crate::weapon_grip::weapon_hand_owned_right_palm_position(
             &presentation,
-            final_result.base_root,
+            final_result.resolved_root,
         );
         let left_target = crate::weapon_grip::weapon_ready_left_palm_position(
             &presentation,
-            final_result.base_root,
+            final_result.resolved_root,
         );
         let left_before_error = (left_before - left_target).length();
         let right_after_error = (right_after - right_target).length();
         let left_after_error = (left_after - left_target).length();
         assert!(
             final_result
-                .base_root
+                .resolved_root
                 .position
                 .distance(authored_root.position)
                 <= 1.0e-6,
@@ -1108,7 +1179,7 @@ mod transition_tests {
         );
         assert!(
             final_result
-                .base_root
+                .resolved_root
                 .rotation
                 .dot(authored_root.rotation)
                 .abs()
@@ -1131,7 +1202,7 @@ mod transition_tests {
             );
         }
         let resolved_handle =
-            crate::weapon_grip::weapon_handle_position(&presentation, final_result.base_root);
+            crate::weapon_grip::weapon_handle_position(&presentation, final_result.resolved_root);
         assert!(
             (resolved_handle - authored_handle).length() <= 1.0e-5,
             "third-person Ready/Aim must preserve authored firing-hand translation"
@@ -1211,7 +1282,7 @@ mod transition_tests {
         .expect("fallback root");
         assert!(
             unqualified_socket_result
-                .base_root
+                .resolved_root
                 .position
                 .distance(incompatible_socket_root.position)
                 > 1.0e-4,
@@ -1282,14 +1353,14 @@ mod transition_tests {
         .expect("socket root");
         assert!(
             socket_result
-                .base_root
+                .resolved_root
                 .position
                 .distance(expected_socket_root.position)
                 <= 1.0e-6
         );
         assert!(
             socket_result
-                .base_root
+                .resolved_root
                 .rotation
                 .dot(expected_socket_root.rotation)
                 .abs()
@@ -1309,7 +1380,7 @@ mod transition_tests {
         let socket_left_after = socket_frames[rig.left_palm].transform_point3(Vec3::ZERO);
         let socket_left_grip = crate::weapon_grip::weapon_ready_left_grip_position(
             &socket_presentation,
-            socket_result.base_root,
+            socket_result.resolved_root,
         );
         assert!(
             socket_left_after.distance(socket_left_grip) < socket_left_before_error,
@@ -1384,16 +1455,16 @@ mod transition_tests {
         .expect("TPP native sight-aligned root");
         let tpp_sight_after = crate::weapon_grip::weapon_sight_forward(
             &socket_presentation,
-            tpp_aim_result.base_root,
+            tpp_aim_result.resolved_root,
         );
         let tpp_handle_after = crate::weapon_grip::weapon_handle_position(
             &socket_presentation,
-            tpp_aim_result.base_root,
+            tpp_aim_result.resolved_root,
         );
         let tpp_stock_after = tpp_handle_after
             + crate::weapon_grip::weapon_handle_rotation(
                 &socket_presentation,
-                tpp_aim_result.base_root,
+                tpp_aim_result.resolved_root,
             ) * Vec3::new(
                 socket_presentation.stock_contact_from_handle[0],
                 socket_presentation.stock_contact_from_handle[1],
@@ -1459,7 +1530,7 @@ mod transition_tests {
         .expect("relative RMB entry root");
         let entry_sight = crate::weapon_grip::weapon_sight_forward(
             &socket_presentation,
-            relative_entry.base_root,
+            relative_entry.resolved_root,
         );
         assert!(
             entry_sight.dot(tpp_sight_before) > 0.999_99,
@@ -1511,7 +1582,7 @@ mod transition_tests {
         .expect("relative RMB moved root");
         let moved_sight = crate::weapon_grip::weapon_sight_forward(
             &socket_presentation,
-            relative_moved.base_root,
+            relative_moved.resolved_root,
         );
         assert!(
             moved_sight.dot(expected_relative_sight) > 0.999_9,
@@ -1522,10 +1593,10 @@ mod transition_tests {
             moved_sight,
         );
         assert!(
-            crate::weapon_grip::weapon_handle_position(&socket_presentation, relative_moved.base_root)
+            crate::weapon_grip::weapon_handle_position(&socket_presentation, relative_moved.resolved_root)
                 .distance(crate::weapon_grip::weapon_handle_position(
                     &socket_presentation,
-                    relative_entry.base_root,
+                    relative_entry.resolved_root,
                 ))
                 > 0.002,
             "relative ADS must move the firing-hand target instead of rotating around a frozen palm"
@@ -1573,14 +1644,14 @@ mod transition_tests {
         .expect("FPP qualified prop root");
         assert!(
             fpp_socket_result
-                .base_root
+                .resolved_root
                 .position
                 .distance(expected_fpp_socket_root.position)
                 <= 1.0e-6
         );
         assert!(
             fpp_socket_result
-                .base_root
+                .resolved_root
                 .rotation
                 .dot(expected_fpp_socket_root.rotation)
                 .abs()
@@ -1672,7 +1743,7 @@ mod transition_tests {
         .expect("native FPP shared aim root");
         let native_fpp_actual_sight = crate::weapon_grip::weapon_sight_forward(
             &socket_presentation,
-            native_fpp_result.base_root,
+            native_fpp_result.resolved_root,
         );
         assert!(
             native_fpp_actual_sight.dot(native_fpp_filtered_sight) > 0.999_9,
@@ -1680,7 +1751,7 @@ mod transition_tests {
         );
         assert!(
             native_fpp_result
-                .base_root
+                .resolved_root
                 .position
                 .distance(expected_fpp_socket_root.position)
                 > 0.001,
@@ -1757,11 +1828,11 @@ mod transition_tests {
         .expect("FPP weapon root");
         let right_target = crate::weapon_grip::weapon_hand_owned_right_palm_position(
             &presentation,
-            fpp_result.base_root,
+            fpp_result.resolved_root,
         );
         let left_target = crate::weapon_grip::weapon_ready_left_palm_position(
             &presentation,
-            fpp_result.base_root,
+            fpp_result.resolved_root,
         );
         let right_actual = fpp_frames[rig.right_palm].transform_point3(Vec3::ZERO);
         let left_actual = fpp_frames[rig.left_palm].transform_point3(Vec3::ZERO);
@@ -1785,11 +1856,133 @@ mod transition_tests {
             );
         }
         let resolved_handle =
-            crate::weapon_grip::weapon_handle_position(&presentation, fpp_result.base_root);
+            crate::weapon_grip::weapon_handle_position(&presentation, fpp_result.resolved_root);
         assert!(resolved_handle.distance(fpp_handle) <= 1.0e-5);
         let sight_forward =
-            crate::weapon_grip::weapon_sight_forward(&presentation, fpp_result.base_root);
+            crate::weapon_grip::weapon_sight_forward(&presentation, fpp_result.resolved_root);
         assert!(sight_forward.dot((view * -Vec3::Z).normalize_or_zero()) > 0.9999);
+    }
+
+    #[test]
+    fn coherent_runtime_rifle_prop_pair_is_valid_aim_authority_without_aim_clip_prop_keys() {
+        use newengine_model_skeleton_api::{ModelSkeletonAnchors, ModelSkeletonJointMetadata};
+        let names = [
+            "root",
+            "chest",
+            "r_shoulder",
+            "r_elbow",
+            "r_wrist",
+            "r_palm",
+            "r_prop",
+            "l_shoulder",
+            "l_elbow",
+            "l_wrist",
+            "l_palm",
+            "l_prop",
+        ];
+        let joints = names
+            .iter()
+            .enumerate()
+            .map(|(index, name)| ModelSkeletonJointMetadata {
+                index: index as u32,
+                tag: index as u32,
+                name: (*name).to_owned(),
+                parent: if index == 0 {
+                    None
+                } else {
+                    Some(
+                        names[if matches!(index, 2 | 7) {
+                            1
+                        } else if index == 1 {
+                            0
+                        } else {
+                            index - 1
+                        }]
+                        .to_owned(),
+                    )
+                },
+                parent_index: if index == 0 {
+                    None
+                } else if index == 1 {
+                    Some(0)
+                } else if index == 2 || index == 7 {
+                    Some(1)
+                } else {
+                    Some((index - 1) as u32)
+                },
+                position_ls: [
+                    0.0,
+                    0.0,
+                    if index == 6 || index == 11 {
+                        -0.25
+                    } else {
+                        0.0
+                    },
+                ],
+                rotation_ls: [0.0, 0.0, 0.0, 1.0],
+                scale_ls: [1.0, 1.0, 1.0],
+                flags: Vec::new(),
+            })
+            .collect();
+        let skeleton = ModelSkeletonMetadata {
+            source: "runtime-rifle-authority".to_owned(),
+            source_format: "test".to_owned(),
+            container_magic: "TEST".to_owned(),
+            byte_len: 0,
+            content_hash: String::new(),
+            decode_status: "ok".to_owned(),
+            joints,
+            anchors: ModelSkeletonAnchors {
+                root: "root".to_owned(),
+                hips: "root".to_owned(),
+                head: "chest".to_owned(),
+                left_hand: "l_palm".to_owned(),
+                right_hand: "r_palm".to_owned(),
+                left_foot: "root".to_owned(),
+                right_foot: "root".to_owned(),
+                eye: "chest".to_owned(),
+                eye_height: 0.0,
+            },
+        };
+        let runtime = AnimationSkeletonRuntime::compile(&skeleton, Mat4::IDENTITY.to_cols_array())
+            .expect("runtime");
+        let pose = skeleton
+            .joints
+            .iter()
+            .map(|j| JointLocalPose {
+                translation: j.position_ls,
+                rotation: j.rotation_ls,
+                scale: Some(j.scale_ls),
+            })
+            .collect::<Vec<_>>();
+        let mut frames = Vec::new();
+        rebuild_model_joint_frames(&runtime, &pose, &mut frames).expect("frames");
+        let rig = WeaponArmIkRig {
+            chest: 1,
+            right_clavicle: Some(1),
+            right_shoulder: 2,
+            right_elbow: 3,
+            right_wrist: 4,
+            right_palm: 5,
+            right_prop_helper: None,
+            right_prop_attachment: Some(6),
+            left_clavicle: Some(1),
+            left_shoulder: 7,
+            left_elbow: 8,
+            left_wrist: 9,
+            left_palm: 10,
+            left_prop_helper: None,
+            left_prop_attachment: Some(11),
+        };
+        let p = newengine_engine_runtime::gameplay::WeaponPresentationDefinition {
+            enabled: true,
+            handle_from_root: [0.0, 0.0, 0.0],
+            handle_rotation_from_root: [0.0, 0.0, 0.0, 1.0],
+            authored_socket_to_weapon_handle_basis: [0.0, 0.0, 0.0, 1.0],
+            ..Default::default()
+        }
+        .sanitized();
+        assert!(current_bilateral_weapon_root(&p, &rig, &frames).is_some(), "a coherent live rifle socket pair must keep AIM authority even when the selected AIM clip does not key the prop joints");
     }
 
     #[test]
@@ -1971,9 +2164,8 @@ mod transition_tests {
         assert!(repaired.position_residual_m <= 1.0e-5);
         assert!(repaired.angular_residual_deg <= 0.01);
 
-        let target =
-            (Quat::from_rotation_y(0.06) * Quat::from_rotation_x(-0.03) * -Vec3::Z)
-                .normalize_or_zero();
+        let target = (Quat::from_rotation_y(0.06) * Quat::from_rotation_x(-0.03) * -Vec3::Z)
+            .normalize_or_zero();
 
         assert!(apply_native_rifle_bilateral_weapon_constraint(
             &presentation,
@@ -2077,14 +2269,14 @@ mod transition_tests {
         .expect("bilateral FPP production solve")
         .expect("bilateral FPP root");
         let fpp_rear =
-            crate::weapon_grip::weapon_rear_sight_position(&presentation, fpp_result.base_root);
+            crate::weapon_grip::weapon_rear_sight_position(&presentation, fpp_result.resolved_root);
         let expected_fpp_rear = fpp_camera + fpp_view * fpp_eye_relief;
         assert!(
             fpp_rear.distance(expected_fpp_rear) <= 1.0e-4,
             "FPP full ADS rear sight must sit at authored eye relief rear={fpp_rear:?} expected={expected_fpp_rear:?}"
         );
         let fpp_sight =
-            crate::weapon_grip::weapon_sight_forward(&presentation, fpp_result.base_root);
+            crate::weapon_grip::weapon_sight_forward(&presentation, fpp_result.resolved_root);
         assert!(
             fpp_sight.dot(-Vec3::Z) > 0.999_9,
             "FPP rear->front sight must point through screen center"
@@ -2541,6 +2733,180 @@ mod transition_tests {
             left_actual.dot(left_arm_rotation).abs() > 0.999_999,
             "absolute ARMS must run after ADD and remain terminal for joints it owns"
         );
+    }
+
+    #[test]
+    fn rifle_upper_body_aim_moves_head_and_bilateral_grip_as_one_rigid_system() {
+        use newengine_model_skeleton_api::{ModelSkeletonAnchors, ModelSkeletonJointMetadata};
+
+        let names = [
+            "root",
+            "chest",
+            "head",
+            "r_shoulder",
+            "r_elbow",
+            "r_wrist",
+            "r_palm",
+            "r_prop",
+            "l_shoulder",
+            "l_elbow",
+            "l_wrist",
+            "l_palm",
+            "l_prop",
+        ];
+        let parent = [
+            None,
+            Some(0),
+            Some(1),
+            Some(1),
+            Some(3),
+            Some(4),
+            Some(5),
+            Some(5),
+            Some(1),
+            Some(8),
+            Some(9),
+            Some(10),
+            Some(10),
+        ];
+        let local = [
+            [0.0, 0.0, 0.0],
+            [0.0, 1.20, 0.0],
+            [0.0, 0.38, -0.02],
+            [-0.18, 0.14, 0.0],
+            [-0.03, -0.22, -0.09],
+            [0.01, -0.20, -0.14],
+            [0.0, -0.04, -0.03],
+            [0.12, -0.02, -0.22],
+            [0.18, 0.14, 0.0],
+            [0.03, -0.22, -0.09],
+            [-0.01, -0.20, -0.14],
+            [0.0, -0.04, -0.03],
+            [-0.12, -0.02, -0.22],
+        ];
+        let joints = names
+            .iter()
+            .enumerate()
+            .map(|(index, name)| ModelSkeletonJointMetadata {
+                index: index as u32,
+                tag: index as u32,
+                name: (*name).to_owned(),
+                parent: parent[index].map(|p| names[p].to_owned()),
+                parent_index: parent[index].map(|p| p as u32),
+                position_ls: local[index],
+                rotation_ls: [0.0, 0.0, 0.0, 1.0],
+                scale_ls: [1.0, 1.0, 1.0],
+                flags: Vec::new(),
+            })
+            .collect::<Vec<_>>();
+        let skeleton = ModelSkeletonMetadata {
+            source: "rifle-upper-body-aim-test".to_owned(),
+            source_format: "test".to_owned(),
+            container_magic: "TEST".to_owned(),
+            byte_len: 0,
+            content_hash: String::new(),
+            decode_status: "ok".to_owned(),
+            joints,
+            anchors: ModelSkeletonAnchors {
+                root: "root".to_owned(),
+                hips: "root".to_owned(),
+                head: "head".to_owned(),
+                left_hand: "l_palm".to_owned(),
+                right_hand: "r_palm".to_owned(),
+                left_foot: "root".to_owned(),
+                right_foot: "root".to_owned(),
+                eye: "head".to_owned(),
+                eye_height: 0.0,
+            },
+        };
+        let runtime = AnimationSkeletonRuntime::compile(&skeleton, Mat4::IDENTITY.to_cols_array())
+            .expect("compile rifle upper-body skeleton");
+        let mut pose = skeleton
+            .joints
+            .iter()
+            .map(|joint| JointLocalPose {
+                translation: joint.position_ls,
+                rotation: joint.rotation_ls,
+                scale: Some(joint.scale_ls),
+            })
+            .collect::<Vec<_>>();
+        let rig = WeaponArmIkRig {
+            chest: 1,
+            right_clavicle: Some(1),
+            right_shoulder: 3,
+            right_elbow: 4,
+            right_wrist: 5,
+            right_palm: 6,
+            right_prop_helper: None,
+            right_prop_attachment: Some(7),
+            left_clavicle: Some(1),
+            left_shoulder: 8,
+            left_elbow: 9,
+            left_wrist: 10,
+            left_palm: 11,
+            left_prop_helper: None,
+            left_prop_attachment: Some(12),
+        };
+        let mut frames = Vec::new();
+        rebuild_model_joint_frames(&runtime, &pose, &mut frames).expect("initial FK");
+
+        let relative_props_before = frames[7].inverse() * frames[12];
+        let right_palm_to_prop_before = frames[6].inverse() * frames[7];
+        let left_palm_to_prop_before = frames[11].inverse() * frames[12];
+        let target = (Quat::from_rotation_y(18.0_f32.to_radians())
+            * Quat::from_rotation_x(-9.0_f32.to_radians())
+            * -Vec3::Z)
+            .normalize_or_zero();
+
+        assert!(apply_native_rifle_upper_body_aim_delta(
+            &skeleton,
+            &runtime,
+            &mut pose,
+            &mut frames,
+            &rig,
+            -Vec3::Z,
+            target,
+        )
+        .expect("upper-body rifle aim"));
+
+        let head_forward = frames[2].transform_vector3(-Vec3::Z).normalize_or_zero();
+        let right_prop_forward = frames[7].transform_vector3(-Vec3::Z).normalize_or_zero();
+        let left_prop_forward = frames[12].transform_vector3(-Vec3::Z).normalize_or_zero();
+        assert!(head_forward.dot(target) > 0.999_99);
+        assert!(right_prop_forward.dot(target) > 0.999_99);
+        assert!(left_prop_forward.dot(target) > 0.999_99);
+
+        let relative_props_after = frames[7].inverse() * frames[12];
+        let right_palm_to_prop_after = frames[6].inverse() * frames[7];
+        let left_palm_to_prop_after = frames[11].inverse() * frames[12];
+        for (before, after, label) in [
+            (
+                relative_props_before,
+                relative_props_after,
+                "bilateral prop pair",
+            ),
+            (
+                right_palm_to_prop_before,
+                right_palm_to_prop_after,
+                "right palm/prop",
+            ),
+            (
+                left_palm_to_prop_before,
+                left_palm_to_prop_after,
+                "left palm/prop",
+            ),
+        ] {
+            let (_, before_rot, before_pos) = before.to_scale_rotation_translation();
+            let (_, after_rot, after_pos) = after.to_scale_rotation_translation();
+            assert!(
+                before_pos.distance(after_pos) <= 1.0e-5,
+                "{label} translation must remain rigid"
+            );
+            assert!(
+                before_rot.dot(after_rot).abs() > 0.999_999,
+                "{label} rotation must remain rigid"
+            );
+        }
     }
 
     #[test]

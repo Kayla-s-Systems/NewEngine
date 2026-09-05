@@ -1,6 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
-use newengine_core::render::{RenderApi, TextureFormat};
+use newengine_core::render::RenderApi;
 use newengine_core::{EngineResult, ThreadPoolHandle};
 use newengine_gameplay_world_runtime::gameplay::{
     PreparedRenderMesh, PrimitiveGpuEvictionQueue, WorldActivationState,
@@ -133,16 +133,37 @@ impl RuntimeRenderController {
     /// Mesh residency is intentionally excluded from this method. Terrain,
     /// imported-model and primitive uploads are admitted by
     /// `pump_scene_gpu_residency`, which applies explicit per-frame budgets.
-    pub(super) fn prewarm_scene_pipeline(&mut self, r: &mut dyn RenderApi) -> EngineResult<()> {
+    pub(super) fn prewarm_scene_pipeline(
+        &mut self,
+        r: &mut dyn RenderApi,
+        window_w: u32,
+        window_h: u32,
+    ) -> EngineResult<()> {
         let started = std::time::Instant::now();
-        let scene_color_format = if self.runtime_profile().hdr_scene_enabled() {
-            super::super::render_quality::SCENE_HDR_COLOR_FORMAT
-        } else {
-            TextureFormat::Bgra8Unorm
-        };
+        // Resolve the exact variant the first playable frame will bind. The
+        // direct-surface predicate mirrors `begin_playable_surface_frame`; resolving a
+        // different variant here would warm a pipeline nothing binds.
+        let (requested_vp_w, requested_vp_h) = self.bridges.viewport.read_extent();
+        let direct_surface_viewport =
+            requested_vp_w == 0 && requested_vp_h == 0 && window_w > 0 && window_h > 0;
+        let editor_active = self.editor_viewport.is_active();
+        let editor_debug_shading = editor_active
+            && self.editor_viewport.shading() != newengine_ui_api::UiEditorViewportShading::Lit;
+        let variant = super::super::render_quality::resolve_scene_pipeline_variant(
+            super::super::render_quality::ScenePipelineVariantInputs {
+                hdr_scene_requested: self.runtime_profile().hdr_scene_enabled(),
+                postfx_requested: self.runtime_profile().postfx_enabled(),
+                deferred_requested: self.runtime_profile().deferred_enabled(),
+                external_preview_target: self.external_preview_target_active(),
+                editor_active,
+                editor_debug_shading,
+                direct_surface_viewport,
+            },
+        );
+        let scene_color_format = variant.scene_color_format;
         let _ = self.gpu.require_primary_lit_pipeline_for(
             scene_color_format,
-            self.runtime_profile().deferred_enabled(),
+            variant.deferred_enabled,
             r,
         )?;
 

@@ -44,6 +44,9 @@ pub struct StartupGraphicsSettings {
     pub shadow_pcss_filter_samples: u32,
     pub shadow_pcss_min_filter_radius_texels: f32,
     pub shadow_pcss_stable_kernel_texels: f32,
+    /// Effective world visibility radius in meters. Authored-world streaming converts this
+    /// to a map-cell render radius while camera projection keeps a farther safety clip.
+    pub view_distance_meters: f32,
     pub lod_quality: LodQuality,
     /// Global distance multiplier used by runtime visibility/LOD policy. 1.0 preserves authored/default distances.
     pub lod_distance_scale: f32,
@@ -95,6 +98,7 @@ impl Default for StartupGraphicsSettings {
             shadow_pcss_filter_samples: 12,
             shadow_pcss_min_filter_radius_texels: 0.18,
             shadow_pcss_stable_kernel_texels: 8.0,
+            view_distance_meters: 1000.0,
             lod_quality: LodQuality::High,
             lod_distance_scale: 1.0,
             texture_quality: TextureQuality::High,
@@ -126,6 +130,7 @@ impl StartupGraphicsSettings {
                 self.shadow_quality = ShadowQuality::Performance;
                 self.shadow_cascade_count = 2;
                 self.shadow_map_resolution = 512;
+                self.view_distance_meters = 500.0;
                 self.lod_distance_scale = 0.65;
                 self.texture_quality = TextureQuality::Low;
                 self.anisotropy = 2;
@@ -160,6 +165,7 @@ impl StartupGraphicsSettings {
                 self.shadow_quality = ShadowQuality::Balanced;
                 self.shadow_cascade_count = 3;
                 self.shadow_map_resolution = 1024;
+                self.view_distance_meters = 1000.0;
                 self.lod_distance_scale = 0.85;
                 self.texture_quality = TextureQuality::High;
                 self.anisotropy = 8;
@@ -194,6 +200,7 @@ impl StartupGraphicsSettings {
                 self.shadow_quality = ShadowQuality::Quality;
                 self.shadow_cascade_count = 4;
                 self.shadow_map_resolution = 2048;
+                self.view_distance_meters = 1500.0;
                 self.lod_distance_scale = 1.0;
                 self.texture_quality = TextureQuality::High;
                 self.anisotropy = 8;
@@ -228,6 +235,7 @@ impl StartupGraphicsSettings {
                 self.shadow_quality = ShadowQuality::Cinematic;
                 self.shadow_cascade_count = 4;
                 self.shadow_map_resolution = 4096;
+                self.view_distance_meters = 2500.0;
                 self.lod_distance_scale = 1.35;
                 self.texture_quality = TextureQuality::Ultra;
                 self.anisotropy = 16;
@@ -272,6 +280,7 @@ impl StartupGraphicsSettings {
         self.bloom_knee = self.bloom_knee.clamp(0.0, 5.0);
         self.bloom_intensity = self.bloom_intensity.clamp(0.0, 5.0);
         self.bloom_radius = self.bloom_radius.clamp(0.1, 5.0);
+        self.view_distance_meters = self.view_distance_meters.clamp(100.0, 2500.0);
         self.lod_distance_scale = self.lod_distance_scale.clamp(0.5, 2.0);
         self.shadow_max_distance = self.shadow_max_distance.clamp(4.0, 2048.0);
         self.shadow_softness = self.shadow_softness.clamp(0.0, 8.0);

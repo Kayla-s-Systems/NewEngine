@@ -128,6 +128,11 @@ impl PreStartGraphicsApp {
                                 );
                                 variable_row(
                                     ui,
+                                    "NEWENGINE_GRAPHICS_VIEW_DISTANCE_METERS",
+                                    &format!("{:.0}", self.settings.graphics.view_distance_meters),
+                                );
+                                variable_row(
+                                    ui,
                                     "NEWENGINE_GRAPHICS_LOD_DISTANCE_SCALE",
                                     &format!("{:.2}", self.settings.graphics.lod_distance_scale),
                                 );

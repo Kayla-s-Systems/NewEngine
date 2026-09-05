@@ -729,6 +729,8 @@ fn environment_without_listener_state_fails_open_instead_of_assuming_world_origi
     assert_eq!(resolved.state.source_send.gain, 0.0);
     assert_eq!(resolved.state.listener_send.gain, 0.0);
     assert_eq!(resolved.portal_gain, 0.0);
+    assert_eq!(resolved.state.portal_gain, 0.0);
+    assert_eq!(resolved.state.direct_path.gain, 1.0);
 }
 
 #[test]

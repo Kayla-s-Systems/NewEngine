@@ -307,7 +307,7 @@ impl RuntimeRenderController {
             .world()
             .resource::<newengine_scene::SceneFrameTimingTelemetry>()
         {
-            if timing.total_ms >= 8.0 || timing.frame_index.is_multiple_of(120) {
+            if should_emit_scene_frame_profile(timing.frame_index, timing.total_ms) {
                 let physics_timing = scene
                     .world()
                     .resource::<newengine_gameplay_world_runtime::gameplay::PhysicsStepTimingTelemetry>()
@@ -325,6 +325,14 @@ impl RuntimeRenderController {
 }
 
 const PROFILER_SAMPLE_TOPIC: &str = "newengine.diagnostics.profiler.sample.v1";
+const SCENE_PROFILE_BASELINE_INTERVAL_FRAMES: u64 = 30;
+const SCENE_PROFILE_HITCH_MS: f32 = 24.0;
+
+#[inline]
+fn should_emit_scene_frame_profile(frame_index: u64, total_ms: f32) -> bool {
+    total_ms >= SCENE_PROFILE_HITCH_MS
+        || frame_index.is_multiple_of(SCENE_PROFILE_BASELINE_INTERVAL_FRAMES)
+}
 
 #[inline]
 fn emit_scene_frame_profile(

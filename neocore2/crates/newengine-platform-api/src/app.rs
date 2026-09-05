@@ -79,7 +79,7 @@ impl Default for PlatformDisplayConfigV1 {
         Self {
             monitor_index: -1,
             window_mode: PlatformWindowModeV1::Windowed,
-            vsync: true,
+            vsync: false,
             refresh_rate_millihz: 0,
             render_scale: 1.0,
             hdr: PlatformHdrModeV1::Auto,

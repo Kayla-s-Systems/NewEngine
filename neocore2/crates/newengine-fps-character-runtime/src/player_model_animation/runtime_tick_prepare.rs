@@ -1,3 +1,19 @@
+#[inline]
+fn semantic_view_rotation_model(
+    visual_rotation_world: Quat,
+    view_yaw: f32,
+    view_pitch: f32,
+) -> Option<Quat> {
+    if !visual_rotation_world.is_finite() || !view_yaw.is_finite() || !view_pitch.is_finite() {
+        return None;
+    }
+    let view_world =
+        Quat::from_euler(EulerRot::YXZ, view_yaw, view_pitch, 0.0).normalize_or_identity();
+    let model = (visual_rotation_world.normalize_or_identity().inverse() * view_world)
+        .normalize_or_identity();
+    model.is_finite().then_some(model)
+}
+
 struct PlayerAnimationFrameInput {
     semantic: PlayerAnimationSemanticFrameState,
     fall_presentation_requested: bool,
@@ -130,14 +146,14 @@ fn prepare_player_animation_frame(
     } else {
         super::equipment_visual::equipped_weapon_secondary_rotation_offset_local(world, player)
     };
-    let rifle_view_rotation_model = if first_person_active || rifle_aim_alpha > 0.001 {
+    // FPP may retain camera-authored offsets. TPP AIM is resolved later from the exact semantic
+    // yaw/pitch that also drives authored head/look, preventing Idle from using a stale CameraRig
+    // while moving locomotion happens to rotate the body underneath the weapon.
+    let camera_view_rotation_model = if first_person_active || rifle_aim_alpha > 0.001 {
         player_rifle_view_rotation_model(world, player)
     } else {
         None
     };
-    let rifle_view_forward_model = rifle_view_rotation_model
-        .map(|rotation| (rotation * -Vec3::Z).normalize_or_zero())
-        .filter(|forward| forward.is_finite() && forward.length_squared() > 1.0e-8);
     let (weapon_presentation, equipment_pose_family) = active_weapon
         .and_then(|equipped| {
             world
@@ -193,6 +209,16 @@ fn prepare_player_animation_frame(
         .filter(|pitch| pitch.is_finite())
         .unwrap_or(0.0);
     let view_body_yaw_delta = newengine_math::wrap_pi(view_yaw - body_yaw);
+    let visual_rotation_world = (root_transform.rotation.normalize_or_identity()
+        * model_root_local.rotation.normalize_or_identity())
+    .normalize_or_identity();
+    let semantic_weapon_view_model = (!first_person_active && rifle_aim_alpha > 0.001)
+        .then(|| semantic_view_rotation_model(visual_rotation_world, view_yaw, view_pitch))
+        .flatten();
+    let rifle_view_rotation_model = semantic_weapon_view_model.or(camera_view_rotation_model);
+    let rifle_view_forward_model = rifle_view_rotation_model
+        .map(|rotation| (rotation * -Vec3::Z).normalize_or_zero())
+        .filter(|forward| forward.is_finite() && forward.length_squared() > 1.0e-8);
     let horizontal_speed = Vec3::new(world_velocity.x, 0.0, world_velocity.z).length();
     let native_turn_allowed = !noclip_enabled
         && !fall_presentation_requested
@@ -211,11 +237,12 @@ fn prepare_player_animation_frame(
         active_camera
             .and_then(|camera| world.get::<newengine_sim::CameraRigComp>(camera))
             .map(|rig| rig.0)
-            .filter(|camera| camera.position.is_finite() && camera.rotation.is_finite())
-            .map(|camera| {
-                let forward =
-                    (camera.rotation.normalize_or_identity() * -Vec3::Z).normalize_or_zero();
-                camera.position + forward * convergence_distance
+            .filter(|camera| camera.position.is_finite())
+            .and_then(|camera| {
+                let forward_model = rifle_view_forward_model?;
+                let forward_world = (visual_rotation_world * forward_model).normalize_or_zero();
+                (forward_world.is_finite() && forward_world.length_squared() > 1.0e-8)
+                    .then_some(camera.position + forward_world * convergence_distance)
             })
             .filter(|target| target.is_finite())
             .map(|target_ws| model_to_world.inverse().transform_point3(target_ws))

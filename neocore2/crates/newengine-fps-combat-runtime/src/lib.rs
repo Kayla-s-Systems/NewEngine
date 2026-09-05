@@ -17,10 +17,10 @@ use newengine_engine_runtime::gameplay::{
     resolve_weapon_impact, sync_equipped_weapon_runtime, try_collect_item_pickup, AIController,
     BallisticMaterialResponse, BallisticShotProfile, CharacterBody, CharacterControlState,
     CharacterLifeState, CombatActuationState, CombatIntent, CombatIntentKind,
-    EquippedWeaponBinding, EquippedWeaponEntity, EquippedWeaponMuzzle, FiringPatternDefinition,
-    FiringPatternKind, Health, HitscanWeaponTuning, Interactable, InteractionEvent,
-    InteractionEventBus, ItemCatalog, ItemInstanceId, ItemPickup, MeleeWeaponTuning,
-    PendingHitscan, PendingInteraction, PerceptionState, PhysicsSurface,
+    EquippedWeaponBinding, EquippedWeaponEntity, EquippedWeaponMuzzle, EquippedWeaponSight,
+    FiringPatternDefinition, FiringPatternKind, Health, HitscanWeaponTuning, Interactable,
+    InteractionEvent, InteractionEventBus, ItemCatalog, ItemInstanceId, ItemPickup,
+    MeleeWeaponTuning, PendingHitscan, PendingInteraction, PerceptionState, PhysicsSurface,
     PlayerAuthoredAnimationCapabilities, PlayerCommandFrame, PlayerController,
     PlayerInteractionTuning, PlayerStanceKind, PlayerStanceState, PlayerWeaponState,
     ResolvedWeaponStats, WeaponAccuracyModifiers, WeaponAccuracyState, WeaponActionKind,
@@ -46,7 +46,7 @@ use newengine_sim::{CharacterMotor, Velocity};
 use newengine_transform::Transform;
 
 #[cfg(test)]
-use newengine_engine_runtime::gameplay::{EquippedWeaponSight, WeaponReloadAnimationMarker};
+use newengine_engine_runtime::gameplay::WeaponReloadAnimationMarker;
 
 #[inline]
 fn resolved_weapon_stats(world: &World, player: EntityId) -> ResolvedWeaponStats {

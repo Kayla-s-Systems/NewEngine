@@ -15,7 +15,6 @@ pub(crate) fn weapon_sight_forward(
 /// This is deliberately root-in/root-out: native character rigs may have a prop socket that is a
 /// sibling of the anatomical palm, so the arm solver must consume the resulting root rather than
 /// inventing a separate camera-space attachment.
-#[cfg(test)]
 pub(crate) fn weapon_sight_aligned_root_around_handle(
     presentation: &WeaponPresentationDefinition,
     authored: WeaponRootTransform,

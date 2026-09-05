@@ -28,7 +28,8 @@ pub use settings::{
     startup_launch_settings, GraphicsPreset, LodQuality, ShadowFilterMode, ShadowQuality,
     StartupDisplaySettings, StartupGraphicsSettings, StartupHdrMode, StartupLaunchSettings,
     StartupWindowMode, TextureQuality, ENV_LOD_DISTANCE_SCALE, ENV_SHADOWS_ENABLED,
-    ENV_SHADOW_CASCADE_COUNT, ENV_SHADOW_MAP_RESOLUTION, STARTUP_SETTINGS_SCHEMA_VERSION,
+    ENV_SHADOW_CASCADE_COUNT, ENV_SHADOW_MAP_RESOLUTION, ENV_VIEW_DISTANCE_METERS,
+    STARTUP_SETTINGS_SCHEMA_VERSION,
 };
 
 use crate::startup::{ConfigPaths, StartupConfig};

@@ -171,6 +171,10 @@ impl StartupLaunchSettings {
             ENV_SHADOW_PCSS_STABLE_KERNEL_TEXELS,
             value.graphics.shadow_pcss_stable_kernel_texels.to_string(),
         );
+        set_env(
+            ENV_VIEW_DISTANCE_METERS,
+            value.graphics.view_distance_meters.to_string(),
+        );
         set_env(ENV_LOD_QUALITY, value.graphics.lod_quality.as_str());
         set_env(
             ENV_LOD_DISTANCE_SCALE,

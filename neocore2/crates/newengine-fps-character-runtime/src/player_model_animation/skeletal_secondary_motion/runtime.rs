@@ -5,8 +5,14 @@ struct SkeletalSecondaryMotionRuntime {
     chain_joints: Vec<usize>,
     collider_bindings: SecondaryMotionColliderBindings,
     attachment_local_points: Vec<Vec3>,
-    bind_chain_points: Vec<Vec3>,
-    bind_chain_frames: Vec<Mat4>,
+    bind_chain_frame_inverses: Vec<Mat4>,
+    bind_chain_parameters: Vec<f32>,
+    particle_guide_scratch: Vec<Vec3>,
+    chain_guide_scratch: Vec<Vec3>,
+    guide_centerline_scratch: Vec<Vec3>,
+    current_centerline_scratch: Vec<Vec3>,
+    desired_scratch: Vec<Vec3>,
+    collider_scratch: SecondaryMotionColliderSet,
     points: Vec<Vec3>,
     previous_points: Vec<Vec3>,
     previous_root_velocity_local: Vec3,
@@ -76,14 +82,39 @@ impl SkeletalSecondaryMotionRuntime {
             bind_chain_points.push(frame.transform_point3(Vec3::ZERO));
         }
 
+        let chain_capacity = chain_joints.len();
+        let bind_chain_frame_inverses = bind_chain_frames
+            .iter()
+            .copied()
+            .map(Mat4::inverse)
+            .collect::<Vec<_>>();
+        if bind_chain_frame_inverses.iter().any(|inverse| {
+            inverse
+                .to_cols_array()
+                .iter()
+                .any(|value| !value.is_finite())
+        }) {
+            return Err("skeletal secondary-motion bind chain contains singular frame".to_owned());
+        }
+        let bind_chain_parameters = (0..bind_chain_points.len())
+            .map(|lane| normalized_polyline_parameter(&bind_chain_points, lane))
+            .collect::<Vec<_>>();
+        let centerline_capacity = authored.centerline_pairs.len();
+
         Ok(Self {
             authored: authored.clone(),
             attachment_joint,
             chain_joints,
             collider_bindings,
             attachment_local_points,
-            bind_chain_points,
-            bind_chain_frames,
+            bind_chain_frame_inverses,
+            bind_chain_parameters,
+            particle_guide_scratch: Vec::with_capacity(bind_particles.len()),
+            chain_guide_scratch: Vec::with_capacity(chain_capacity),
+            guide_centerline_scratch: Vec::with_capacity(centerline_capacity),
+            current_centerline_scratch: Vec::with_capacity(centerline_capacity),
+            desired_scratch: Vec::with_capacity(chain_capacity),
+            collider_scratch: SecondaryMotionColliderSet::default(),
             points: bind_particles.clone(),
             previous_points: bind_particles,
             previous_root_velocity_local: Vec3::ZERO,
@@ -92,14 +123,6 @@ impl SkeletalSecondaryMotionRuntime {
             reset_pending: true,
             initialized: false,
         })
-    }
-
-    fn reset(&mut self, guide: &[Vec3], root_velocity_local: Vec3) {
-        self.points.clone_from_slice(guide);
-        self.previous_points.clone_from_slice(guide);
-        self.previous_root_velocity_local = root_velocity_local;
-        self.reset_pending = false;
-        self.initialized = true;
     }
 
     fn tick(
@@ -114,15 +137,16 @@ impl SkeletalSecondaryMotionRuntime {
         let attachment = *joint_frames
             .get(self.attachment_joint)
             .ok_or_else(|| "skeletal secondary-motion attachment frame missing".to_owned())?;
-        let particle_guide = self
-            .attachment_local_points
-            .iter()
-            .copied()
-            .map(|point| attachment.transform_point3(point))
-            .collect::<Vec<_>>();
-        let mut chain_guide = Vec::with_capacity(self.chain_joints.len());
+        self.particle_guide_scratch.clear();
+        self.particle_guide_scratch.extend(
+            self.attachment_local_points
+                .iter()
+                .copied()
+                .map(|point| attachment.transform_point3(point)),
+        );
+        self.chain_guide_scratch.clear();
         for (lane, joint) in self.chain_joints.iter().copied().enumerate() {
-            chain_guide.push(
+            self.chain_guide_scratch.push(
                 joint_frames
                     .get(joint)
                     .copied()
@@ -134,7 +158,13 @@ impl SkeletalSecondaryMotionRuntime {
                     .transform_point3(Vec3::ZERO),
             );
         }
-        let colliders = self.collider_bindings.resolve_from_joint_frames(joint_frames)?;
+        self.collider_bindings.resolve_from_joint_frames_into(
+            joint_frames,
+            &mut self.collider_scratch,
+        )?;
+        let particle_guide = &self.particle_guide_scratch;
+        let chain_guide = &self.chain_guide_scratch;
+        let colliders = &self.collider_scratch;
         let one_sided_back_normal = colliders
             .boxes
             .iter()
@@ -169,7 +199,13 @@ impl SkeletalSecondaryMotionRuntime {
         self.last_root_rotation = Some(root_rotation);
 
         if !self.initialized || self.reset_pending {
-            self.reset(&particle_guide, root_velocity_local);
+            self.points
+                .clone_from_slice(&self.particle_guide_scratch);
+            self.previous_points
+                .clone_from_slice(&self.particle_guide_scratch);
+            self.previous_root_velocity_local = root_velocity_local;
+            self.reset_pending = false;
+            self.initialized = true;
         } else if dt > 0.0 {
             let frame_dt = dt.clamp(1.0 / 240.0, 1.0 / 20.0);
             let substeps = usize::from(tuning.solver_substeps.max(1));
@@ -210,7 +246,7 @@ impl SkeletalSecondaryMotionRuntime {
                 for _ in 0..iterations {
                     pin_secondary_motion_particles(
                         &mut self.points,
-                        &particle_guide,
+                        particle_guide,
                         &self.authored,
                     );
                     for edge in &self.authored.edges {
@@ -226,7 +262,7 @@ impl SkeletalSecondaryMotionRuntime {
                     for bend in &self.authored.bends {
                         solve_secondary_motion_bend(
                             &mut self.points,
-                            &particle_guide,
+                            particle_guide,
                             &self.authored,
                             bend.indices,
                             bend.weights,
@@ -295,7 +331,7 @@ impl SkeletalSecondaryMotionRuntime {
                     }
                     pin_secondary_motion_particles(
                         &mut self.points,
-                        &particle_guide,
+                        particle_guide,
                         &self.authored,
                     );
                 }
@@ -310,22 +346,34 @@ impl SkeletalSecondaryMotionRuntime {
                         edge.damping,
                     );
                 }
-                pin_secondary_motion_particles(&mut self.points, &particle_guide, &self.authored);
+                pin_secondary_motion_particles(&mut self.points, particle_guide, &self.authored);
             }
         }
 
-        let guide_centerline = secondary_motion_centerline(&particle_guide, &self.authored);
-        let current_centerline = secondary_motion_centerline(&self.points, &self.authored);
-        let mut desired = chain_guide.clone();
+        secondary_motion_centerline_into(
+            particle_guide,
+            &self.authored,
+            &mut self.guide_centerline_scratch,
+        );
+        secondary_motion_centerline_into(
+            &self.points,
+            &self.authored,
+            &mut self.current_centerline_scratch,
+        );
+        self.desired_scratch.clear();
+        self.desired_scratch.extend_from_slice(chain_guide);
+        let guide_centerline = &self.guide_centerline_scratch;
+        let current_centerline = &self.current_centerline_scratch;
+        let desired = &mut self.desired_scratch;
         for (lane, desired_point) in desired
             .iter_mut()
             .enumerate()
             .take(self.chain_joints.len())
             .skip(self.authored.dynamic_start)
         {
-            let t = normalized_polyline_parameter(&self.bind_chain_points, lane);
-            *desired_point += sample_polyline_normalized(&current_centerline, t)
-                - sample_polyline_normalized(&guide_centerline, t);
+            let t = self.bind_chain_parameters[lane];
+            *desired_point += sample_polyline_normalized(current_centerline, t)
+                - sample_polyline_normalized(guide_centerline, t);
         }
         for lane in self.authored.dynamic_start..self.chain_joints.len() {
             let joint = self.chain_joints[lane];
@@ -357,8 +405,7 @@ impl SkeletalSecondaryMotionRuntime {
                 * Mat4::from_quat(bend)
                 * Mat4::from_translation(-chain_guide[lane])
                 * base_frame;
-            let bind_inverse = self.bind_chain_frames[lane].inverse();
-            let deformation = desired_frame * bind_inverse;
+            let deformation = desired_frame * self.bind_chain_frame_inverses[lane];
             if deformation
                 .to_cols_array()
                 .iter()

@@ -2,14 +2,36 @@
 
 use newengine_ecs::{EntityId, World};
 use newengine_engine_runtime::gameplay::{
-    apply_player_stance_geometry, emit_gameplay_event, is_player_controller_enabled,
-    update_player_stance_camera, CharacterBody, CharacterMotionTuning, PhysicsSurface,
-    PlayerCommandFrame, PlayerController, PlayerGroundState, PlayerLocomotionState,
+    active_equipped_weapon_binding, apply_player_stance_geometry, emit_gameplay_event,
+    is_player_controller_enabled, update_player_stance_camera, CharacterBody,
+    CharacterExertionState, CharacterMotionTuning, PhysicsSurface, PlayerCommandFrame,
+    PlayerController, PlayerGroundState, PlayerLocomotionState, PlayerMovementSpeeds,
     PlayerStanceKind, PlayerStanceState,
 };
 use newengine_gameplay_fps_api::{FpsActionFrame, FpsGameplayPolicySnapshot};
 use newengine_sim::{MotorInput, Velocity};
 use newengine_transform::Transform;
+
+#[inline]
+fn fps_ground_speed_multiplier(
+    movement: PlayerMovementSpeeds,
+    crouched: bool,
+    sprinting: bool,
+    aiming: bool,
+) -> f32 {
+    let movement = movement.sanitized();
+    if aiming {
+        // ADS owns deliberate combat locomotion. Use the character-authored walk/run ratio rather
+        // than a product hard-code, and never allow sprint to override it while the weapon is up.
+        (movement.walk / movement.run).clamp(0.05, 1.0)
+    } else if crouched {
+        movement.crouch_multiplier()
+    } else if sprinting {
+        movement.sprint_multiplier()
+    } else {
+        1.0
+    }
+}
 
 fn publish_jump_surface_event(
     world: &mut World,
@@ -115,9 +137,26 @@ pub fn apply_fps_character_commands(world: &mut World, dt: f32, fixed_tick: u64)
             continue;
         }
 
-        if !player_policy.allow_sprint {
-            if let Some(input) = world.get_mut::<MotorInput>(player) {
-                input.speed_mul = 1.0;
+        let crouched = stance.current == PlayerStanceKind::Crouched;
+        let aiming_with_weapon = actions.aim_held
+            && active_equipped_weapon_binding(world, player)
+                .is_some_and(|binding| binding.capabilities().aim);
+        let movement = world
+            .get::<PlayerMovementSpeeds>(player)
+            .copied()
+            .unwrap_or_default()
+            .sanitized();
+        let requested_sprint = world
+            .get::<MotorInput>(player)
+            .is_some_and(|input| input.speed_mul > 1.05);
+        let sprinting = player_policy.allow_sprint && requested_sprint && !aiming_with_weapon;
+        if let Some(input) = world.get_mut::<MotorInput>(player) {
+            input.speed_mul =
+                fps_ground_speed_multiplier(movement, crouched, sprinting, aiming_with_weapon);
+        }
+        if aiming_with_weapon {
+            if let Some(exertion) = world.get_mut::<CharacterExertionState>(player) {
+                exertion.sprinting = false;
             }
         }
 
@@ -225,6 +264,22 @@ mod tests {
     use newengine_gameplay_fps_api::action;
     use newengine_input_actions_api::ActionCommandFrame;
     use newengine_math::Vec3;
+
+    #[test]
+    fn ads_ground_speed_uses_authored_walk_ratio_and_suppresses_sprint() {
+        let movement = PlayerMovementSpeeds {
+            walk: 1.5,
+            run: 3.0,
+            sprint: 4.6,
+            crouch: 1.0,
+        };
+        assert!((fps_ground_speed_multiplier(movement, false, false, true) - 0.5).abs() <= 1.0e-6);
+        assert!((fps_ground_speed_multiplier(movement, false, true, true) - 0.5).abs() <= 1.0e-6);
+        assert!(
+            (fps_ground_speed_multiplier(movement, false, true, false) - (4.6 / 3.0)).abs()
+                <= 1.0e-6
+        );
+    }
 
     #[test]
     fn grounded_fps_jump_sets_vertical_velocity_and_clears_ground_state() {

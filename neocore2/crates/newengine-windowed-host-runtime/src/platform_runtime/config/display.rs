@@ -274,7 +274,7 @@ fn parse_display_config(value: Option<&Value>) -> PlatformDisplayConfigV1 {
         .map(parse_window_mode)
         .unwrap_or(PlatformWindowModeV1::Windowed);
 
-    let vsync = obj.get("vsync").and_then(Value::as_bool).unwrap_or(true);
+    let vsync = obj.get("vsync").and_then(Value::as_bool).unwrap_or(false);
 
     let refresh_rate_millihz = obj
         .get("refresh_rate_millihz")

@@ -1,11 +1,130 @@
 include!("weapon_ik/solver.rs");
 
+#[inline]
+fn weapon_ads_alignment_alpha(aim_alpha: f32) -> f32 {
+    // Directional authority starts on the very first non-zero AIM frame. The authored animation
+    // can still raise/shoulder the weapon, but it must never leave the muzzle frozen in READY while
+    // the head already follows the live aim intent. Smoothstep keeps the transition continuous.
+    let t = if aim_alpha.is_finite() {
+        aim_alpha.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    t * t * (3.0 - 2.0 * t)
+}
+
+#[inline]
+fn staged_weapon_sight_target(
+    authored_sight_forward: Vec3,
+    filtered_sight_forward: Option<Vec3>,
+    aim_alpha: f32,
+) -> Option<Vec3> {
+    let weight = weapon_ads_alignment_alpha(aim_alpha);
+    if weight <= 1.0e-5 {
+        return None;
+    }
+    let authored = authored_sight_forward.normalize_or_zero();
+    let filtered = filtered_sight_forward?.normalize_or_zero();
+    if !authored.is_finite()
+        || !filtered.is_finite()
+        || authored.length_squared() <= 1.0e-8
+        || filtered.length_squared() <= 1.0e-8
+    {
+        return None;
+    }
+    let target = authored.lerp(filtered, weight).normalize_or_zero();
+    (target.is_finite() && target.length_squared() > 1.0e-8).then_some(target)
+}
+
+#[inline]
+fn weapon_view_rotation_for_sight_target(
+    view_rotation_model: Quat,
+    sight_forward_model: Vec3,
+) -> Option<Quat> {
+    if !view_rotation_model.is_finite() || !sight_forward_model.is_finite() {
+        return None;
+    }
+    let view_rotation = view_rotation_model.normalize_or_identity();
+    let raw_forward = (view_rotation * -Vec3::Z).normalize_or_zero();
+    let target = sight_forward_model.normalize_or_zero();
+    if raw_forward.length_squared() <= 1.0e-8 || target.length_squared() <= 1.0e-8 {
+        return None;
+    }
+    Some((Quat::from_rotation_arc(raw_forward, target) * view_rotation).normalize_or_identity())
+}
+
+#[inline]
+fn current_bilateral_weapon_root(
+    presentation: &newengine_engine_runtime::gameplay::WeaponPresentationDefinition,
+    rig: &WeaponArmIkRig,
+    frames: &[Mat4],
+) -> Option<crate::weapon_grip::WeaponRootTransform> {
+    let (right, left) = rig.right_prop_attachment.zip(rig.left_prop_attachment)?;
+    crate::weapon_grip::weapon_root_from_bilateral_authored_prop_frames(
+        presentation,
+        *frames.get(right)?,
+        *frames.get(left)?,
+    )
+    .map(|pair| pair.root)
+}
 
 /// Apply third-person RMB/free-aim as an authored upper-body delta, not as a detached weapon-root
 /// correction. Native rifle prop sockets live under the wrists, so rotating both clavicle-owned arm
 /// chains moves the firing socket, both hands and the muzzle together while leaving neck/head
 /// authority untouched. Body turn-in-place may later consume large residual yaw and naturally
 /// recenters this local arm offset.
+fn apply_native_rifle_upper_body_aim_delta(
+    skeleton: &ModelSkeletonMetadata,
+    animation_runtime: &AnimationSkeletonRuntime,
+    pose: &mut [JointLocalPose],
+    frames: &mut Vec<Mat4>,
+    rig: &WeaponArmIkRig,
+    authored_sight_forward: Vec3,
+    target_sight_forward: Vec3,
+) -> Result<bool, String> {
+    let from = authored_sight_forward.normalize_or_zero();
+    let to = target_sight_forward.normalize_or_zero();
+    if !from.is_finite()
+        || !to.is_finite()
+        || from.length_squared() <= 1.0e-8
+        || to.length_squared() <= 1.0e-8
+    {
+        return Ok(false);
+    }
+
+    let mut delta = Quat::from_rotation_arc(from, to).normalize_or_identity();
+    if delta.w < 0.0 {
+        delta = Quat::from_xyzw(-delta.x, -delta.y, -delta.z, -delta.w);
+    }
+    // Keep camera/free-aim inside a believable torso envelope. Larger residual yaw belongs to
+    // turn-in-place/body-follow, not to independent arm stretching.
+    const MAX_UPPER_BODY_AIM_RADIANS: f32 = 55.0_f32.to_radians();
+    let angle = (2.0 * delta.w.clamp(-1.0, 1.0).acos()).abs();
+    if angle > MAX_UPPER_BODY_AIM_RADIANS {
+        delta = Quat::IDENTITY
+            .slerp(delta, MAX_UPPER_BODY_AIM_RADIANS / angle)
+            .normalize_or_identity();
+    }
+    if delta.dot(Quat::IDENTITY).abs() >= 0.999_999_9 {
+        return Ok(true);
+    }
+
+    // One chest-space writer rotates head, clavicles, both arms, authored prop sockets and weapon
+    // together. This preserves the bilateral grip exactly and removes the frame-to-frame feedback
+    // caused by solving the two arms independently toward a moving weapon root.
+    let chest_frame = *frames
+        .get(rig.chest)
+        .ok_or("rifle ADS chest frame missing")?;
+    let current_global = chest_frame
+        .to_scale_rotation_translation()
+        .1
+        .normalize_or_identity();
+    let desired_global = (delta * current_global).normalize_or_identity();
+    set_pose_joint_global_rotation(skeleton, pose, frames, rig.chest, desired_global)?;
+    refresh_model_joint_frames_subtree(animation_runtime, pose, frames, rig.chest)?;
+    Ok(true)
+}
+
 fn apply_native_rifle_clavicle_aim_delta(
     skeleton: &ModelSkeletonMetadata,
     animation_runtime: &AnimationSkeletonRuntime,
@@ -15,7 +134,8 @@ fn apply_native_rifle_clavicle_aim_delta(
     authored_sight_forward: Vec3,
     target_sight_forward: Vec3,
 ) -> Result<bool, String> {
-    let (Some(right_clavicle), Some(left_clavicle)) = (rig.right_clavicle, rig.left_clavicle) else {
+    let (Some(right_clavicle), Some(left_clavicle)) = (rig.right_clavicle, rig.left_clavicle)
+    else {
         return Ok(false);
     };
     let from = authored_sight_forward.normalize_or_zero();
@@ -58,18 +178,11 @@ fn apply_native_rifle_clavicle_aim_delta(
             .1
             .normalize_or_identity();
         let desired_global = (delta * current_global).normalize_or_identity();
-        set_pose_joint_global_rotation(
-            skeleton,
-            pose,
-            frames,
-            clavicle,
-            desired_global,
-        )?;
+        set_pose_joint_global_rotation(skeleton, pose, frames, clavicle, desired_global)?;
         refresh_model_joint_frames_subtree(animation_runtime, pose, frames, clavicle)?;
     }
     Ok(true)
 }
-
 
 /// Apply procedural sight alignment to a native TLOU-style bilateral grip without ever splitting the
 /// two authored prop branches. Both hand-prop attachments are solved toward one desired socket frame;
@@ -99,8 +212,12 @@ fn apply_first_person_bilateral_rigid_projection(
     };
     let Some(current_pair) = crate::weapon_grip::weapon_root_from_bilateral_authored_prop_frames(
         presentation,
-        *frames.get(right_socket).ok_or("FPP right prop frame missing")?,
-        *frames.get(left_socket).ok_or("FPP left prop frame missing")?,
+        *frames
+            .get(right_socket)
+            .ok_or("FPP right prop frame missing")?,
+        *frames
+            .get(left_socket)
+            .ok_or("FPP left prop frame missing")?,
     ) else {
         return Ok(false);
     };
@@ -391,7 +508,8 @@ fn apply_equipped_weapon_support_ik(
     let transition_prop_root = strict_native_rifle_contact_contract
         .then_some(authored_transition_weapon_root)
         .flatten()
-        .filter(|root| root.position.is_finite() && root.rotation.is_finite());
+        .filter(|root| root.position.is_finite() && root.rotation.is_finite())
+        .filter(|_| authored_prop_pair.is_none());
     if strict_native_rifle_contact_contract
         && prop_authority_enabled
         && bilateral_prop_indices.is_some()
@@ -403,7 +521,8 @@ fn apply_equipped_weapon_support_ik(
                 .to_owned(),
         );
     }
-    let native_bilateral_prop_owned = authored_prop_pair.is_some() || transition_prop_root.is_some();
+    let native_bilateral_prop_owned =
+        authored_prop_pair.is_some() || transition_prop_root.is_some();
     let authored_pair_position_residual_m = authored_prop_pair
         .map(|pair| pair.position_residual_m)
         .unwrap_or(0.0);
@@ -444,6 +563,7 @@ fn apply_equipped_weapon_support_ik(
     let filtered_aim_target = aim_controller
         .as_deref()
         .and_then(WeaponAimControllerState::sight_target);
+    let ads_alignment_alpha = weapon_ads_alignment_alpha(aim_alpha);
     let first_person_hand_root = (authored_prop_root.is_none()
         && first_person_active
         && authored_hand_contacts
@@ -456,7 +576,7 @@ fn apply_equipped_weapon_support_ik(
                 right_palm,
                 view_rotation,
                 filtered_aim_target,
-                aim_alpha,
+                ads_alignment_alpha,
                 recoil_alpha,
                 recoil_yaw_radians,
             )
@@ -493,7 +613,26 @@ fn apply_equipped_weapon_support_ik(
         }
     }
 
-    let native_aim_target = authored_prop_root.and(filtered_aim_target);
+    let native_aim_target = authored_prop_root.and_then(|root| {
+        staged_weapon_sight_target(
+            crate::weapon_grip::weapon_sight_forward(presentation, root),
+            filtered_aim_target,
+            aim_alpha,
+        )
+    });
+    // Compact hand-owned firearms (pistols/sidearms) do not necessarily expose a bilateral prop
+    // socket. They still need the exact same sight authority: rotate the weapon around the authored
+    // firing-handle contact, then let terminal arm IK rotate the wrist/forearm to that same root.
+    // Without this branch the AIM animation could raise the arms while the rendered pistol remained
+    // frozen in its READY orientation.
+    let authored_hand_aim_root = authored_hand_root.and_then(|root| {
+        let target = staged_weapon_sight_target(
+            crate::weapon_grip::weapon_sight_forward(presentation, root),
+            filtered_aim_target,
+            aim_alpha,
+        )?;
+        crate::weapon_grip::weapon_sight_aligned_root_around_handle(presentation, root, target, 1.0)
+    });
     // FPP ironsight is camera-primary, matching REDengine's ProceduralIronsightData ownership.
     // Build a full-ADS root whose rear sight sits at the authored eye-relief point on the camera
     // center line, then blend the current authored root toward it. Both hands are subsequently solved
@@ -501,16 +640,19 @@ fn apply_equipped_weapon_support_ik(
     let first_person_bilateral_ads_root = if first_person_active
         && native_bilateral_prop_owned
         && aim_controller.is_some()
-        && aim_alpha > 1.0e-4
+        && ads_alignment_alpha > 1.0e-4
     {
         authored_prop_root
             .zip(first_person_eye_model)
             .zip(view_rotation_model)
             .and_then(|((authored, camera_position), view_rotation)| {
+                let aim_view_rotation = filtered_aim_target
+                    .and_then(|target| weapon_view_rotation_for_sight_target(view_rotation, target))
+                    .unwrap_or(view_rotation);
                 crate::weapon_grip::weapon_first_person_solve_contract_presented(
                     presentation,
                     camera_position,
-                    view_rotation,
+                    aim_view_rotation,
                     right_shoulder,
                     left_shoulder,
                     1.0,
@@ -518,7 +660,7 @@ fn apply_equipped_weapon_support_ik(
                     recoil_yaw_radians * aim_alpha.clamp(0.0, 1.0),
                 )
                 .map(|ads| {
-                    let weight = aim_alpha.clamp(0.0, 1.0);
+                    let weight = ads_alignment_alpha;
                     crate::weapon_grip::WeaponRootTransform {
                         position: authored.position.lerp(ads.root.position, weight),
                         rotation: authored
@@ -544,16 +686,30 @@ fn apply_equipped_weapon_support_ik(
                     fpp_root,
                 )?
             } else if let Some(target) = native_aim_target {
-                apply_native_rifle_bilateral_weapon_constraint(
-                    presentation,
-                    skeleton,
-                    animation_runtime,
-                    pose,
-                    frames,
-                    rig,
-                    root,
-                    Some(target),
-                )?
+                if first_person_active {
+                    apply_native_rifle_bilateral_weapon_constraint(
+                        presentation,
+                        skeleton,
+                        animation_runtime,
+                        pose,
+                        frames,
+                        rig,
+                        root,
+                        Some(target),
+                    )?
+                } else {
+                    let authored_sight =
+                        crate::weapon_grip::weapon_sight_forward(presentation, root);
+                    apply_native_rifle_upper_body_aim_delta(
+                        skeleton,
+                        animation_runtime,
+                        pose,
+                        frames,
+                        rig,
+                        authored_sight,
+                        target,
+                    )?
+                }
             } else {
                 false
             }
@@ -698,8 +854,10 @@ fn apply_equipped_weapon_support_ik(
                 )
             })
     } else if let Some(root) = authored_hand_root {
-        // The original character grip owns both handle position and weapon orientation. Torso data is
-        // retained only for elbow-pole/soft stock metadata; it must not rotate or translate this root.
+        // The original character grip owns translation through the firing handle. During AIM the
+        // sight controller may rotate that grip around the same physical handle so the pistol follows
+        // camera intent exactly like the authored game pose, without detaching from the hand.
+        let root = authored_hand_aim_root.unwrap_or(root);
         crate::weapon_grip::weapon_ready_solve_contract_presented(
             presentation,
             chest,
@@ -785,7 +943,6 @@ fn apply_equipped_weapon_support_ik(
             support_left_hand,
         )
     };
-    let mut base_root = base_contract.root;
     let native_prop_owned = authored_prop_root.is_some();
     let mut contract = if native_prop_owned {
         // A qualified prop socket is already the final authored weapon frame. Applying generic
@@ -913,7 +1070,6 @@ fn apply_equipped_weapon_support_ik(
     let native_view_aim_committed = if native_view_aim && !native_arm_aim_applied && !right_solved {
         if let Some(authored_root) = authored_prop_root {
             contract.root = authored_root;
-            base_root = authored_root;
             let stock_from_handle = Vec3::new(
                 presentation.stock_contact_from_handle[0],
                 presentation.stock_contact_from_handle[1],
@@ -965,7 +1121,9 @@ fn apply_equipped_weapon_support_ik(
     // Each arm solve incrementally refreshed its affected branch, so the shared frame table is
     // already coherent here; a final full-skeleton FK pass would duplicate work every render frame.
     let socket_indices = [
-        native_prop_owned.then_some(rig.right_prop_attachment).flatten(),
+        native_prop_owned
+            .then_some(rig.right_prop_attachment)
+            .flatten(),
         (native_prop_owned && native_bilateral_prop_owned)
             .then_some(rig.left_prop_attachment)
             .flatten(),
@@ -1067,7 +1225,7 @@ fn apply_equipped_weapon_support_ik(
         left_error_m: left_error,
         socket_position_error_m: socket_position_error,
         socket_angular_error_deg: socket_angular_error,
-        base_root,
+        resolved_root: contract.root,
     }))
 }
 

@@ -171,14 +171,18 @@ impl AudioEnvironmentFrame {
                 .sanitized();
             }
             _ => {
-                // No common authored acoustic-zone route is not the same thing as an
-                // acoustically blocked path. In worlds without AudioEnvironmentZone
-                // authoring (or while listener/emitter membership is unresolved), the
-                // conservative runtime fallback is a dry unity direct path. Explicitly
-                // disconnected authored zones above still resolve to zero through the
-                // portal graph.
+                // Missing authored acoustic-zone membership is not the same thing as an
+                // acoustically blocked direct path. Keep the direct path dry/unity so
+                // audio fails open, but do not invent a valid portal route when the
+                // listener snapshot itself is unavailable. Worlds with a valid listener
+                // and no authored zones still retain the ordinary dry-unity fallback.
                 resolution.state = AudioEnvironmentState::clear();
-                resolution.portal_gain = 1.0;
+                if self.listener_ready {
+                    resolution.portal_gain = 1.0;
+                } else {
+                    resolution.portal_gain = 0.0;
+                    resolution.state.portal_gain = 0.0;
+                }
             }
         }
 

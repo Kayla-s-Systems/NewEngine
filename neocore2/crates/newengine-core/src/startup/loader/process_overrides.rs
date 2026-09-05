@@ -12,7 +12,7 @@ fn apply_graphics_process_overrides_to_settings(
 ) -> usize {
     use crate::startup_window::{
         ENV_LOD_DISTANCE_SCALE, ENV_SHADOWS_ENABLED, ENV_SHADOW_CASCADE_COUNT,
-        ENV_SHADOW_MAP_RESOLUTION,
+        ENV_SHADOW_MAP_RESOLUTION, ENV_VIEW_DISTANCE_METERS,
     };
 
     let mut changed = 0usize;
@@ -22,6 +22,16 @@ fn apply_graphics_process_overrides_to_settings(
             report.overrides.push(StartupOverride { key, from, to });
         }
     };
+
+    if let Some(raw) =
+        newengine_plugin_host::current_host_context().environment_var(ENV_VIEW_DISTANCE_METERS)
+    {
+        if let Ok(value) = raw.trim().parse::<f32>() {
+            let from = settings.graphics.view_distance_meters.to_string();
+            settings.graphics.view_distance_meters = value;
+            record(ENV_VIEW_DISTANCE_METERS, from, raw);
+        }
+    }
 
     if let Some(raw) =
         newengine_plugin_host::current_host_context().environment_var(ENV_LOD_DISTANCE_SCALE)

@@ -201,15 +201,21 @@ fn solve_secondary_motion_bend(
     }
 }
 
-fn secondary_motion_centerline(
+fn secondary_motion_centerline_into(
     points: &[Vec3],
     authored: &PlayerSkeletalSecondaryMotionRig,
-) -> Vec<Vec3> {
-    authored
-        .centerline_pairs
-        .iter()
-        .map(|pair| (points[pair[0]] + points[pair[1]]) * 0.5)
-        .collect()
+    out: &mut Vec<Vec3>,
+) {
+    out.clear();
+    if out.capacity() < authored.centerline_pairs.len() {
+        out.reserve(authored.centerline_pairs.len() - out.capacity());
+    }
+    out.extend(
+        authored
+            .centerline_pairs
+            .iter()
+            .map(|pair| (points[pair[0]] + points[pair[1]]) * 0.5),
+    );
 }
 
 fn normalized_polyline_parameter(points: &[Vec3], index: usize) -> f32 {
